@@ -1,12 +1,6 @@
----
-editor_options: 
-  markdown: 
-    wrap: 72
----
-
 # mortality_models
 
-This is a repository for code used to estimate Bayesian models of tree
+This is a repository for code used to estimate Bayesian logistic regression models of tree
 mortality and survival using periodic Eastwide Forest Inventory Data
 
 ## Repository Overview
