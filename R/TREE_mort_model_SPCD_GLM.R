@@ -1,0 +1,1331 @@
+library(rstan)
+library(MASS)
+library(here)
+library(tidyverse)
+library(gt)
+library(FIESTA)
+library(dplyr)
+
+options(mc.cores = parallel::detectCores())
+cleaned.data <- readRDS( "data/cleaned.data.mortality.TRplots.RDS")
+
+# get summary of damages for later use:
+N.DAMAGE <- cleaned.data %>% group_by(SPCD, damage) %>% summarise(n.by.damage = n())
+N.DAMAGE$SPECIES <- ref_species[match(N.DAMAGE$SPCD, ref_species$SPCD),]$COMMON
+ref_damage<- ref_codes %>% filter(VARIABLE %in% "AGENTCD")
+N.DAMAGE$damage_agent <- ref_damage[match(N.DAMAGE$damage, ref_damage$VALUE),]$MEANING
+N.DAMAGE$damage_agent <- ifelse(N.DAMAGE$damage == 0, "None", N.DAMAGE$damage_agent)
+saveRDS(N.DAMAGE, "data/N.DAMAGE.table.RDS")
+
+
+nspp <- cleaned.data %>% group_by(SPCD) %>% summarise(n = n(), 
+                                              pct = n/nrow(cleaned.data)) %>% arrange (desc(`pct`))
+
+nspp$cumulative.pct <- cumsum(nspp$pct)
+
+
+
+# link up to the species table:
+nspp$COMMON <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$COMMON
+
+View(nspp)
+
+nspp[1:17,]$COMMON
+
+library(gt)
+nspp[1:17,] |> gt()
+# 15 species make up >75% of the total trees in the cored plots, so lets focus on those
+
+# only 210 tree mortality events detected in this dataset:
+# M  `n()`
+# <dbl>  <int>
+#   1     0 315132
+# 2     1    210
+# Split into training and testing
+
+
+cleaned.data$SPGRPCD <- FIESTA::ref_species[match(cleaned.data$SPCD, FIESTA::ref_species$SPCD),]$E_SPGRPCD
+
+SPGRP.df <- FIESTA::ref_codes %>% filter(VARIABLE %in% "SPGRPCD") %>% filter(VALUE %in% unique(cleaned.data$SPGRPCD))
+cleaned.data$SPGRPNAME <- SPGRP.df[match(cleaned.data$SPGRPCD, SPGRP.df$VALUE),]$MEANING
+
+
+View(cleaned.data %>% filter(SPCD %in% unique(nspp[1:17,]$SPCD))%>% group_by( SPGRPNAME, SPCD) %>% summarise(n()))
+# next to 97 (red spruce), 241 (white ceder), 531 (fagus grandifolia), 
+# select species 318--red maple
+
+# center and scale the covariate data
+# for covariates at the plot level, scale by the unique plots so the # of trees on the plot doesnt affect the mean and sd values:
+plot.means <- unique(cleaned.data %>% ungroup()%>% dplyr::select(PLOT.ID, si, ba, slope, aspect, MAP, MATmin, MATmax, damage.total, elev, Ndep.remper.avg)) %>% ungroup() %>% summarise(si.mean = mean(si, na.rm =TRUE), 
+                                                                                          ba.mean = mean(ba, na.rm =TRUE), 
+                                                                                          slope.mean = mean(slope, na.rm = TRUE), 
+                                                                                          aspect.mean = mean(aspect, na.rm = TRUE),
+                                                                                          damage.mean = mean(damage.total, na.rm =TRUE),
+                                                                                          elev.mean = mean(elev, na.rm =TRUE),
+                                                                                          Ndep.mean = mean(Ndep.remper.avg, na.rm =TRUE),
+                                                                                          
+                                                                                          MAP.mean = mean(MAP, na.rm =TRUE), 
+                                                                                          MATmin.mean = mean(MATmin, na.rm =TRUE), 
+                                                                                          MATmax.mean = mean(MATmax, na.rm =TRUE), 
+                                                                                          
+                                                                                          ba.sd = sd(ba, na.rm =TRUE),
+                                                                                          si.sd = sd(si, na.rm =TRUE), 
+                                                                                          slope.sd = sd(slope, na.rm =TRUE),
+                                                                                          aspect.sd = sd(aspect, na.rm = TRUE),
+                                                                                          damage.sd = sd(damage.total, na.rm =TRUE),
+                                                                                          elev.sd = sd(elev, na.rm =TRUE),
+                                                                                          Ndep.sd = sd(Ndep.remper.avg, na.rm =TRUE),
+                                                                                          
+                                                                                          MAP.sd = sd(MAP, na.rm =TRUE), 
+                                                                                          MATmin.sd = sd(MATmin, na.rm =TRUE), 
+                                                                                          MATmax.sd = sd(MATmax, na.rm =TRUE)
+                                                                                          )
+
+View(cleaned.data %>% group_by(SPGRPCD, SPCD) %>% summarise(n()))
+
+cleaned.data.full <- cleaned.data
+
+#-----------------------------------------------------------------------------------------
+# Make the species level datasets for the top 15 species to run the model
+#-----------------------------------------------------------------------------------------
+length(unique(cleaned.data$SPCD))
+
+nspp[1:17,]$COMMON
+# save these as .RDA files so we can just load, run the model, and 
+SPCD.id <- 316#unique(cleaned.data$SPCD)[25]
+set.seed(22)
+
+SPCD.stan.data <- function(SPCD.id, remper.correction){
+      cleaned.data <- cleaned.data.full %>% filter(SPCD %in% SPCD.id)
+      
+      # scale the cleaned data tree-level diameters by species?
+      cleaned.data <- cleaned.data %>% ungroup()  %>% group_by(SPCD) %>% 
+      mutate(rempercur = ifelse(M ==1, remper*remper.correction, remper), 
+             annual.growth = DIA_DIFF/rempercur) %>% mutate(DIA.mean = mean(dbhcur, na.rm =TRUE), 
+                                                                               DIA.sd = sd(dbhcur, na.rm = TRUE),  
+                                                                            BAL.mean = mean(BAL, na.rm=TRUE),
+                                                                            BAL.sd = sd(BAL, na.rm = TRUE),
+                                                                               annual.growth.mean = mean(annual.growth, na.rm = TRUE), 
+                                                                               annual.growth.sd = sd(annual.growth, na.rm = TRUE)) %>% 
+        ungroup() %>% mutate(DIA_scaled = (dbhcur - DIA.mean)/DIA.sd, 
+                             annual.growth.scaled = (annual.growth - annual.growth.mean)/annual.growth.sd, 
+                             BAL.scaled = (BAL-BAL.mean)/BAL.sd,
+                             si.scaled = (si - plot.means$si.mean)/plot.means$si.sd, 
+                             ba.scaled = (ba - plot.means$ba.mean)/plot.means$ba.sd,
+                             aspect.scaled = (aspect - plot.means$aspect.mean)/plot.means$aspect.sd,
+                             slope.scaled = (slope - plot.means$slope.mean)/plot.means$slope.sd,
+                             damage.scaled = (damage.total - plot.means$damage.mean)/plot.means$damage.sd,
+                             MAP.scaled = (MAP-plot.means$MAP.mean)/plot.means$MAP.sd, 
+                             elev.scaled = (elev-plot.means$elev.mean)/plot.means$elev.sd,
+                             Ndep.scaled = (Ndep.remper.avg- plot.means$Ndep.mean)/plot.means$Ndep.sd,
+                             MATmin.scaled = (MATmin- plot.means$MATmin.mean)/plot.means$MATmin.sd,
+                             MATmax.scaled = (MATmax - plot.means$MATmax.mean)/plot.means$MATmax.sd)
+      
+      SPP.df <- data.frame(SPCD = unique(cleaned.data$SPCD), 
+                           SPP = 1:length(unique(cleaned.data$SPCD)))
+      
+      cleaned.data<- left_join(cleaned.data, SPP.df) 
+      cleaned.data <- cleaned.data %>%  filter(!is.na(si) & !is.na(dbhcur)& !is.na(M) & !is.na(annual.growth.scaled) & !is.na(ppt.anom))
+      #summary(cleaned.data$BAL.scaled)
+ 
+      N_train <- nrow(cleaned.data)*0.7
+      N_test <- nrow(cleaned.data)*0.3
+      train_ind <- sample(c(1:nrow(cleaned.data)), size = N_train, replace = FALSE)
+      
+      train.data <- cleaned.data[train_ind,]
+      test.data <- cleaned.data[-train_ind, ]
+   
+      
+      mod.data <- list(N = nrow(train.data), 
+                       Nspp = length(unique(train.data$SPCD)),
+                       SPP = train.data$SPP,
+                       y = train.data$M,
+                       si = train.data$si.scaled, 
+                       slope = train.data$slope.scaled, 
+                       aspect = train.data$aspect.scaled,
+                       elev = train.data$elev.scaled, 
+                       Ndep = train.data$Ndep.scaled,
+                       DIA = train.data$DIA_scaled, 
+                       MATmax = train.data$MATmax.scaled, 
+                       MATmin= train.data$MATmin.scaled, 
+                       MAP = train.data$MAP.scaled, 
+                       annual_growth = train.data$annual.growth.scaled,
+                       BAL = train.data$BAL.scaled, 
+                       BA = train.data$ba.scaled, 
+                       damage = train.data$damage.total,
+                       MAPanom = train.data$ppt.anom, 
+                       MATminanom = train.data$tmin.anom, 
+                       MATmaxanom = train.data$tmax.anom,
+                       PHYSIO = train.data$physio, 
+                       RD = train.data$RD, 
+                       
+                       N_test = nrow(test.data),
+                       si_test = test.data$si.scaled, 
+                       DIA_test = test.data$DIA_scaled, 
+                       aspect_test = test.data$aspect.scaled, 
+                       elev_test = test.data$elev.scaled, 
+                       Ndep_test = test.data$Ndep.scaled,
+                       slope_test = test.data$slope.scaled,
+                       BAL_test = test.data$BAL.scaled,
+                       BA_test = test.data$ba.scaled,
+                       damage_test = test.data$damage.scaled, 
+                       
+                       MATmax_test = test.data$MATmax.scaled, 
+                       MATmin_test = test.data$MATmin.scaled, 
+                       MAP_test = test.data$MAP.scaled,
+                       annual_growth_test = test.data$annual.growth.scaled, 
+                       MAPanom_test = test.data$ppt.anom, 
+                       MATminanom_test = test.data$tmin.anom, 
+                       MATmaxanom_test = test.data$tmax.anom, 
+                       PHYSIO_test = test.data$physio, 
+                       RD_test = test.data$RD)
+      
+      
+      model.name <- paste0("simple_logistic_SPCD_", SPCD.id, "remper_",remper.correction)
+      
+      save(train.data, test.data, mod.data, model.name, file = paste0("SPCD_standata/SPCD_",SPCD.id,"remper_correction_",remper.correction, ".Rdata"))
+}
+
+# write the data for all 26 different species groups:
+for(i in 1:length(unique(nspp[1:17,]$SPCD))){
+  cat(i)
+  SPCD.stan.data(SPCD.id = nspp[i,]$SPCD, remper.correction = 0.5)
+  SPCD.stan.data(SPCD.id = nspp[i,]$SPCD, remper.correction = 0.9)
+  SPCD.stan.data(SPCD.id = nspp[i,]$SPCD, remper.correction = 0.1)
+  SPCD.stan.data(SPCD.id = nspp[i,]$SPCD, remper.correction = 0.3)
+  SPCD.stan.data(SPCD.id = nspp[i,]$SPCD, remper.correction = 0.7)
+}
+
+#---------------------------------------------------------------------
+# variable selection with glm models
+#---------------------------------------------------------------------
+#for(i in 1:15){# unique(cleaned.data.full$SPGRPCD)){
+SPCD.df <- data.frame(SPCD = nspp[1:17,]$SPCD, 
+                      spcd.id = 1:17)
+remper.cor.vector <- c(0.5)
+j <- 1
+i <- 1
+ 
+for(i in 2:length(SPCD.df$SPCD)){
+  SPCD.id <- SPCD.df[i,]$SPCD
+  common.name <- nspp[1:17,] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON)
+  
+  if(SPCD.id == 621){
+    cat("Not running for yellow poplar, not enough data")
+  }else{
+    
+  for (j in 1:length(remper.cor.vector)){
+    cat(paste("running glm mortality model for SPCD", SPCD.df[i,]$SPCD, common.name$COMMON, " remper correction", remper.cor.vector[j]))
+    
+    remper.correction <- remper.cor.vector[j]
+    load(paste0("SPCD_standata/SPCD_", SPCD.id, "remper_correction_", remper.correction, ".Rdata")) # load the species code data
+    covariate.data <- data.frame(M = mod.data$y, 
+                                 annual.growth = mod.data$annual_growth, 
+                                 DIA = mod.data$DIA, 
+                                 si = mod.data$si, 
+                                 slope = mod.data$slope, 
+                                 aspect = mod.data$aspect, 
+                                 MATmax = mod.data$MATmax, 
+                                 MATmin= mod.data$MATmin, 
+                                 MAP = mod.data$MAP, 
+                                 BAL = mod.data$BAL, 
+                                 damage = mod.data$damage, 
+                                 MAPanom = mod.data$MAPanom, 
+                                 MATmaxanom = mod.data$MATmaxanom, 
+                                 MATminanom = mod.data$MATminanom, 
+                                 PHYSIO = mod.data$PHYSIO, 
+                                 BA = mod.data$BA, 
+                                 RD = mod.data$RD, 
+                                 elev = mod.data$elev, 
+                                 Ndep = mod.data$Ndep)
+    
+    test.covariate.data <- data.frame(M = test.data$M,
+                                      annual.growth = mod.data$annual_growth_test, 
+                                      DIA = mod.data$DIA_test, 
+                                      si = mod.data$si_test, 
+                                      slope = mod.data$slope_test, 
+                                      aspect = mod.data$aspect_test, 
+                                      MATmax = mod.data$MATmax_test, 
+                                      MATmin= mod.data$MATmin_test, 
+                                      MAP = mod.data$MAP_test, 
+                                      BAL = mod.data$BAL_test, 
+                                      damage = mod.data$damage_test, 
+                                      MAPanom = mod.data$MAPanom_test, 
+                                      MATmaxanom = mod.data$MATmaxanom_test, 
+                                      MATminanom = mod.data$MATminanom_test, 
+                                      PHYSIO = mod.data$PHYSIO_test, 
+                                      BA = mod.data$PHYSIO_test, 
+                                      RD = mod.data$RD_test, 
+                                      elev = mod.data$elev_test, 
+                                      Ndep = mod.data$Ndep_test)
+    
+   
+  
+  glm.A <-  glm(M ~ MAP , data = covariate.data, family = "binomial")
+  glm.B <-  glm(M ~ MATmaxanom, data = covariate.data, family = "binomial")
+  glm.C <-  glm(M ~ MATminanom, data = covariate.data, family = "binomial")
+  glm.D <-  glm(M ~ MAPanom, data = covariate.data, family = "binomial")
+  glm.E <-  glm(M ~ BAL, data = covariate.data, family = "binomial")
+  glm.F <-  glm(M ~ damage , data = covariate.data, family = "binomial")
+  glm.G <-  glm(M ~ si, data = covariate.data, family = "binomial")
+  glm.H <-  glm(M ~ PHYSIO, data = covariate.data, family = "binomial")
+  glm.I <-  glm(M ~ BA, data = covariate.data, family = "binomial")
+  glm.J <-  glm(M ~ RD , data = covariate.data, family = "binomial")
+  glm.K <-  glm(M ~ elev, data = covariate.data, family = "binomial")
+  glm.L <-  glm(M ~ Ndep, data = covariate.data, family = "binomial")
+  
+  glm.1 <-  glm(M ~ annual.growth, data = covariate.data, family = "binomial")
+  glm.2 <-  glm(M ~ annual.growth + DIA, data = covariate.data, family = "binomial")
+  glm.3 <-  glm(M ~ annual.growth + DIA + exp(DIA), data = covariate.data, family = "binomial")
+  #glm.2c <-  glm(M ~ annual.growth + DIA + (DIA)^2, data = covariate.data, family = "binomial")
+  
+  glm.4 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect, data = covariate.data, family = "binomial")
+  glm.5 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope , data = covariate.data, family = "binomial")
+  glm.6 <-  glm(M ~ annual.growth + DIA + exp(DIA) + aspect + slope + MATmax , data = covariate.data, family = "binomial")
+  
+  glm.7 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+                + MATmin , data = covariate.data, family = "binomial")
+  glm.8 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+                + MATmin+ MATmax , data = covariate.data, family = "binomial")
+  glm.9 <-  glm(M ~ annual.growth + DIA + exp(DIA) + aspect + slope + MATmax 
+                + MATmin+ MAP , data = covariate.data, family = "binomial")
+  
+  glm.10 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+                + MATmin+ MAP + MATmaxanom , data = covariate.data, family = "binomial")
+  
+  glm.11 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+                + MATmin+ MAP + MATmaxanom 
+                + MATminanom , data = covariate.data, family = "binomial")
+  
+  
+  glm.12 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+                + MATmin+ MAP + MATmaxanom 
+                + MATminanom + MAPanom , data = covariate.data, family = "binomial")
+  
+  glm.13 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+                + MATmin+ MAP + MATmaxanom 
+                + MATminanom + MAPanom + BAL , data = covariate.data, family = "binomial")
+  
+  glm.14<-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+                + MATmin+ MAP + MATmaxanom 
+                + MATminanom + MAPanom + BAL + damage, data = covariate.data, family = "binomial")
+ 
+   glm.15 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+                + MATmin+ MAP + MATmaxanom 
+                + MATminanom + MAPanom + BAL + damage + si, data = covariate.data, family = "binomial")
+ 
+   glm.16 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+                  + MATmin+ MAP + MATmaxanom 
+                  + MATminanom + MAPanom + BAL + damage + si + PHYSIO, data = covariate.data, family = "binomial")
+   
+   glm.17 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+                  + MATmin+ MAP + MATmaxanom 
+                  + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA , data = covariate.data, family = "binomial")
+   
+   glm.18 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+                  + MATmin+ MAP + MATmaxanom 
+                  + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD , data = covariate.data, family = "binomial")
+   
+   glm.19 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+                  + MATmin+ MAP + MATmaxanom 
+                  + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD +
+                    elev, data = covariate.data, family = "binomial")
+   
+   glm.20 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+                  + MATmin+ MAP + MATmaxanom 
+                  + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD +
+                    elev + Ndep, data = covariate.data, family = "binomial")
+   
+   glm.21 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+                  + MATmin+ MAP + MATmaxanom 
+                  + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                    # annual growth interactcovarions
+                    DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth  
+                  + MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  
+                  + MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth +
+                    +  PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth, data = covariate.data, family = "binomial")
+   
+   
+
+  # all growth + diameter interaction terms
+  glm.22 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+                 + MATmin+ MAP + MATmaxanom 
+                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   # annual growth interactions
+                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth  
+                 + MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  
+                 + MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
+                   +  PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth+ elev*annual.growth + Ndep*annual.growth+ 
+                   # all diameter interactions
+                  aspect*DIA  + slope*DIA  + MATmax*DIA  
+                 + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA, data = covariate.data, family = "binomial")
+  
+  glm.23 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+                 + MATmin+ MAP + MATmaxanom 
+                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   # annual growth interactions
+                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth  
+                 + MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  
+                 + MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
+                   +  PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth+ elev*annual.growth + Ndep*annual.growth + 
+                   # all diameter interactions
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  
+                 + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
+                   
+                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                   # all aspect interactions
+                   slope*aspect  + MATmax*aspect  
+                 + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
+                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect +
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect, data = covariate.data, family = "binomial")
+  
+  
+  
+  glm.24 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+                 + MATmin+ MAP + MATmaxanom 
+                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   # annual growth interactions
+                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth  
+                 + MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  
+                 + MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
+                   +  PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth +
+                   # all diameter interactions
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  
+                 + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA + 
+                   # all aspect interactions
+                   slope*aspect  + MATmax*aspect  
+                 + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
+                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect +
+                   # all slope interactions
+                    MATmax*slope  
+                 + MATmin*slope  + MAP*slope  + MATmaxanom*slope  
+                 + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope + 
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope, data = covariate.data, family = "binomial")
+  
+  glm.25 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+                 + MATmin+ MAP + MATmaxanom 
+                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD+ elev + Ndep +
+                   # annual growth interactions
+                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth  
+                 + MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  
+                 + MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
+                    PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   # all diameter interactions
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  
+                 + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA + 
+                   # all aspect interactions
+                   slope*aspect  + MATmax*aspect  
+                 + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
+                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect +
+                   # all slope interactions
+                   MATmax*slope  
+                 + MATmin*slope  + MAP*slope  + MATmaxanom*slope  
+                 + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
+                    # all MATmax interactions
+                   
+                  MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  
+                 + MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax +
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax +  Ndep*MATmax, data = covariate.data, family = "binomial")
+  
+  
+  glm.26 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+                 + MATmin+ MAP + MATmaxanom 
+                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD+ elev + Ndep + 
+                   # annual growth interactions
+                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth  
+                 + MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  
+                 + MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth +
+                     PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   # all diameter interactions
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  
+                 + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
+                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                   # all aspect interactions
+                   slope*aspect  + MATmax*aspect  
+                 + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
+                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect + 
+                    # all slope interactions
+                   MATmax*slope  
+                 + MATmin*slope  + MAP*slope  + MATmaxanom*slope  
+                 + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
+                     # all MATmax interactions
+                   
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  
+                 + MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax + 
+                    # all MATmin interactions
+                   
+                   MAP*MATmin + MATminanom*MATmin
+                 + MATminanom*MATmin + MAPanom*MATmin + BAL*MATmin + damage*MATmin + si*MATmin +
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin, data = covariate.data, family = "binomial")
+  
+
+                   
+  glm.27 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax +
+                 MATmin+ MAP + MATmaxanom +
+                 MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
+                   # annual growth interactions
+                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
+                  MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
+                  MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
+                     PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth+ elev*annual.growth + Ndep*annual.growth + 
+                   
+                   # all diameter interactions
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
+                 MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
+                  MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
+                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                   # all aspect interactions
+                   slope*aspect  + MATmax*aspect  +
+                  MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
+                 MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect +
+                    # all slope interactions
+                   MATmax*slope +  
+                 MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
+                  MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
+                    # all MATmax interactions
+                   
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
+                  MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax + 
+                   # all MATmin interactions
+                  MAP*MATmin+ MATminanom*MATmin +
+                  MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin + 
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin + 
+                     # all MAP interatction
+                  MATminanom*MAP +
+                 MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP +
+                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP, data = covariate.data, family = "binomial")
+  
+
+  glm.28 <-  glm(M ~ annual.growth + DIA + exp(DIA) + aspect + slope + MATmax +
+                   MATmin+ MAP + MATmaxanom +
+                   MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   # annual growth interactions
+                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
+                   MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
+                   MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
+                     PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   # all diameter interactions
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
+                   MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
+                   MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA + 
+                   # all aspect interactions
+                   slope*aspect  + MATmax*aspect  +
+                   MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
+                   MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect +
+                    # all slope interactions
+                   MATmax*slope +  
+                   MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
+                   MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
+                   # all MATmax interactions
+                   
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
+                   MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax + 
+                   
+                   # all MATmaxinteractions
+                   MAP*MATmin+ MATminanom*MATmin +
+                   MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin + 
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin +
+                   
+                    # all MAP interatction
+                   MATminanom*MAP +
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP+
+                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP + 
+                 
+                 
+                 # all MATminanom interatction
+                 
+                   MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom + Ndep*MATminanom, data = covariate.data, family = "binomial")
+  
+  glm.29 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax +
+                   MATmin+ MAP + MATmaxanom +
+                   MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   # annual growth interactions
+                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
+                   MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
+                   MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  
+                   +  PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth  + Ndep*annual.growth +
+                   # all diameter interactions
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
+                   MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
+                   MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
+                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                   # all aspect interactions
+                   slope*aspect  + MATmax*aspect  +
+                   MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
+                   MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect + 
+                     # all slope interactions
+                   MATmax*slope +  
+                   MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
+                   MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope +
+                   # all MATmax interactions
+                   
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
+                   MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax + 
+                   # all MATmaxinteractions
+                   MAP*MATmin+ MATminanom*MATmin +
+                   MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin +
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin + 
+                   
+                   # all MAP interatction
+                   MATminanom*MAP +
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP+
+                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   
+                   
+                   # all MATminanom interatction
+                   
+                   MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom + Ndep*MATminanom + 
+                    # all MATmaxanom interatction
+                   
+                 MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
+                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom, data = covariate.data, family = "binomial")
+  
+  
+  
+  glm.30 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax +
+                   MATmin+ MAP + MATmaxanom +
+                   MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   # annual growth interactions
+                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
+                   MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
+                   MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  
+                   +  PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   # all diameter interactions
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
+                   MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
+                   MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA + 
+                   # all aspect interactions
+                   slope*aspect  + MATmax*aspect  +
+                   MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
+                   MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect +
+                    # all slope interactions
+                   MATmax*slope +  
+                   MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
+                   MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
+                    # all MATmax interactions
+                   
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
+                   MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax + 
+                   
+                   # all MATmin  interactions
+                   MAP*MATmin+ MATminanom*MATmin +
+                   MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin +
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin + 
+                   
+                   # all MAP interatction
+                   MATminanom*MAP +
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP+
+                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP + 
+                   
+                   
+                   # all MATminanom interatction
+                   
+                   MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom + Ndep*MATminanom + 
+                   # all MATmaxanom interatction
+                   
+                   MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
+                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom +
+                   # all MAPanom interatction
+                   
+                   BAL*MAPanom + damage*MAPanom + si*MAPanom +
+                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom +elev*MAPanom + Ndep*MAPanom, data = covariate.data, family = "binomial")
+  
+  glm.31 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax +
+                   MATmin+ MAP + MATmaxanom +
+                   MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
+                   # annual growth interactions
+                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
+                   MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
+                   MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
+                    PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   # all diameter interactions
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
+                   MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
+                   MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
+                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                   # all aspect interactions
+                   slope*aspect  + MATmax*aspect  +
+                   MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
+                   MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect + 
+                    # all slope interactions
+                   MATmax*slope +  
+                   MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
+                   MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
+                     # all MATmax interactions
+                   
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
+                   MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax +
+                   
+                   # all MATmaxinteractions
+                   MAP*MATmin+ MATminanom*MATmin +
+                   MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin + 
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin + 
+                   
+                   # all MAP interatction
+                   MATminanom*MAP +
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP+
+                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   
+                   
+                   # all MATminanom interatction
+                   
+                   MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom  + Ndep*MATminanom +
+                    # all MATmaxanom interatction
+                   
+                   MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
+                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom + 
+                   # all MAPanom interatction
+                   
+                   BAL*MAPanom + damage*MAPanom + si*MAPanom +
+                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom + elev*MAPanom + Ndep*MAPanom + 
+                   # all BAL interatction
+                   
+                   damage*BAL + si*BAL + 
+                   PHYSIO*BAL + BA*BAL + RD*BAL +elev*BAL + Ndep*BAL, data = covariate.data, family = "binomial")
+  
+  glm.32 <-  glm(M ~  annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax +
+                   MATmin+ MAP + MATmaxanom +
+                   MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
+                   # annual growth interactions
+                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
+                   MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
+                   MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
+                   PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   # all diameter interactions
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
+                   MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
+                   MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
+                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                   # all aspect interactions
+                   slope*aspect  + MATmax*aspect  +
+                   MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
+                   MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect + 
+                   # all slope interactions
+                   MATmax*slope +  
+                   MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
+                   MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
+                   # all MATmax interactions
+                   
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
+                   MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax +
+                   
+                   # all MATmaxinteractions
+                   MAP*MATmin+ MATminanom*MATmin +
+                   MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin + 
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin + 
+                   
+                   # all MAP interatction
+                   MATminanom*MAP +
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP+
+                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   
+                   
+                   # all MATminanom interatction
+                   
+                   MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom  + Ndep*MATminanom +
+                   # all MATmaxanom interatction
+                   
+                   MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
+                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom + 
+                   # all MAPanom interatction
+                   
+                   BAL*MAPanom + damage*MAPanom + si*MAPanom +
+                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom + elev*MAPanom + Ndep*MAPanom + 
+                   # all BAL interatction
+                   
+                   damage*BAL + si*BAL + 
+                   PHYSIO*BAL + BA*BAL + RD*BAL +elev*BAL + Ndep*BAL +
+                   # all remainingdamage interatction
+                   
+                   si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage, data = covariate.data, family = "binomial")
+  
+  glm.33 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax +
+                   MATmin+ MAP + MATmaxanom +
+                   MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
+                   # annual growth interactions
+                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
+                   MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
+                   MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
+                   PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   # all diameter interactions
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
+                   MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
+                   MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
+                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                   # all aspect interactions
+                   slope*aspect  + MATmax*aspect  +
+                   MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
+                   MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect + 
+                   # all slope interactions
+                   MATmax*slope +  
+                   MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
+                   MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
+                   # all MATmax interactions
+                   
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
+                   MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax +
+                   
+                   # all MATmaxinteractions
+                   MAP*MATmin+ MATminanom*MATmin +
+                   MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin + 
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin + 
+                   
+                   # all MAP interatction
+                   MATminanom*MAP +
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP+
+                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   
+                   
+                   # all MATminanom interatction
+                   
+                   MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom  + Ndep*MATminanom +
+                   # all MATmaxanom interatction
+                   
+                   MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
+                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom + 
+                   # all MAPanom interatction
+                   
+                   BAL*MAPanom + damage*MAPanom + si*MAPanom +
+                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom + elev*MAPanom + Ndep*MAPanom + 
+                   # all BAL interatction
+                   
+                   damage*BAL + si*BAL + 
+                   PHYSIO*BAL + BA*BAL + RD*BAL +elev*BAL + Ndep*BAL +
+                   # all remainingdamage interatction
+                   
+                   si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage+
+                   PHYSIO*si + BA*si + RD*si + elev*si + Ndep*si , data = covariate.data, family = "binomial")
+  
+  glm.34 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax +
+                   MATmin+ MAP + MATmaxanom +
+                   MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
+                   # annual growth interactions
+                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
+                   MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
+                   MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
+                   PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   # all diameter interactions
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
+                   MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
+                   MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
+                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                   # all aspect interactions
+                   slope*aspect  + MATmax*aspect  +
+                   MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
+                   MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect + 
+                   # all slope interactions
+                   MATmax*slope +  
+                   MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
+                   MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
+                   # all MATmax interactions
+                   
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
+                   MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax +
+                   
+                   # all MATmaxinteractions
+                   MAP*MATmin+ MATminanom*MATmin +
+                   MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin + 
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin + 
+                   
+                   # all MAP interatction
+                   MATminanom*MAP +
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP+
+                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   
+                   
+                   # all MATminanom interatction
+                   
+                   MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom  + Ndep*MATminanom +
+                   # all MATmaxanom interatction
+                   
+                   MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
+                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom + 
+                   # all MAPanom interatction
+                   
+                   BAL*MAPanom + damage*MAPanom + si*MAPanom +
+                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom + elev*MAPanom + Ndep*MAPanom + 
+                   # all BAL interatction
+                   
+                   damage*BAL + si*BAL + 
+                   PHYSIO*BAL + BA*BAL + RD*BAL +elev*BAL + Ndep*BAL +
+                   # all remainingdamage interatction
+                   
+                   si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage+
+                   PHYSIO*si + BA*si + RD*si + elev*si + Ndep*si  +
+                    BA*PHYSIO + RD*PHYSIO + elev*PHYSIO + Ndep*PHYSIO, data = covariate.data, family = "binomial")
+  
+  
+  glm.35 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax +
+                   MATmin+ MAP + MATmaxanom +
+                   MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
+                   # annual growth interactions
+                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
+                   MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
+                   MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
+                   PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   # all diameter interactions
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
+                   MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
+                   MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
+                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                   # all aspect interactions
+                   slope*aspect  + MATmax*aspect  +
+                   MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
+                   MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect + 
+                   # all slope interactions
+                   MATmax*slope +  
+                   MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
+                   MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
+                   # all MATmax interactions
+                   
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
+                   MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax +
+                   
+                   # all MATmaxinteractions
+                   MAP*MATmin+ MATminanom*MATmin +
+                   MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin + 
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin + 
+                   
+                   # all MAP interatction
+                   MATminanom*MAP +
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP+
+                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   
+                   
+                   # all MATminanom interatction
+                   
+                   MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom  + Ndep*MATminanom +
+                   # all MATmaxanom interatction
+                   
+                   MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
+                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom + 
+                   # all MAPanom interatction
+                   
+                   BAL*MAPanom + damage*MAPanom + si*MAPanom +
+                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom + elev*MAPanom + Ndep*MAPanom + 
+                   # all BAL interatction
+                   
+                   damage*BAL + si*BAL + 
+                   PHYSIO*BAL + BA*BAL + RD*BAL +elev*BAL + Ndep*BAL +
+                   # all remainingdamage interatction
+                   
+                   si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage+
+                   PHYSIO*si + BA*si + RD*si + elev*si + Ndep*si  +
+                   BA*PHYSIO + RD*PHYSIO + elev*PHYSIO + Ndep*PHYSIO + 
+                   BA*RD + elev*RD + Ndep*RD, data = covariate.data, family = "binomial")
+  
+  
+  glm.36 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax +
+                   MATmin+ MAP + MATmaxanom +
+                   MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
+                   # annual growth interactions
+                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
+                   MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
+                   MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
+                   PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   # all diameter interactions
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
+                   MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
+                   MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
+                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                   # all aspect interactions
+                   slope*aspect  + MATmax*aspect  +
+                   MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
+                   MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect + 
+                   # all slope interactions
+                   MATmax*slope +  
+                   MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
+                   MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
+                   # all MATmax interactions
+                   
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
+                   MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax +
+                   
+                   # all MATmaxinteractions
+                   MAP*MATmin+ MATminanom*MATmin +
+                   MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin + 
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin + 
+                   
+                   # all MAP interatction
+                   MATminanom*MAP +
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP+
+                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   
+                   
+                   # all MATminanom interatction
+                   
+                   MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom  + Ndep*MATminanom +
+                   # all MATmaxanom interatction
+                   
+                   MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
+                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom + 
+                   # all MAPanom interatction
+                   
+                   BAL*MAPanom + damage*MAPanom + si*MAPanom +
+                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom + elev*MAPanom + Ndep*MAPanom + 
+                   # all BAL interatction
+                   
+                   damage*BAL + si*BAL + 
+                   PHYSIO*BAL + BA*BAL + RD*BAL +elev*BAL + Ndep*BAL +
+                   # all remainingdamage interatction
+                   
+                   si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage+
+                   PHYSIO*si + BA*si + RD*si + elev*si + Ndep*si  +
+                   BA*PHYSIO + RD*PHYSIO + elev*PHYSIO + Ndep*PHYSIO + 
+                   BA*RD + elev*RD + Ndep*RD+
+                   elev*BA + Ndep*BA, data = covariate.data, family = "binomial")
+  
+  
+  glm.37 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax +
+                   MATmin+ MAP + MATmaxanom +
+                   MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
+                   # annual growth interactions
+                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
+                   MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
+                   MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
+                   PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   # all diameter interactions
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
+                   MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
+                   MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
+                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                   # all aspect interactions
+                   slope*aspect  + MATmax*aspect  +
+                   MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
+                   MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect + 
+                   # all slope interactions
+                   MATmax*slope +  
+                   MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
+                   MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
+                   # all MATmax interactions
+                   
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
+                   MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax +
+                   
+                   # all MATmaxinteractions
+                   MAP*MATmin+ MATminanom*MATmin +
+                   MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin + 
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin + 
+                   
+                   # all MAP interatction
+                   MATminanom*MAP +
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP+
+                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   
+                   
+                   # all MATminanom interatction
+                   
+                   MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom  + Ndep*MATminanom +
+                   # all MATmaxanom interatction
+                   
+                   MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
+                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom + 
+                   # all MAPanom interatction
+                   
+                   BAL*MAPanom + damage*MAPanom + si*MAPanom +
+                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom + elev*MAPanom + Ndep*MAPanom + 
+                   # all BAL interatction
+                   
+                   damage*BAL + si*BAL + 
+                   PHYSIO*BAL + BA*BAL + RD*BAL +elev*BAL + Ndep*BAL +
+                   # all remainingdamage interatction
+                   
+                   si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage+
+                   PHYSIO*si + BA*si + RD*si + elev*si + Ndep*si  +
+                   BA*PHYSIO + RD*PHYSIO + elev*PHYSIO + Ndep*PHYSIO + 
+                   BA*RD + elev*RD + Ndep*RD+
+                   elev*BA + Ndep*BA + 
+                   elev*Ndep, data = covariate.data, family = "binomial")
+  # mcfaddens rsquared
+  list.mods <- list(glm.A, glm.B, glm.C, glm.D, glm.E, 
+                    glm.F, glm.G, glm.H, glm.I, glm.J, 
+                    glm.K, glm.L,
+                    glm.1, glm.2, glm.3, glm.4, glm.5, 
+                    glm.6, glm.7, glm.8, glm.9, glm.10, 
+                    glm.11, glm.12, glm.13, glm.14, glm.15, 
+                    glm.16, glm.17, glm.18, glm.19, glm.20, 
+                    glm.21, glm.22, glm.23, glm.24, glm.25, 
+                    glm.26, glm.27, glm.28, glm.29, glm.30, 
+                    glm.31, glm.32, glm.33, glm.34, glm.35, 
+                    glm.36, glm.37)
+  
+  # get convergence list
+  Convergence.list <- lapply(list.mods, FUN = function(x){x$converged}) 
+  convergence.df <- do.call(rbind, Convergence.list)
+  
+  # get AICs
+  AICS.list <- lapply(list.mods, FUN = function(x){x$aic})
+  aics.df <- do.call(rbind, AICS.list)
+  
+  # get mcfaddens rsquared to look at model fit
+  McFadden.rsq <- lapply(list.mods, FUN =  function(x){pscl::pR2(x)["McFadden"]})
+  McFadden.rsq.df <- do.call(rbind, McFadden.rsq)
+  
+
+  # variable importance
+  Var.importance.list <- lapply(list.mods, FUN = function(x){caret::varImp(x)})
+ 
+  # AUC of predicted test data:
+  library(ROCR)
+  newdata <- test.covariate.data
+  
+ # m <- list.mods[[1]]
+  #m <- glm.26
+  get_AUC <- function(m, newdata = covariate.data){
+    p <- predict(m, newdata=newdata, type="response")
+    pr <- prediction(p, newdata$M)
+    prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+    plot(prf)
+    auc <- performance(pr, measure = "auc")
+    auc <- auc@y.values[[1]]
+    auc
+  }
+  AUC.lists <- list()
+  for (p in 1:length(list.mods)){
+    AUC.lists[[p]]<- get_AUC(m = list.mods[[p]], test.covariate.data)
+  }
+  AUC.lists <- lapply (list.mods, FUN = function(x){get_AUC(x, test.covariate.data)})
+  AUC.df <- do.call(rbind, AUC.lists)
+  
+  model.diag <- data.frame(SPCD =  SPCD.df[i,]$SPCD,
+                           Species = nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON),
+                          model = paste0("model ", 1:49), 
+                          model.no = as.numeric(1:49),
+                          remper.correction = remper.cor.vector[j],
+                          AUC = AUC.df[,1],
+                          McFadden.Rsq = McFadden.rsq.df[,1], 
+                          AIC = aics.df[,1], 
+                          converged = convergence.df[,1])
+  plot(model.diag$model.no, model.diag$AUC)
+  plot(model.diag$model.no, model.diag$McFadden.Rsq)
+      
+ saveRDS(model.diag, paste0("SPCD_glm_output/GLM_model_diag_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".RDS") )
+ saveRDS(Var.importance.list, paste0("SPCD_glm_output/GLM_variable_importance_list_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".RDS") )
+ 
+ 
+ #--------------------------------------------------------------------------------------
+ # PLOT UP VARIABLE IMPORTANCE FOR THE BEST FIT MODEL 
+ #--------------------------------------------------------------------------------------
+ AIC.best <- model.diag %>% filter(converged == TRUE)%>% mutate(minAIC = min(AIC))%>%  filter(AIC == minAIC)
+ AIC.best$model.no
+ 
+ AIC.best.varimp <- Var.importance.list[[AIC.best$model.no]]
+ AIC.best.varimp$VARS <- rownames(AIC.best.varimp)
+ AIC.best.ordered <- AIC.best.varimp %>% arrange(Overall)
+ AIC.best.ordered$VARS <- factor(AIC.best.ordered$VARS, levels = unique(AIC.best.ordered$VARS))
+ 
+ ggplot(AIC.best.ordered, aes(x = VARS, y = Overall))+geom_bar(stat = "identity")+
+   theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+   ylab("Variable Importance")+xlab("")+
+   ggtitle(paste0("Variable Importance, ", nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON) , " model ", AIC.best$model.no))
+ ggsave(filename = paste0("SPCD_glm_output/GLM_AIC_best_VARIMP_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 5, width = 12)
+  
+ 
+ AIC.best$model.no
+ 
+ AUC.best <- model.diag %>% filter(converged == TRUE)%>% mutate(maxAUC = max(AUC))%>%  filter(AUC == maxAUC)
+ AUC.best$model.no
+ 
+ AUC.best.varimp <- Var.importance.list[[AUC.best$model.no]]
+ AUC.best.varimp$VARS <- rownames(AUC.best.varimp)
+ AUC.best.ordered <- AUC.best.varimp %>% arrange(Overall)
+ AUC.best.ordered$VARS <- factor(AUC.best.ordered$VARS, levels = unique(AUC.best.ordered$VARS))
+ 
+ ggplot(AUC.best.ordered, aes(x = VARS, y = Overall))+geom_bar(stat = "identity")+
+   theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+   ylab("Variable Importance")+xlab("")+
+   ggtitle(paste0("Variable Importance, ", nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON) , " model ", AUC.best$model.no))
+ ggsave(filename = paste0("SPCD_glm_output/GLM_AUC_best_VARIMP_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 5, width = 12)
+ 
+ 
+ 
+ Rsq.best <- model.diag %>% filter(converged == TRUE)%>% mutate(maxRsq = max(McFadden.Rsq))%>%  filter(McFadden.Rsq == maxRsq)
+ Rsq.best$model.no
+ 
+ Rsq.best.varimp <- Var.importance.list[[Rsq.best$model.no]]
+ Rsq.best.varimp$VARS <- rownames(Rsq.best.varimp)
+ Rsq.best.ordered <- Rsq.best.varimp %>% arrange(Overall)
+ Rsq.best.ordered$VARS <- factor(Rsq.best.ordered$VARS, levels = unique(Rsq.best.ordered$VARS))
+ 
+ ggplot(Rsq.best.ordered, aes(x = VARS, y = Overall))+geom_bar(stat = "identity")+
+   theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+   ylab("Variable Importance")+xlab("")+
+   ggtitle(paste0("Variable Importance, ", nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON) , " model ", Rsq.best$model.no))
+ ggsave(filename = paste0("SPCD_glm_output/GLM_Rsq_best_VARIMP_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 5, width = 12)
+ 
+  }
+  }
+}
+
+
+# make a big table with the model results:
+model.diags <- list()
+for(i in 1:length(SPCD.df[,]$SPCD)){
+  SPCD.id <- SPCD.df[i,]$SPCD
+  if(SPCD.id == 621){}else{
+model.diags[[i]] <- readRDS(paste0("SPCD_glm_output/GLM_model_diag_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".RDS") )
+}}
+model.diag <- do.call(rbind, model.diags)
+model.diag %>% group_by(SPCD, COMMON)|> gt()
+
+ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AUC, fill = COMMON, group = model.no))+geom_bar(stat= "identity",position = position_dodge2())#+position_dodge()
+ggsave("SPCD_glm_output/GLM_all_species_AUC.png", height = 5, width = 8)
+
+ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = McFadden.Rsq))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
+ggsave("SPCD_glm_output/GLM_all_species_McFaddenRsq.png", height = 5, width = 8)
+
+ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AUC))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
+ggsave("SPCD_glm_output/GLM_all_species_AUC.png", height = 5, width = 8)
+
+ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AIC))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
+ggsave("SPCD_glm_output/GLM_all_species_AIC.png", height = 5, width = 8)
+
+ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, AIC,  label = as.character(model.no)))+geom_text()+facet_wrap(~SPCD, scales = "free_y")
+ggsave("SPCD_glm_output/GLM_all_species_AIC_AUC.png", height = 5, width = 8)
+
+ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, McFadden.Rsq,  label = as.character(model.no)))+geom_text(size = 2)+facet_wrap(~SPCD, scales = "free_y")
+ggsave("SPCD_glm_output/GLM_all_species_AUC_Rsq.png", height = 5, width = 8)
+
+# make a table explaining the models:
+
+
+glm.model.table <- data.frame(model.no = 1:49, 
+                              description = c("MAP", 
+                                              "MATmaxanom", 
+                                              "MATminanom", 
+                                              "MAPanom", 
+                                              "BAL", 
+                                              "percent damage", 
+                                              "site index", 
+                                              "Physiographic class", 
+                                              "BA", 
+                                              "Relative Density",
+                                              "elevation", 
+                                              "N depostion (wet + dry)", 
+                                              "average annual growth", 
+                                              
+                                              ## sequentially adding in each variable
+                                              "average annual growth + Diameter", 
+                                              "exp(Diameter)", 
+                                              "aspect", 
+                                              "slope", 
+                                              "MATmax", 
+                                              "MATmin", 
+                                              "MAP", 
+                                              "MATmax anomaly", 
+                                              "MATmin anomaly", 
+                                              "MAP anomaly", 
+                                              "BAL", 
+                                              "percent damage", 
+                                              "site index", 
+                                              "physiographic class", 
+                                              "BA", 
+                                              "Relative Density", 
+                                              "Elevation", 
+                                              "N deposition", 
+                                              ## adding in interactions
+                                              "growth interactions", 
+                                              "diameter interactions", 
+                                              "aspect interactions", 
+                                              " slope interactions", 
+                                              "MATmax interactions", 
+                                              "MATmin interactions", 
+                                              "MAP interactions", 
+                                              "MATmax anomaly interactions", 
+                                              "MATmin anomaly interactions", 
+                                              "MAP anomaly interactions", 
+                                              "BAL interactions", 
+                                              "percent damage interactions", 
+                                              "site index interactions", 
+                                              "Physiographic interactions", 
+                                              "Relative Density interactions", 
+                                              "elevation interactions",
+                                              "Basal Area interactions", 
+                                              "N dep interactions"
+                                              ), 
+                              model.type = c(rep("single variable", 13), 
+                                             rep("adding on to growth effect", 18), 
+                                             rep("adding interaction terms", 18
+                                                )))
+model.diag <- left_join(model.diag, glm.model.table)
+
+ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AUC, fill = COMMON, group = model.no))+geom_bar(stat= "identity",position = position_dodge2())#+position_dodge()
+ggsave("SPCD_glm_output/GLM_all_species_AUC.png", height = 5, width = 8)
+
+ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = McFadden.Rsq, fill = model.type))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
+ggsave("SPCD_glm_output/GLM_all_species_McFaddenRsq.png", height = 5, width = 8)
+
+ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AUC, fill = model.type))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
+ggsave("SPCD_glm_output/GLM_all_species_AUC.png", height = 5, width = 8)
+
+ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AIC, fill = model.type))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
+ggsave("SPCD_glm_output/GLM_all_species_AIC.png", height = 5, width = 8)
+
+ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, AIC,  label = as.character(model.no)))+geom_text()+facet_wrap(~SPCD, scales = "free_y")
+ggsave("SPCD_glm_output/GLM_all_species_AIC_AUC.png", height = 5, width = 8)
+
+ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, McFadden.Rsq,  label = as.character(model.no)))+geom_text(size = 2)+facet_wrap(~SPCD, scales = "free_y")
+ggsave("SPCD_glm_output/GLM_all_species_AUC_Rsq.png", height = 5, width = 8)
+
+library(tinytable)
+tt(glm.model.table) |> save_tt("SPCD_glm_output/GLM_table.png")
+write.csv(glm.model.table, "GLM_table.csv", quote = TRUE)
