@@ -22,18 +22,20 @@ parameters {
   array[Nspp] vector[K] u_beta; //species by K array of ubetas
   real alpha; // population intercept
   array[Nspp] real alpha_SPP; //species-specific intercepts
-
+  real<lower = 0> sigma_s[K]; // K array of across-species variance for each parameter
 }
 model {
 //priors for population-level parameters
  mu_beta ~ normal(0, 5);
  alpha ~ normal(0,5);
- 
+ sigma_aS ~ cauchy(0,1); //prior for the across-species variance for alphas
+ sigma_s ~ cauchy(0,1);// prior for the K array of across-species variances for each parameter
  //priors for species=level means, centered on population level means
  //maybe we want species-specific variances??
+
 for (s in 1:Nspp) {
-  alpha_SPP[s] ~ normal(alpha, 1);
-  u_beta[s] ~ normal(mu_beta, 5);
+  alpha_SPP[s] ~ normal(alpha, sigma_aS);
+  u_beta[s] ~ normal(mu_beta, sigma_s[1:K]);
 }
   
   vector[N] pSannual;//mean annual surivival for bernoulli logit
@@ -87,6 +89,7 @@ generated quantities{
     
     // convert to remeasurement period survival rate
     mMrep[n] = pSannualrep[n]^Remper[n];
+    
     //generate in sample predictions as yrep
     
     y_rep[n] = bernoulli_rng(mMrep[n]);
