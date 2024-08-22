@@ -6,14 +6,14 @@ data {
   int<lower=1> K;       // N. predictors 
   array[N] row_vector[K] xM;      // Predictor matrix
   array[N] int<lower=0, upper=1> y; //observations of mortality
+  vector[N] Remper; //list of remper observations
   
   ///out of sample data for generated quantities
  int<lower=0> Nrep;// N. held out observations
- array[Nrep] int<lower=1, upper=Nspp> SPPrep;//
- //int SPPrep[N]; //index describing which out of sample observations belong to each species
- //covariate data is in one big matrix
- array[Nrep] row_vector[K] xMrep;      // Predictor matrix
- //matrix[Nrep,K] xMrep;        // Predictor matrix
+ array[Nrep] int<lower=1, upper=Nspp> SPPrep;//index describing which out of sample observations belong to each species
+
+ array[Nrep] row_vector[K] xMrep;      // out of sample Predictor matrix
+ int<lower = 0> Remperoos[N]; //list of out of sample remper observations
  
 }
 parameters {
@@ -35,12 +35,18 @@ for (s in 1:Nspp) {
   alpha_SPP[s] ~ normal(alpha, 1);
   u_beta[s] ~ normal(mu_beta, 5);
 }
-
-// estimated mean for each observation 
-vector[N] mM; 
-  for (n in 1:N) {
-    mM[n] = alpha_SPP[SPP[n]] + xM[n] * u_beta[SPP[n]];
-  }
+  
+  vector[N] pSannual;//mean annual surivival for bernoulli logit
+  vector[N] mM;//mean survival probability over remeasurement for bernoulli logit
+  
+  //Liklihood function
+for (n in 1:N) {
+    // annual survival probability
+    pSannual[n] = alpha_SPP[SPP[n]] + xM[n] * u_beta[SPP[n]];
+}    
+    // convert to remeasurement period survival rate
+    mM[1:N] = pow(pSannual[1:N], Remper[1:N]);
+    
 //liklihood function
   y ~ bernoulli_logit(mM);
 
@@ -54,22 +60,35 @@ generated quantities{
   // log-likelihood posterior
   //vector[N] log_lik; //calculate log likilhoods
 
-  // calculate the probabilities
-  vector[N]  mMrep;//in sample probs
-  vector[Nrep]  mMhat;//in sample probs
+   // calculate the probabilities
+  vector[N]  pSannualrep;//annual survival probability for in sample data
+  vector[N]  mMrep;//remeasurement probability of survival for in sample data
+  vector[Nrep]  pSannualhat;//annual survival proability for out of sample data
+  vector[Nrep]  mMhat;//remper survival probability for out of sample data
+  
  //generate out of sample predictions ad yhat
   for (i in 1:Nrep) {
-    mMhat[i] = inv_logit(alpha_SPP[SPPrep[i]] + xMrep[i]*u_beta[SPPrep[i]]);
-   //inv_logit(alpha + beta*x_test[i])
+    //generate annual survival predictions
+    pSannualhat[i] = inv_logit(alpha_SPP[SPPrep[i]] + xMrep[i]*u_beta[SPPrep[i]]);
+   
+   
+    // convert to remeasurement period survival rate
+    mMhat[i] = pSannualhat[i]^Remperoos[i];
+   
     y_hat[i] = bernoulli_rng(mMhat[i]);
   }
 
   // individual log-likelihoods for use in loo
    for (n in 1:N) {
     log_lik[n] = bernoulli_logit_lpmf(y[n] | xM[n] * u_beta[SPP[n]]);
-
+ 
+  //generate annual survival predictions
+    pSannualrep[n] = inv_logit(alpha_SPP[SPP[n]] + xM[n]*u_beta[SPP[n]]);
+    
+    // convert to remeasurement period survival rate
+    mMrep[n] = pSannualrep[n]^Remper[n];
     //generate in sample predictions as yrep
-    mMrep[n] = inv_logit(alpha_SPP[SPP[n]] + xM[n]*u_beta[SPP[n]]);
+    
     y_rep[n] = bernoulli_rng(mMrep[n]);
   }
 
