@@ -15,10 +15,13 @@ names(fit.1) <- c("alpha_SPP", colnames(mod.data$xM),
                   ## in sample predicted status
                   paste0("yrep[",1:mod.data$N, "]"),
                   paste0("psurv[",1:mod.data$N, "]"),
+                  paste0("psurv.annual[",1:mod.data$N, "]"),
+                  
                   ## out of  sample predicted status
                   paste0("yhat[",1:mod.data$Nrep, "]"),
                   ## out of sample predicted prob mor
                   paste0("psurv.hat[",1:mod.data$Nrep, "]"),
+                  paste0("psurv.hat.annual[",1:mod.data$Nrep, "]"),
                   ## in sample predicted status
                   paste0("log_lik[",1:mod.data$N, "]"),
                   paste0("DIA_spline[", 1:mod.data$S, "]"),

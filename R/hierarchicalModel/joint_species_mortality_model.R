@@ -113,8 +113,9 @@ fit.1 <- stan(file = "mort_model_general_heiarchical.stan" ,
               #adapt_delta = 0.99, 
               pars =c("alpha_SPP", "u_beta", # the species-specific params
                       "alpha", "mu_beta",
-                      "y_rep", "mMrep",## in sample predictions
-                      "y_hat", "mMhat", ## out of sample predictions
+                      "sigma_s", "sigma_aS",
+                      "y_rep", "mMrep", "pSannualrep", ## in sample predictions
+                      "y_hat", "mMhat", "pSannualhat", ## out of sample predictions
                       "log_lik")) #, "y_hat", 
 end.time <- Sys.time()
 # Calculate elapsed time in seconds
@@ -154,6 +155,7 @@ joint.samples <- as_draws_df(fit.1)
 
 alpha.p <- subset_draws(joint.samples, variable = "alpha", chain = 1:2, iteration = 500:1500)
 alpha.spp <- subset_draws(joint.samples, variable = "alpha_SPP", chain = 1:2, iteration = 500:1500)
+
 saveRDS(alpha.p, paste0("SPCD_stanoutput_joint/samples/alpha.p_model_",model.no,"_1000samples.rds"))
 saveRDS(alpha.spp, paste0("SPCD_stanoutput_joint/samples/alpha.spp_model_",model.no,"_1000samples.rds"))
 
@@ -161,6 +163,9 @@ beta.p <- subset_draws(joint.samples, variable = "mu_beta", chain = 1:2, iterati
 bet0a.spp <- subset_draws(joint.samples, variable = "u_beta", chain = 1:2, iteration = 500:1500)
 saveRDS(beta.p, paste0("SPCD_stanoutput_joint/samples/beta_model_",model.no,"_1000samples.rds"))
 saveRDS(bet0a.spp, paste0("SPCD_stanoutput_joint/samples/u_betas_model_",model.no,"_1000samples.rds"))
+
+sigmas <- subset_draws(joint.samples, variable = c("sigma_s", "sigma_aS"), chain = 1:2, iteration = 500:1500)
+saveRDS(sigmas, paste0("SPCD_stanoutput_joint/samples/sigmas_model_",model.no,"_1000samples.rds"))
 
 yrep <- subset_draws(joint.samples, variable = "y_rep", chain = 1:2, iteration = 500:1500)
 yhat <- subset_draws(joint.samples, variable = "y_hat", chain = 1:2, iteration = 500:1500)
@@ -174,6 +179,13 @@ mMrep <- subset_draws(joint.samples, variable = "mMrep", chain = 1:2, iteration 
 mMhat <- subset_draws(joint.samples, variable = "mMhat", chain = 1:2, iteration = 500:1500)
 saveRDS(mMrep, paste0("SPCD_stanoutput_joint/samples/mMrep_model_",model.no,"_1000samples.rds"))
 saveRDS(mMhat, paste0("SPCD_stanoutput_joint/samples/mMhat_model_",model.no,"_1000samples.rds"))
+
+# save annual survival probabilities:
+pSannualrep <- subset_draws(joint.samples, variable = "pSannualhat", chain = 1:2, iteration = 500:1500)
+pSannualhat <- subset_draws(joint.samples, variable = "mMhat", chain = 1:2, iteration = 500:1500)
+saveRDS(pSannualrep, paste0("SPCD_stanoutput_joint/samples/pSannualrep_model_",model.no,"_1000samples.rds"))
+saveRDS(pSannualhat, paste0("SPCD_stanoutput_joint/samples/pSannualhat_model_",model.no,"_1000samples.rds"))
+
 
 log_lik <- subset_draws(joint.samples, variable = "log_lik", chain = 1:2, iteration = 500:1500)
 saveRDS(log_lik, paste0("SPCD_stanoutput_joint/samples/log_lik_model_",model.no,"_1000samples.rds"))
@@ -566,7 +578,7 @@ state_sub <- filter(states, region %in% c("connecticut","maine","new hampshire",
 canada <- map_data("worldHires", "Canada")
 
 # plot distribution 
-ll.test.pmort  <- ll.test.pmort  %>%mutate(`p(mort)` = 1- median) %>%  mutate(Mort.quantiles = cut(`p(mort)`, 
+ll.test.pmort  <- ll.test.pmort  %>% mutate(`p(mort)` = 1- median) %>%  mutate(Mort.quantiles = cut(`p(mort)`, 
                                                                                                    breaks = c(0,0.01,0.05, 0.1, 0.2, 0.3, 0.40, 0.50, 1), 
                                                                                                    include.lowest=TRUE))
 

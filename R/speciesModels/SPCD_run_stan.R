@@ -16,8 +16,8 @@ SPCD_run_stan <- function(SPCD.id, model.no = 1, niter = 1000, nchains = 2, remp
                 #sample_file = model.name, 
                 #adapt_delta = 0.99, 
                 pars =c("alpha_SPP", "u_beta", 
-                        "y_rep", "mMrep",## in sample predictions
-                        "y_hat", "mMhat", ## out of sample predictions
+                        "y_rep", "mMrep", "pSannualrep", ## in sample predictions
+                        "y_hat", "mMhat", "pSannualhat", ## out of sample predictions
                         "log_lik")) #, "y_hat", 
   
  
