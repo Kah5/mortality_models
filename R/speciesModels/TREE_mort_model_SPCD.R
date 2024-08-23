@@ -158,7 +158,7 @@ Covariate.table <- read.csv("C:/Users/KellyHeilman/Box/01. kelly.heilman Workspa
 Covariate.table %>% rename(`Covariate Group` = "Covariate.group", 
                            `Spatial Scale` = "Spatial.Scale")|> gt()
 # script that generates all the testing and training datasets
-source("R/SPCD_stan_data.R")
+source("R/speciesModels/SPCD_stan_data.R")
 # write the data for all 26 different species groups:
 for(i in 1:length(unique(nspp[1:17,]$SPCD))){
   cat(i)
@@ -177,7 +177,7 @@ for(i in 1:length(unique(nspp[1:17,]$SPCD))){
 
 # for each species group, fit a model, plot the outputs, and save the results
 # we source a function from another script
-source("R/SPCD_run_stan.R")
+source("R/speciesModels/SPCD_run_stan.R")
 
 # this runs a stan model and saves the outputs
 # SPGRPCD 2 throws uncerialize socklist error--too big of a diataset to parallelisze?
@@ -198,8 +198,8 @@ for(i in 1:17){# run for each of the 17 species
       
       fit.1 <- SPCD_run_stan(SPCD.id = SPCD.df[i,]$SPCD,
                              model.no = model.number,
-                             niter = 1000,
-                             nchains = 2,
+                             niter = 3000,
+                             nchains = 3,
                              remper.correction = remper.cor.vector[j],
                             model.file = 'modelcode/mort_model_general.stan' )
       SPCD.id <-  SPCD.df[i,]$SPCD

@@ -53,19 +53,22 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   
   # model.1 data
   mod.data.1 <- list(N = nrow(train.data), 
-                     y = train.data$S, 
+                     y = train.data$S,                       
+                     Remper = train.data$remper, 
                      xM = as.matrix(train.data %>% dplyr::select(annual.growth.scaled)))
   # model.2 data
   # 2. Diameter + Annual growth
   mod.data.2 <- list(N = nrow(train.data), 
-                     y = train.data$S, 
+                     y = train.data$S,                       
+                     Remper = train.data$remper, 
                      xM = as.matrix(train.data %>% dplyr::select(annual.growth.scaled, 
                                                                  DIA_scaled)))
   
   # model.3 data
   # 3. Diameter + Annual growth + competition variables (RD.scaled, BAL, damage)
   mod.data.3 <- list(N = nrow(train.data), 
-                     y = train.data$S, 
+                     y = train.data$S,                       
+                     Remper = train.data$remper, 
                      xM = as.matrix(train.data %>% dplyr::select(annual.growth.scaled, 
                                                                  DIA_scaled, 
                                                                  RD.scaled, 
@@ -76,7 +79,8 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   # 4. Diameter + Annual growth + competition variables (RD.scaled, BAL, damage) + Climate variables
   
   mod.data.4 <- list(N = nrow(train.data), 
-                     y = train.data$S, 
+                     y = train.data$S,                       
+                     Remper = train.data$remper, 
                      xM = as.matrix(train.data %>% dplyr::select(annual.growth.scaled, 
                                                                  DIA_scaled, 
                                                                  RD.scaled, 
@@ -93,7 +97,8 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   # 5. Diameter + Annual growth + competition variables (RD.scaled, BAL, damage) + 
   #Climate variables + site/soil effects + ndep
   mod.data.5 <- list(N = nrow(train.data), 
-                     y = train.data$S, 
+                     y = train.data$S,                       
+                     Remper = train.data$remper, 
                      xM = as.matrix(train.data %>% dplyr::select(annual.growth.scaled, 
                                                                  DIA_scaled, 
                                                                  RD.scaled, 
@@ -114,7 +119,8 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   # model.6 data
   # 6. All Fixed effects and all growth + Diameter interactions
   mod.data.6 <- list(N = nrow(train.data), 
-                     y = train.data$S, 
+                     y = train.data$S,                       
+                     Remper = train.data$remper, 
                      xM = as.matrix(train.data %>% dplyr::select(annual.growth.scaled, 
                                                                  DIA_scaled, 
                                                                  RD.scaled, 
@@ -146,7 +152,8 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   # model.7 data
   # 7. model 5 + competition interactions
   mod.data.7 <- list(N = nrow(train.data), 
-                     y = train.data$S, 
+                     y = train.data$S,                       
+                     Remper = train.data$remper, 
                      xM = as.matrix(train.data %>% dplyr::select(annual.growth.scaled, 
                                                                  DIA_scaled, 
                                                                  RD.scaled, 
@@ -193,7 +200,8 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   # model.8 data
   # 8. model 6 + climate interactions
   mod.data.8 <- list(N = nrow(train.data), 
-                     y = train.data$S, 
+                     y = train.data$S,                       
+                     Remper = train.data$remper, 
                      xM = as.matrix(train.data %>% dplyr::select(annual.growth.scaled, 
                                                                  DIA_scaled, 
                                                                  RD.scaled, 
@@ -261,7 +269,8 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   
   # 9. All Fixed effects and all interactions
   mod.data.9 <- list(N = nrow(train.data), 
-                     y = train.data$S, 
+                     y = train.data$S,                       
+                     Remper = train.data$remper, 
                      xM = as.matrix(train.data %>% dplyr::select(annual.growth.scaled, 
                                                                  DIA_scaled, 
                                                                  RD.scaled, 
@@ -345,19 +354,22 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   
   # model.1 data
   mod.data.1.test <- list(N = nrow(test.data), 
-                          y = test.data$S, 
+                          y = test.data$S,                       
+                          Remper = test.data$remper, 
                           xM = as.matrix(test.data %>% dplyr::select(annual.growth.scaled)))
   # model.2 data
   # 2. Diameter + Annual growth
   mod.data.2.test <- list(N = nrow(test.data), 
-                          y = test.data$S, 
+                          y = test.data$S,                       
+                          Remper = test.data$remper, 
                           xM = as.matrix(test.data %>% dplyr::select(annual.growth.scaled, 
                                                                      DIA_scaled)))
   
   # model.3 data
   # 3. Diameter + Annual growth + competition variables (RD.scaled, BAL, damage)
   mod.data.3.test <- list(N = nrow(test.data), 
-                          y = test.data$S, 
+                          y = test.data$S,                       
+                          Remper = test.data$remper, 
                           xM = as.matrix(test.data %>% dplyr::select(annual.growth.scaled, 
                                                                      DIA_scaled, 
                                                                      RD.scaled, 
@@ -368,7 +380,8 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   # 4. Diameter + Annual growth + competition variables (RD.scaled, BAL, damage) + Climate variables
   
   mod.data.4.test <- list(N = nrow(test.data), 
-                          y = test.data$S, 
+                          y = test.data$S,                       
+                          Remper = test.data$remper, 
                           xM = as.matrix(test.data %>% dplyr::select(annual.growth.scaled, 
                                                                      DIA_scaled, 
                                                                      RD.scaled, 
@@ -385,7 +398,8 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   # 5. Diameter + Annual growth + competition variables (RD.scaled, BAL, damage) + 
   #Climate variables + site/soil effects + ndep
   mod.data.5.test <- list(N = nrow(test.data), 
-                          y = test.data$S, 
+                          y = test.data$S,                       
+                          Remper = test.data$remper, 
                           xM = as.matrix(test.data %>% dplyr::select(annual.growth.scaled, 
                                                                      DIA_scaled, 
                                                                      RD.scaled, 
@@ -406,7 +420,8 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   # model.6 data
   # 6. All Fixed effects and all growth + Diameter interactions
   mod.data.6.test <- list(N = nrow(test.data), 
-                          y = test.data$S, 
+                          y = test.data$S,                       
+                          Remper = test.data$remper, 
                           xM = as.matrix(test.data %>% dplyr::select(annual.growth.scaled, 
                                                                      DIA_scaled, 
                                                                      RD.scaled, 
@@ -438,7 +453,8 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   # model.7 data
   # 7. model 5 + competition interactions
   mod.data.7.test <- list(N = nrow(test.data), 
-                          y = test.data$S, 
+                          y = test.data$S,                       
+                          Remper = test.data$remper, 
                           xM = as.matrix(test.data %>% dplyr::select(annual.growth.scaled, 
                                                                      DIA_scaled, 
                                                                      RD.scaled, 
@@ -485,7 +501,8 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   # model.8 data
   # 8. model 6 + climate interactions
   mod.data.8.test <- list(N = nrow(test.data), 
-                          y = test.data$S, 
+                          y = test.data$S,                       
+                          Remper = test.data$remper, 
                           xM = as.matrix(test.data %>% dplyr::select(annual.growth.scaled, 
                                                                      DIA_scaled, 
                                                                      RD.scaled, 
@@ -553,7 +570,8 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   
   # 9. All Fixed effects and all interactions
   mod.data.9.test <- list(N = nrow(test.data), 
-                          y = test.data$S, 
+                          y = test.data$S,                       
+                          Remper = test.data$remper, 
                           xM = as.matrix(test.data %>% dplyr::select(annual.growth.scaled, 
                                                                      DIA_scaled, 
                                                                      RD.scaled, 
@@ -644,6 +662,7 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   mod.data$Nrep <- mod.data.test$N
   mod.data$xMrep <- mod.data.test$xM
   mod.data$ytest <- mod.data.test$y
+  mod.data$Remperoos <- mod.data.test$Remper
   save(train.data, 
        test.data, 
        mod.data,
@@ -656,6 +675,7 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   mod.data$Nrep <- mod.data.test$N
   mod.data$xMrep <- mod.data.test$xM
   mod.data$ytest <- mod.data.test$y
+  mod.data$Remperoos <- mod.data.test$Remper
   save(train.data, 
        test.data, 
        mod.data,
@@ -668,6 +688,7 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   mod.data$Nrep <- mod.data.test$N
   mod.data$xMrep <- mod.data.test$xM
   mod.data$ytest <- mod.data.test$y
+  mod.data$Remperoos <- mod.data.test$Remper
   save(train.data, 
        test.data, 
        mod.data,
@@ -680,6 +701,7 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   mod.data$Nrep <- mod.data.test$N
   mod.data$xMrep <- mod.data.test$xM
   mod.data$ytest <- mod.data.test$y
+  mod.data$Remperoos <- mod.data.test$Remper
   save(train.data, 
        test.data, 
        mod.data,
@@ -692,6 +714,7 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   mod.data$Nrep <- mod.data.test$N
   mod.data$xMrep <- mod.data.test$xM
   mod.data$ytest <- mod.data.test$y
+  mod.data$Remperoos <- mod.data.test$Remper
   save(train.data, 
        test.data, 
        mod.data,
@@ -704,6 +727,7 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   mod.data$Nrep <- mod.data.test$N
   mod.data$xMrep <- mod.data.test$xM
   mod.data$ytest <- mod.data.test$y
+  mod.data$Remperoos <- mod.data.test$Remper
   save(train.data, 
        test.data, 
        mod.data,
@@ -716,6 +740,7 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   mod.data$Nrep <- mod.data.test$N
   mod.data$xMrep <- mod.data.test$xM
   mod.data$ytest <- mod.data.test$y
+  mod.data$Remperoos <- mod.data.test$Remper
   save(train.data, 
        test.data, 
        mod.data,
@@ -728,6 +753,7 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   mod.data$Nrep <- mod.data.test$N
   mod.data$xMrep <- mod.data.test$xM
   mod.data$ytest <- mod.data.test$y
+  mod.data$Remperoos <- mod.data.test$Remper
   save(train.data, 
        test.data, 
        mod.data,
@@ -740,6 +766,7 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   mod.data$Nrep <- mod.data.test$N
   mod.data$xMrep <- mod.data.test$xM
   mod.data$ytest <- mod.data.test$y
+  mod.data$Remperoos <- mod.data.test$Remper
   save(train.data, 
        test.data, 
        mod.data,
