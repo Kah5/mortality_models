@@ -4,21 +4,24 @@ library(here)
 library(tidyverse)
 library(gt)
 library(terra)
+library(tidyverse)
+library(odbc)
 options(mc.cores = parallel::detectCores())
 
+boxdir <- "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
 # lets start with just remeasured trees from plots where we have tree cores (and therefore lat-longs)
-load(here("data", "Tree Records Master.RData")) 
+load(paste0(boxdir, "data/Tree Records Master.RData"))
 # loads all.trees and radial.inc but we just need all.trees for the PLOT.ID 
 
 # loads internal CN connection that will allow us to get plot lat and lons
 CN.connect <- read.csv("C:/Users/KellyHeilman/Box/tree core project/Tree Core plots needing matching to their old Periodic data.csv")
 
 # load the plot-level information and climate data, called plots
-load(here("data", "Tree core plots plus 800m PRISM.RData"))
+load(paste0(boxdir, "data/Tree core plots plus 800m PRISM.RData"))
 
 colnames(plots)
 
-TREE <- read_delim("data/formatted_older_matching_plts_TREE.txt")
+TREE <- read_delim(paste0(boxdir, "data/formatted_older_matching_plts_TREE.txt"))
 TREE$dbhcur <- as.numeric(TREE$dbhcur)
 TREE$dbhold <- as.numeric(TREE$dbhold)
 
@@ -37,7 +40,7 @@ unique(TREE$crcls)
 unique(TREE$state)
 TREE %>% group_by(status) %>% summarise(n())
 
-PLOT <- read_delim("data/formatted_older_matching_plts_PLOT.txt")
+PLOT <- read_delim(paste0(boxdir,"data/formatted_older_matching_plts_PLOT.txt"))
 colnames(PLOT)
 PLOT$long
 PLOT$lat
@@ -48,8 +51,7 @@ PLOT %>% filter( state == 10) %>% summarise(n())
 #------------------------------------------------------
 # get the periodic plot lat longs that match:
 #------------------------------------------------------
-library(tidyverse)
-library(odbc)
+
 
 # get periodic plot information from all the plots:
 # 09 CT
@@ -126,7 +128,7 @@ summary(NE_plot_ll$LAT_FIADB)
 
 
 # JOIN up elevation data to this dataset
-PRISM <- rast("data/PRISM_us_dem_800m_asc.asc")
+PRISM <- rast(paste0(boxdir,"data/PRISM_us_dem_800m_asc.asc"))
 plot(PRISM)
 
 # make a spatial vector of the lat long points to extract the prism elevation from
@@ -144,7 +146,7 @@ summary(NE_plot_ll$elev)
 #unique(PLOT %>% filter(remper >= 20) %>% dplyr::select(state, date))
 summary(NE_plot_ll$exprem)
 
-NE_plot_ll %>% group_by(state) %>% summarise(mean (elev, na.rm  =TRUE))
+NE_plot_ll %>% group_by(state) %>% summarise(mean (elev, na.rm  = TRUE))
 
 
 NE_plot_ll %>% group_by(state, exprem > 0) %>% summarise(n())
@@ -241,9 +243,9 @@ TREE.remeas %>% group_by(PLOT.ID, point, tree) %>% mutate(mortfac.tree = ifelse(
   ungroup() %>% group_by(PLOT.ID) %>% mutate(mortfac.total = sum(mortfac.tree))%>% 
   filter(mortfac.total == 0 )
 
-test <- TREE.remeas %>% group_by(PLOT.ID, point, tree) %>% mutate(mortfac.tree = ifelse(mortfac > 0, 0, 1))%>% 
-  ungroup() %>% group_by(PLOT.ID) %>% mutate(mortfac.total = sum(mortfac.tree))
-summary(test$mortfac.total)
+# test <- TREE.remeas %>% group_by(PLOT.ID, point, tree) %>% mutate(mortfac.tree = ifelse(mortfac > 0, 0, 1))%>% 
+#   ungroup() %>% group_by(PLOT.ID) %>% mutate(mortfac.total = sum(mortfac.tree))
+# summary(test$mortfac.total)
                                              
 TREE.remeas2 <-  TREE.remeas %>% 
   filter(DIA_DIFF >= 0 & exprem > 0 & dbhold > 0 & ! remper == 0 & spp %in% nspp[1:17,]$spp & !is.na(elev)) %>% 
@@ -307,11 +309,11 @@ head(TREE_growth.mort$spp)
 
 
 cleaned.data <- TREE_growth.mort %>% filter(!is.na(annual.growth) & !is.na(status) & DIA_DIFF >=0 & !is.na(elev) )
-View(cleaned.data %>% group_by(M, spp) %>% summarise(n()))
-View(cleaned.data %>% group_by(M, state) %>% summarise(n()))
-View(cleaned.data %>% group_by(M) %>% summarise(n()))
-
-# only 2400 tree mortality events detected in the valid plots of this dataset:
+# View(cleaned.data %>% group_by(M, spp) %>% summarise(n()))
+# View(cleaned.data %>% group_by(M, state) %>% summarise(n()))
+# View(cleaned.data %>% group_by(M) %>% summarise(n()))
+# 
+# # only 2400 tree mortality events detected in the valid plots of this dataset:
 # A tibble: 2 × 2
 # M  `n()`
 # <dbl>  <int>
@@ -327,7 +329,7 @@ View(cleaned.data %>% group_by(M) %>% summarise(n()))
 
 # --------------------------Merge with plot covariate data ------------------
 # get plot-level information:
-head(PLOT)
+
 
 unique.PLOT.cov <- unique(PLOT %>% dplyr::select(PLOT.ID, cndtn, physio, ba, slope, aspect, si, siage, mdate, cycle))
 TREE_growth.cov <- left_join(TREE_growth.mort, unique.PLOT.cov)
@@ -355,7 +357,7 @@ TREE_growth.cov <- TREE_growth.cov %>% mutate(damage.total = 100-damage.0)
 length(unique(TREE_growth.cov$PLOT.ID)) # 11,128 unique plots
 
 # read in RDS:
-plots.clim <- readRDS("data/seasonal_climate_periodic_NE_plots.RDS")
+plots.clim <- readRDS(paste0(boxdir, "data/seasonal_climate_periodic_NE_plots.RDS"))
 
 
 # colnames(plots)
@@ -432,7 +434,9 @@ TREE_growth.cov <- left_join(TREE_growth.cov, MATmax)
 TREE_growth.cov <- left_join(TREE_growth.cov, MAP)
 TREE_growth.cov <- left_join(TREE_growth.cov, annual.ppt.anom)
 
-rm(annual.ppt, annual.tmin, annual.tmax, ppt.prism, tmin.prism, tmax.prism, plots.clim.m, clim.month.split, clim.month)
+rm(annual.ppt, annual.tmin, annual.tmax, ppt.prism, tmin.prism, tmax.prism, plots.clim.m, clim.month.split, clim.month, radial.inc, spplots.elev)
+rm(MAP, MATmax, MATmin, annual.ppt.anom, annual.ppt.remp, occurance.number, PRISM, spplots)
+
 # do some renaming to make things easier
 #TREE_growth.cov <- TREE_growth.cov %>% rename(SPCD = spp)
 
@@ -440,22 +444,35 @@ rm(annual.ppt, annual.tmin, annual.tmax, ppt.prism, tmin.prism, tmax.prism, plot
 TREE.remeas.BAL <- TREE.remeas %>%
   mutate(ba_sq_ft = ((dbhcur^2))*0.005454) %>% 
   group_by(PLOT.ID, point, date, cndtn) %>% 
-  mutate(BAL = sitreeE::PBAL(ba_sq_ft)) %>% select(state, county, pltnum, cndtn, point, tree, SPCD, status, 
+  mutate(BAL = sitreeE::PBAL(ba_sq_ft*volfac)) %>% select(state, county, pltnum, cndtn, point, tree, SPCD, status, 
                                                    dbhcur, dbhold, PLOT.ID, BAL, ba_sq_ft, volfac, cycle)
 
-TREE_growth.cov <- left_join(TREE_growth.cov, TREE.remeas.BAL)
+TREE_growth.cov <- left_join(TREE_growth.cov, TREE.remeas.BAL) %>% distinct()
 
-cleaned.data <- TREE_growth.cov %>% filter(!is.na(annual.growth) & !is.na(status) & DIA_DIFF >=0 & !is.na(elev))
+# calculate species-level BA for like species and non-like species for each tree
+PLOT.remeas.BAL <- TREE.remeas %>%
+  mutate(ba_sq_ft = ((dbhcur^2))*0.005454) %>% 
+  group_by(PLOT.ID, point, date, cndtn, SPCD) %>%
+  mutate(SPCD_BAL = sum(ba_sq_ft*volfac, na.rm =TRUE)) %>% ungroup() %>%
+  group_by(PLOT.ID, point, date, cndtn) %>%
+  mutate(BAL_total = sum(SPCD_BAL, na.rm =TRUE)) %>%
+  mutate(non_SPCD_BAL = BAL_total - SPCD_BAL) %>%  
+  select(PLOT.ID, point, date, cndtn, SPCD, SPCD_BAL, BAL_total, non_SPCD_BAL)
 
-ggplot(cleaned.data, aes(elev, M))+geom_point()+facet_wrap(~SPCD)
-ggplot(cleaned.data, aes(BAL, M))+geom_point()+facet_wrap(~SPCD)
-ggplot(cleaned.data, aes(DIA_DIFF, M))+geom_point()+facet_wrap(~SPCD)
-ggplot(cleaned.data, aes(si, M))+geom_point()+facet_wrap(~SPCD)
-ggplot(cleaned.data, aes(dbhcur, M))+geom_point()+facet_wrap(~SPCD)
+TREE_growth.cov <- left_join(TREE_growth.cov, PLOT.remeas.BAL) %>% distinct()
 
-View(cleaned.data %>% group_by(M, SPCD) %>% summarise(n()))
+cleaned.data <- TREE_growth.cov %>% filter(!is.na(annual.growth) & !is.na(status) & DIA_DIFF >=0 & !is.na(elev))%>% distinct()
 
-ggplot(cleaned.data, aes(LONG_FIADB, LAT_FIADB, color = M))+geom_jitter(size = 0.5)
+# ggplot(cleaned.data, aes(non_SPCD_BAL, M))+geom_point()+facet_wrap(~SPCD)
+# ggplot(cleaned.data, aes(elev, M))+geom_point()+facet_wrap(~SPCD)
+# ggplot(cleaned.data, aes(BAL, M))+geom_point()+facet_wrap(~SPCD)
+# ggplot(cleaned.data, aes(DIA_DIFF, M))+geom_point()+facet_wrap(~SPCD)
+# ggplot(cleaned.data, aes(si, M))+geom_point()+facet_wrap(~SPCD)
+# ggplot(cleaned.data, aes(dbhcur, M))+geom_point()+facet_wrap(~SPCD)
+
+# View(cleaned.data %>% group_by(M, SPCD) %>% summarise(n()))
+# 
+# ggplot(cleaned.data, aes(LONG_FIADB, LAT_FIADB, color = M))+geom_jitter(size = 0.5)
 
 
 summary(cleaned.data$elev)
@@ -465,11 +482,11 @@ saveRDS(cleaned.data, "data/cleaned.data.mortality.TRplots.RDS")
 # Get the N deposition data for all the plots
 # N deposition timeseries/spatial variation from...
 # the time series go from 1930-2017 by state and county...so it should be simple to match up 
-N.oxidized <- read_delim("data/Ndep/Atmospheric_Oxidized.txt")
+N.oxidized <- read_delim(paste0(boxdir,"data/Ndep/Atmospheric_Oxidized.txt"))
 N.oxidized$county <- as.numeric(N.oxidized$CountyFIPS)
 N.oxidized$state <- as.numeric(N.oxidized$StateFIPS)
 
-N.reduced <- read_delim("data/Ndep/Atmospheric_Reduced.txt")
+N.reduced <- read_delim(paste0(boxdir, "data/Ndep/Atmospheric_Reduced.txt"))
 N.reduced$county <- as.numeric(N.reduced$CountyFIPS)
 N.reduced$state <- as.numeric(N.reduced$StateFIPS)
 
@@ -488,13 +505,13 @@ Ndep.remper <- Ndep.melt %>% group_by(PLOT.ID, cycle) %>% mutate(prev.date = dat
                               filter(year >= prev.date & year <= date) %>% group_by(PLOT.ID, cycle, county, state) %>% 
                               mutate(Ndep.remper.avg = mean(value, na.rm =TRUE), 
                                      Nyears = n())
-View(Ndep.remper)
+#View(Ndep.remper)
 
-
+rm(test, plots.clim)
 # save Ndep average for the remper
 saveRDS(Ndep.remper, "data/Ndep.average.remper.NE.periodic.RDS")
 
-Ndep.remper <- Ndep.remper %>% dplyr::select(date, PLOT.ID, cycle, remper, county, state, Ndep.remper.avg)
+Ndep.remper <- Ndep.remper %>% dplyr::select(date, PLOT.ID, cycle, remper, county, state, Ndep.remper.avg) %>% distinct()
 # join up to cleaned data
 cleaned.data <- left_join(cleaned.data, Ndep.remper)
 colnames(cleaned.data)
@@ -510,6 +527,7 @@ map.ndep.trees
 dev.off()
 
 saveRDS(cleaned.data, "data/cleaned.data.mortality.TRplots.RDS")
+
 
 #----------------------------------------------------------------
 # get all the plot and tree information for the whole NE:
@@ -539,7 +557,7 @@ TPA <- TREE %>% group_by(state, county, pltnum, SPCD) %>% summarise(TPA = sum(vo
 
 PLOT.tpa <- left_join(PLOT, TPA)
 PLOT.tpa.all <- PLOT.tpa %>% dplyr::select(state, county, pltnum,SPCD, typcur, ba, TPA) %>% filter(!is.na(TPA)) %>%
-  filter(TPA >0 & ba > 0)
+  filter(TPA >0 & ba > 0) %>% distinct()
 
 unique(PLOT.tpa.all$typcur)
 
