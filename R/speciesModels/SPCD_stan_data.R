@@ -1,6 +1,9 @@
 SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   cleaned.data <- cleaned.data.full %>% filter(SPCD %in% SPCD.id)
   
+  
+ 
+  
   # scale the cleaned data tree-level diameters by species?
   cleaned.data <- cleaned.data %>% ungroup()  %>% group_by(SPCD) %>% 
     mutate(rempercur = ifelse(M ==1, remper*remper.correction, remper), 
@@ -12,27 +15,58 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                                           RD.sd = sd(RD, na.rm =TRUE),
                                                           annual.growth.median = median(annual.growth, na.rm = TRUE), 
                                                           annual.growth.sd = sd(annual.growth, na.rm = TRUE)) %>% 
-    ungroup() %>% mutate(DIA_scaled = (dbhcur - DIA.median)/DIA.sd, 
-                         annual.growth.scaled = (annual.growth - annual.growth.median)/annual.growth.sd, 
-                         RD.scaled = (RD-RD.median)/RD.sd,
-                         BAL.scaled = (BAL-BAL.median)/BAL.sd,
-                         si.scaled = (si - plot.medians$si.median)/plot.medians$si.sd, 
-                         ba.scaled = (ba - plot.medians$ba.median)/plot.medians$ba.sd,
-                         aspect.scaled = (aspect - plot.medians$aspect.median)/plot.medians$aspect.sd,
-                         slope.scaled = (slope - plot.medians$slope.median)/plot.medians$slope.sd,
-                         damage.scaled = (damage.total - plot.medians$damage.median)/plot.medians$damage.sd,
-                         MAP.scaled = (MAP-plot.medians$MAP.median)/plot.medians$MAP.sd, 
-                         elev.scaled = (elev-plot.medians$elev.median)/plot.medians$elev.sd,
-                         Ndep.scaled = (Ndep.remper.avg- plot.medians$Ndep.median)/plot.medians$Ndep.sd,
-                         physio.scaled = (physio-plot.medians$physio.median)/plot.medians$physio.sd,
-                         MATmin.scaled = (MATmin- plot.medians$MATmin.median)/plot.medians$MATmin.sd,
-                         MATmax.scaled = (MATmax - plot.medians$MATmax.median)/plot.medians$MATmax.sd)
+   # rescale to values of 0 to 1
+     ungroup()%>% mutate(DIA_scaled = rescale(dbhold, to = c(-1,1)), 
+                        annual.growth.scaled = rescale(annual.growth, to = c(-1,1)),
+                        RD.scaled = rescale(RD, to = c(-1,1)),
+                        BAL.scaled = rescale(BAL, to = c(-1,1)),
+                        
+                        SPCD.BA.scaled = rescale(SPCD_BA, to = c(-1,1)),
+                        non_SPCD.BA.scaled = rescale(non_SPCD_BA, to = c(-1,1)),
+                        prop.focal.ba = rescale(SPCD_BA/BA_total, to = c(-1,1)), 
+                        
+                        density.scaled = rescale(density_total, to = c(-1,1)),
+                        SPCD.density.scaled = rescale(SPCD_density, to = c(-1,1)),
+                        non.SPCD.density.scaled = rescale(non_SPCD_density, to = c(-1,1)),
+                        prop.focal.density = rescale(SPCD_density/density_total, to = c(-1,1)), 
+                        
+                        si.scaled = rescale(si, to = c(-1,1)),
+                        ba.scaled = rescale(BA_total, to = c(-1,1)),
+                        aspect.scaled = rescale(aspect, to = c(-1,1)),
+                        slope.scaled = rescale(slope, to = c(-1,1)),
+                        damage.scaled = rescale(damage, to = c(-1,1)),
+                        MAP.scaled = rescale(MAP, to = c(-1,1)),
+                        elev.scaled = rescale(elev, to = c(-1,1)),
+                        Ndep.scaled = rescale(Ndep.remper.avg, to = c(-1,1)),
+                        physio.scaled = rescale(physio, to = c(-1,1)),
+                        MATmin.scaled = rescale(MATmin, to = c(-1,1)),
+                        MATmax.scaled = rescale(MATmax, to = c(-1,1)), 
+                        ppt.anom = rescale(ppt.anom, to = c(-1,1)), 
+                        tmax.anom = rescale(tmax.anom, to = c(-1,1)), 
+                        tmin.anom = rescale(tmin.anom, to = c(-1,1)))
+  # old method of scaling                      
+    # ungroup() %>% mutate(DIA_scaled = (dbhcur - DIA.median)/DIA.sd, 
+    #                      annual.growth.scaled = (annual.growth - annual.growth.median)/annual.growth.sd, 
+    #                      RD.scaled = (RD-RD.median)/RD.sd,
+    #                      BAL.scaled = (BAL-BAL.median)/BAL.sd,
+    #                      si.scaled = (si - plot.medians$si.median)/plot.medians$si.sd, 
+    #                      ba.scaled = (ba - plot.medians$ba.median)/plot.medians$ba.sd,
+    #                      aspect.scaled = (aspect - plot.medians$aspect.median)/plot.medians$aspect.sd,
+    #                      slope.scaled = (slope - plot.medians$slope.median)/plot.medians$slope.sd,
+    #                      damage.scaled = (damage.total - plot.medians$damage.median)/plot.medians$damage.sd,
+    #                      MAP.scaled = (MAP-plot.medians$MAP.median)/plot.medians$MAP.sd, 
+    #                      elev.scaled = (elev-plot.medians$elev.median)/plot.medians$elev.sd,
+    #                      Ndep.scaled = (Ndep.remper.avg- plot.medians$Ndep.median)/plot.medians$Ndep.sd,
+    #                      physio.scaled = (physio-plot.medians$physio.median)/plot.medians$physio.sd,
+    #                      MATmin.scaled = (MATmin- plot.medians$MATmin.median)/plot.medians$MATmin.sd,
+    #                      MATmax.scaled = (MATmax - plot.medians$MATmax.median)/plot.medians$MATmax.sd)
   
   SPP.df <- data.frame(SPCD = unique(cleaned.data$SPCD), 
                        SPP = 1:length(unique(cleaned.data$SPCD)))
   
   cleaned.data<- left_join(cleaned.data, SPP.df) 
-  cleaned.data <- cleaned.data %>%  filter(!is.na(si) & !is.na(dbhcur)& !is.na(M) & !is.na(annual.growth.scaled) & !is.na(ppt.anom))
+  cleaned.data <- cleaned.data %>%  filter(!is.na(si) & !is.na(dbhcur)& !is.na(M) & 
+                                             !is.na(annual.growth.scaled) & !is.na(ppt.anom))# & !is.na(prop.focal.ba) & !is.na(prop.focal.density))
   #summary(cleaned.data$BAL.scaled)
   cleaned.data$S <- ifelse(cleaned.data$M == 1, 0, 1)
   
@@ -47,7 +81,12 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   # 1. Annual growth 
   
   
-  
+  ggplot(test.data, aes(x= as.character(M), y = density.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  ggplot(test.data, aes(x= as.character(M), y = prop.focal.ba))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  ggplot(test.data, aes(x= as.character(M), y = SPCD.BA.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  ggplot(test.data, aes(x= as.character(M), y = SPCD.density.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  ggplot(test.data, aes(x= as.character(M), y = non_SPCD.BA.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  ggplot(test.data, aes(x= as.character(M), y = non.SPCD.density.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
   
   
   
@@ -73,8 +112,11 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                                                  DIA_scaled, 
                                                                  RD.scaled, 
                                                                  ba.scaled, 
-                                                                 BAL.scaled, 
-                                                                 damage.scaled)))
+                                                                 BAL.scaled,
+                                                                 prop.focal.ba,
+                                                                 damage.scaled 
+                                                                 
+                                                                 )))
   # model.4 data
   # 4. Diameter + Annual growth + competition variables (RD.scaled, BAL, damage) + Climate variables
   
@@ -86,7 +128,9 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                                                  RD.scaled, 
                                                                  ba.scaled, 
                                                                  BAL.scaled, 
+                                                                 prop.focal.ba,
                                                                  damage.scaled,
+                                                                 
                                                                  MATmax.scaled, 
                                                                  MATmin.scaled, 
                                                                  MAP.scaled,
@@ -103,8 +147,10 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                                                  DIA_scaled, 
                                                                  RD.scaled, 
                                                                  ba.scaled, 
-                                                                 BAL.scaled, 
+                                                                 BAL.scaled,
+                                                                 prop.focal.ba,
                                                                  damage.scaled,
+                                                                
                                                                  MATmax.scaled, 
                                                                  MATmin.scaled, 
                                                                  MAP.scaled,
@@ -126,7 +172,9 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                                                  RD.scaled, 
                                                                  ba.scaled, 
                                                                  BAL.scaled, 
+                                                                 prop.focal.ba,
                                                                  damage.scaled,
+                                                                
                                                                  MATmax.scaled, 
                                                                  MATmin.scaled, 
                                                                  MAP.scaled,
@@ -142,13 +190,15 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                       mutate_at(.funs = list(growth.int = ~.*annual.growth.scaled), 
                                                 .vars = vars(DIA_scaled:physio.scaled)) %>% 
                                       mutate_at(.funs = list(DIA.int = ~.*DIA_scaled), 
-                                                .vars = vars(RD.scaled:physio.scaled)) ))
+                                                .vars = vars(RD.scaled:physio.scaled)) )) #%>% 
+                                     # mutate_at(scale, .vars = vars(DIA_scaled_growth.int:physio.scaled_DIA.int))))
   
   
   
   
-  
-  
+  xM <- mod.data.6$xM
+  summary(xM[,1]*xM[,2])
+  summary(xM[,"DIA_scaled_growth.int"])
   # model.7 data
   # 7. model 5 + competition interactions
   mod.data.7 <- list(N = nrow(train.data), 
@@ -159,7 +209,9 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                                                  RD.scaled, 
                                                                  ba.scaled, 
                                                                  BAL.scaled, 
+                                                                 prop.focal.ba,
                                                                  damage.scaled,
+                                                                
                                                                  MATmax.scaled, 
                                                                  MATmin.scaled, 
                                                                  MAP.scaled,
@@ -192,7 +244,10 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                       
                                       # generate damage interactions
                                       mutate_at(.funs = list(damage.int = ~.*damage.scaled), 
-                                                .vars = vars(MATmax.scaled:physio.scaled))
+                                                .vars = vars(MATmax.scaled:physio.scaled))#%>%
+                                      # make sure interactions terms are scaled to be closer to values
+                                      #mutate_at(.funs = function(x)(x/10), .vars = vars(physio.scaled_damage.int))
+                                    # mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:physio.scaled_damage.int))
                      ))
   
   
@@ -206,8 +261,10 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                                                  DIA_scaled, 
                                                                  RD.scaled, 
                                                                  ba.scaled, 
-                                                                 BAL.scaled, 
+                                                                 BAL.scaled,
+                                                                 prop.focal.ba,
                                                                  damage.scaled,
+                                                                 
                                                                  MATmax.scaled, 
                                                                  MATmin.scaled, 
                                                                  MAP.scaled,
@@ -262,7 +319,10 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                       
                                       # generate tmax.anom interactions
                                       mutate_at(.funs = list(tmax.anom.int = ~.*tmax.anom), 
-                                                .vars = vars(slope.scaled:physio.scaled))
+                                                .vars = vars(slope.scaled:physio.scaled))#%>%
+                                      # make sure interactions terms are scaled to be closer to values
+                                      #mutate_at(.funs = function(x)(x/10), .vars = vars(ba.scaled_RD.scaled.int:physio.scaled_damage.int))
+                                      #mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:physio.scaled_tmax.anom.int))
                      ))
   
   # model.9 data
@@ -276,6 +336,7 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                                                  RD.scaled, 
                                                                  ba.scaled, 
                                                                  BAL.scaled, 
+                                                                 prop.focal.ba,
                                                                  damage.scaled,
                                                                  MATmax.scaled, 
                                                                  MATmin.scaled, 
@@ -344,7 +405,8 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                       mutate_at(.funs = list(elev.int = ~.*elev.scaled), 
                                                 .vars = vars(Ndep.scaled:physio.scaled)) %>%
                                       # generate Ndep interactions
-                                      mutate(Ndep.physio.int = physio.scaled*Ndep.scaled)
+                                      mutate(Ndep.physio.int = physio.scaled*Ndep.scaled) #%>%
+                                      #mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:Ndep.physio.int))
                                     
                      ))
   
@@ -375,6 +437,7 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                                                      RD.scaled, 
                                                                      ba.scaled, 
                                                                      BAL.scaled, 
+                                                                     prop.focal.ba,
                                                                      damage.scaled)))
   # model.4 data
   # 4. Diameter + Annual growth + competition variables (RD.scaled, BAL, damage) + Climate variables
@@ -387,6 +450,7 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                                                      RD.scaled, 
                                                                      ba.scaled, 
                                                                      BAL.scaled, 
+                                                                     prop.focal.ba,
                                                                      damage.scaled,
                                                                      MATmax.scaled, 
                                                                      MATmin.scaled, 
@@ -405,6 +469,7 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                                                      RD.scaled, 
                                                                      ba.scaled, 
                                                                      BAL.scaled, 
+                                                                     prop.focal.ba,
                                                                      damage.scaled,
                                                                      MATmax.scaled, 
                                                                      MATmin.scaled, 
@@ -427,6 +492,7 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                                                      RD.scaled, 
                                                                      ba.scaled, 
                                                                      BAL.scaled, 
+                                                                     prop.focal.ba,
                                                                      damage.scaled,
                                                                      MATmax.scaled, 
                                                                      MATmin.scaled, 
@@ -460,6 +526,7 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                                                      RD.scaled, 
                                                                      ba.scaled, 
                                                                      BAL.scaled, 
+                                                                     prop.focal.ba,
                                                                      damage.scaled,
                                                                      MATmax.scaled, 
                                                                      MATmin.scaled, 
@@ -493,7 +560,10 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                            
                                            # generate damage interactions
                                            mutate_at(.funs = list(damage.int = ~.*damage.scaled), 
-                                                     .vars = vars(MATmax.scaled:physio.scaled))
+                                                     .vars = vars(MATmax.scaled:physio.scaled))#%>%
+                                           # make sure interactions terms are scaled to be closer to values
+                                           #mutate_at(.funs = function(x)(x/10), .vars = vars(physio.scaled_damage.int))
+                                         #  mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:physio.scaled_damage.int))
                           ))
   
   
@@ -508,6 +578,7 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                                                      RD.scaled, 
                                                                      ba.scaled, 
                                                                      BAL.scaled, 
+                                                                     prop.focal.ba,
                                                                      damage.scaled,
                                                                      MATmax.scaled, 
                                                                      MATmin.scaled, 
@@ -563,7 +634,10 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                            
                                            # generate tmax.anom interactions
                                            mutate_at(.funs = list(tmax.anom.int = ~.*tmax.anom), 
-                                                     .vars = vars(slope.scaled:physio.scaled))
+                                                     .vars = vars(slope.scaled:physio.scaled))#%>%
+                                           # make sure interactions terms are scaled to be closer to values
+                                           #mutate_at(.funs = function(x)(x/10), .vars = vars(ba.scaled_RD.scaled.int:physio.scaled_damage.int))
+                                           #mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:physio.scaled_tmax.anom.int))
                           ))
   
   # model.9 data
@@ -577,6 +651,7 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                                                      RD.scaled, 
                                                                      ba.scaled, 
                                                                      BAL.scaled, 
+                                                                     prop.focal.ba,
                                                                      damage.scaled,
                                                                      MATmax.scaled, 
                                                                      MATmin.scaled, 
@@ -645,7 +720,8 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                            mutate_at(.funs = list(elev.int = ~.*elev.scaled), 
                                                      .vars = vars(Ndep.scaled:physio.scaled)) %>%
                                            # generate Ndep interactions
-                                           mutate(Ndep.physio.int = physio.scaled*Ndep.scaled)
+                                           mutate(Ndep.physio.int = physio.scaled*Ndep.scaled)#%>%
+                                          # mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:Ndep.physio.int))
                                          
                           ))
   
