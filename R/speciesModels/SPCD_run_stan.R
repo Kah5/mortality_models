@@ -1,28 +1,81 @@
-SPCD_run_stan <- function(SPCD.id, model.no = 1, niter = 1000, nchains = 2, remper.correction = 0.5,  model.file = 'modelcode/mort_model3_SPCD.stan'){
-
+SPCD_run_stan <- function(SPCD.id, model.no = 1, niter = 1000, nchains = 2, remper.correction = 0.5,  model.file = 'modelcode/mort_model3_SPCD.stan', output.folder ){
+ 
   model.name <- paste0("mort_model", model.no, "_single_SPCD_", SPCD.id, "remper_", remper.correction)
-  load(paste0("SPCD_standata_general_full/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.no, ".Rdata")) # load the species code data
+  load(paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.no, ".Rdata")) # load the species code data
   mod.data$K <- ncol(mod.data$xM)
   # y == 0 is mortality and y == 1 is survival
   num_cores <-  parallel::detectCores()
+  
+  initf2 <- function(chain_id = 1) {
+    # cat("chain_id =", chain_id, "\n")
+    list(u_beta = rnorm(length(colnames(mod.data$xM))), alpha_SPP = rnorm(1), alpha = chain_id)
+  }
+  
+  u_betas.inits = data.frame(param = paste0("u_beta[",1:length(colnames(mod.data$xM)),"]"), 
+                             init = rnorm(length(colnames(mod.data$xM)), 0.1, 0.1)) %>% spread(init, param)
+  # generate a list of lists to specify initial values
+  #n_chains <- 4
+  init_ll <- lapply(1:nchains, function(id) initf2(chain_id = id))
+  
+  #mod.data$xM <- mod.data$xM %>% mutate_at(.funs = function(x)(x/10), .vars = vars(DIA_scaled_growth.int:physio.scaled_DIA.int))
   # null model:
   start.time <- Sys.time()
-  fit.1 <- stan(file = model.file , 
-                data = mod.data,
-                iter = niter, 
-                chains = nchains, 
-                verbose=FALSE, 
-                ##control =  list(max_treedepth = 15),#list(adapt_delta = 0.99, stepsize = 0.5, max_treedepth = 15),#, stepsize = 0.01, max_treedepth = 15),
-                #sample_file = model.name, 
-                #adapt_delta = 0.99, 
-                pars =c("alpha_SPP", "u_beta", 
-                        "y_rep", "mMrep", "pSannualrep", ## in sample predictions
-                        "y_hat", "mMhat", "pSannualhat", ## out of sample predictions
-                        "log_lik")) #, "y_hat", 
+  # 
+  # mod.data.brms <- data.frame(S = mod.data$y, 
+  #                             mod.data$xM, 
+  #                             Remper = mod.data$Remper)
+  # 
+  # fit.1 <- brm(S ~ . -Remper, # make a full regression without the Remper column
+  #              data = mod.data.brms, 
+  #              family = bernoulli(link = "logit"), 
+  #              iter = 100, 
+  #              chains = 1, )
+  # 
+  # 
+  # 
+  # plot(fit.1)
+  # 
+  # 
+  # mod.1 <- brm(bf(S ~ (1+exp(-eta))^(-Remper),
+  #                 eta ~ . -Remper,
+  #                 nl = TRUE),
+  #                 data = mod.data.brms,
+  #                 family = bernoulli(link="identity"), 
+  #                 iter = 100, 
+  #                 chains = 1)
+  # 
+  # 
+  # 
+  # mod.1 <- brm(bf(S ~ (exp(eta) / (1 + exp(eta)))^(-Remper),
+  #                 eta ~ . -Remper,
+  #                 nl = TRUE),
+  #              data = mod.data.brms,
+  #              family = bernoulli(link="identity"), 
+  #              iter = 100, 
+  #              chains = 1, 
+  #              sample_prior = "only")
+  # 
+  # mod.1 <- brm(bf(S ~ inv_logit(eta)^(-Remper),
+  #                 eta ~ . -Remper,
+  #                 nl = TRUE),
+  #              data = mod.data.brms,
+  #              family = bernoulli(link="identity"), 
+  #              iter = 100, 
+  #              chains = 1)
   
- 
- 
-
+  fit.1 <- stan(file = model.file , 
+       data = mod.data,
+       iter = niter, 
+       chains = nchains, 
+       verbose=FALSE, 
+       init = 0,
+       ##control =  list(max_treedepth = 15),#list(adapt_delta = 0.99, stepsize = 0.5, max_treedepth = 15),#, stepsize = 0.01, max_treedepth = 15),
+       #sample_file = model.name, 
+       #adapt_delta = 0.99, 
+       pars =c("alpha_SPP", "u_beta"))#, 
+              # "y_rep", "mMrep",## in sample predictions
+              # "y_hat", "mMhat", ## out of sample predictions
+             #  "log_lik")) #, "y_hat", 
 end.time <- Sys.time()
 
 
@@ -39,9 +92,9 @@ time.diag <- data.frame(model = model.no,
                         elapsed.time = elapsed_time, 
                         cores = num_cores)
 
-write.csv(time.diag, paste0("SPCD_stanoutput_full/computational_resources/time_diag_SPCD_",SPCD.id, "_model_", model.no, "_remper_", remper.correction,".csv"))
+write.csv(time.diag, paste0(output.folder, "/computational_resources/time_diag_SPCD_",SPCD.id, "_model_", model.no, "_remper_", remper.correction,".csv"))
 # get the sampler diagnostics and save:
-saveRDS(fit.1, paste0("SPCD_stanoutput_full/samples/model_",model.no,"_SPCD_",SPCD.id, "_remper_correction_", remper.correction, ".RDS"))
+saveRDS(fit.1, paste0(output.folder, "/samples/model_",model.no,"_SPCD_",SPCD.id, "_remper_correction_", remper.correction, ".RDS"))
 
 }
 
@@ -60,7 +113,7 @@ save_diagnostics <- function(stanfitobj = fit.1, nchains = 2, model.no = 1, remp
     # we want few (no) divergent transitions so this is good
     sampler_diag
     # there are no divergent transistions in either chain, and acceptance rate > 0.89
-    write.csv(sampler_diag, paste0("SPCD_stanoutput/sample_diagnostics_", model.name,"_remper_",remper.correction, "_species_", SPCD.id , ".csv"), row.names = FALSE)
+    write.csv(sampler_diag, paste0(output.folder, "SPCD_stanoutput_full/sample_diagnostics_", model.name,"_remper_",remper.correction, "_species_", SPCD.id , ".csv"), row.names = FALSE)
     
     
     # get the convergence statistics of the model:
@@ -76,7 +129,7 @@ save_diagnostics <- function(stanfitobj = fit.1, nchains = 2, model.no = 1, remp
     convergence.stats <- as.data.frame(rbind(Rhats, ESS_bulks, ESS_tails))
     convergence.stats$Statistic <- c("Rhat", "ESS_bulk", "ESS_tail")
     
-    write.csv(convergence.stats,paste0("SPCD_stanoutput/Rhats_diagnostics_", model.name,"_remper_",remper.correction,  "_species_", SPCD.id , ".csv"))
+    write.csv(convergence.stats,paste0(output.folder, "SPCD_stanoutput_full/Rhats_diagnostics_", model.name,"_remper_",remper.correction,  "_species_", SPCD.id , ".csv"))
 }
   #end.time <- Sys.time()
   #mod1REtime <-  end.time - start.time 
@@ -87,12 +140,12 @@ plot.stan.mort <- function(fit = fit.1, SPCD.id){
   
   
   
-  png(height = 12, width = 12, units = "in", res = 100, paste0("SPGRP_stanoutput/images/traceplots_mortality_", model.name,"_species_", SPCD.id , ".png"))
+  png(height = 12, width = 12, units = "in", res = 100, paste0(output.folder, "SPCD_stanoutput_full/images/traceplots_mortality_", model.name,"_species_", SPCD.id , ".png"))
   #par(mfrow = c(5, 3))
   traceplot (fit.1, pars = par.names, nrow = 7, ncol = 6, inc_warmup = FALSE) 
   dev.off()
   
-  png(height = 12, width = 12, units = "in", res = 100, paste0("SPCD_stanoutput/pairs_plot_mortality_", model.name, "_species_", SPCD.id , ".png"))
+  png(height = 12, width = 12, units = "in", res = 100, paste0(output.folder, "SPCD_stanoutput_full/pairs_plot_mortality_", model.name, "_species_", SPCD.id , ".png"))
   pairs(fit.1, pars = "alpha", "u_beta")
   dev.off()
   
@@ -129,5 +182,5 @@ plot.stan.mort <- function(fit = fit.1, SPCD.id){
     geom_errorbar(data = na.omit(betas.quant), aes(x = Covariate , ymin = ci.lo, ymax = ci.hi), width = 0.1)+
     geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+facet_wrap(~COMMON)+theme_bw(base_size = 12)+
     theme( axis.text.x = element_text(angle = 45, hjust = 1))+ylab("Effect on mortality")+xlab("Parameter")
-  ggsave(height = 5, width = 7, units = "in",paste0("SPCD_stanoutput/images/Estimated_effects_on_mortality_",model.name, "_species_", SPCD.id , ".png"))
+  ggsave(height = 5, width = 7, units = "in",paste0(output.folder, "SPCD_stanoutput_full/images/Estimated_effects_on_mortality_",model.name, "_species_", SPCD.id , ".png"))
 }
