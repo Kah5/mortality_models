@@ -65,34 +65,73 @@ cleaned.data$SPGRPNAME <- SPGRP.df[match(cleaned.data$SPGRPCD, SPGRP.df$VALUE),]
 
 # center and scale the covariate data
 # for covariates at the plot level, scale by the unique plots so the # of trees on the plot doesnt affect the mean and sd values:
-plot.medians <- unique(cleaned.data %>% ungroup()%>% dplyr::select(PLOT.ID, si, ba, slope, aspect, MAP, MATmin, MATmax, damage.total, elev, Ndep.remper.avg, physio, RD)) %>% ungroup() %>% summarise(si.median = median(si, na.rm =TRUE), 
-                                                                                                                                                                                                      RD.median = median(RD, na.rm = TRUE),
-                                                                                                                                                                                                      ba.median = median(ba, na.rm =TRUE), 
-                                                                                                                                                                                                      slope.median = median(slope, na.rm = TRUE), 
-                                                                                                                                                                                                      aspect.median = median(aspect, na.rm = TRUE),
-                                                                                                                                                                                                      damage.median = median(damage.total, na.rm =TRUE),
-                                                                                                                                                                                                      elev.median = median(elev, na.rm =TRUE),
-                                                                                                                                                                                                      Ndep.median = median(Ndep.remper.avg, na.rm =TRUE),
-                                                                                                                                                                                                      physio.median = median(physio, na.rm = TRUE),
-                                                                                                                                                                                                      
-                                                                                                                                                                                                      MAP.median = median(MAP, na.rm =TRUE), 
-                                                                                                                                                                                                      MATmin.median = median(MATmin, na.rm =TRUE), 
-                                                                                                                                                                                                      MATmax.median = median(MATmax, na.rm =TRUE), 
-                                                                                                                                                                                                      
-                                                                                                                                                                                                      RD.sd = sd(RD, na.rm = TRUE),
-                                                                                                                                                                                                      ba.sd = sd(ba, na.rm =TRUE),
-                                                                                                                                                                                                      si.sd = sd(si, na.rm =TRUE), 
-                                                                                                                                                                                                      slope.sd = sd(slope, na.rm =TRUE),
-                                                                                                                                                                                                      aspect.sd = sd(aspect, na.rm = TRUE),
-                                                                                                                                                                                                      damage.sd = sd(damage.total, na.rm =TRUE),
-                                                                                                                                                                                                      elev.sd = sd(elev, na.rm =TRUE),
-                                                                                                                                                                                                      Ndep.sd = sd(Ndep.remper.avg, na.rm =TRUE),
-                                                                                                                                                                                                      physio.sd = sd(physio, na.rm = TRUE),
-                                                                                                                                                                                                      
-                                                                                                                                                                                                      MAP.sd = sd(MAP, na.rm =TRUE), 
-                                                                                                                                                                                                      MATmin.sd = sd(MATmin, na.rm =TRUE), 
-                                                                                                                                                                                                      MATmax.sd = sd(MATmax, na.rm =TRUE)
-)
+plot.medians <- unique(
+  cleaned.data %>% ungroup() %>%
+    dplyr::select(
+      PLOT.ID,
+      si,
+      ba,
+      BA_total,
+      SPCD_BA, 
+      non_SPCD_BA, 
+      
+      slope,
+      aspect,
+      MAP,
+      MATmin,
+      MATmax,
+      damage.total,
+      elev,
+      Ndep.remper.avg,
+      physio,
+      RD
+    )
+) %>%
+  ungroup() %>% summarise(
+    si.median = median(si, na.rm = TRUE),
+    RD.median = median(RD, na.rm = TRUE),
+    ba.median = median(ba, na.rm = TRUE),
+    BA_tot.median = median(BA_total, na.rm =
+                             TRUE),
+    nonSPCD_BA_tot.median = median(non_SPCD_BA, na.rm = TRUE),
+    SPCD_BA.median = median(SPCD_BA, na.rm =
+                              TRUE),
+    slope.median = median(slope, na.rm = TRUE),
+    aspect.median = median(aspect, na.rm = TRUE),
+    damage.median = median(damage.total, na.rm =
+                             TRUE),
+    elev.median = median(elev, na.rm = TRUE),
+    Ndep.median = median(Ndep.remper.avg, na.rm =
+                           TRUE),
+    physio.median = median(physio, na.rm = TRUE),
+    MAP.median = median(MAP, na.rm =
+                          TRUE),
+    MATmin.median = median(MATmin, na.rm = TRUE),
+    MATmax.median = median(MATmax, na.rm =
+                             TRUE),
+    RD.sd = sd(RD, na.rm = TRUE),
+    ba.sd = sd(ba, na.rm = TRUE),
+    
+    BA_tot.sd = sd(BA_total, na.rm =
+                             TRUE),
+    nonSPCD_BA_tot.sd = sd(non_SPCD_BA, na.rm = TRUE),
+    SPCD_BA.sd = sd(SPCD_BA, na.rm =
+                              TRUE),
+    si.sd = sd(si, na.rm =
+                 TRUE),
+    slope.sd = sd(slope, na.rm = TRUE),
+    aspect.sd = sd(aspect, na.rm = TRUE),
+    damage.sd = sd(damage.total, na.rm =
+                     TRUE),
+    elev.sd = sd(elev, na.rm = TRUE),
+    Ndep.sd = sd(Ndep.remper.avg, na.rm =
+                   TRUE),
+    physio.sd = sd(physio, na.rm = TRUE),
+    MAP.sd = sd(MAP, na.rm = TRUE),
+    MATmin.sd = sd(MATmin, na.rm =
+                     TRUE),
+    MATmax.sd = sd(MATmax, na.rm = TRUE)
+  )
 
 #View(cleaned.data %>% group_by(SPGRPCD, SPCD) %>% summarise(n()))
 
@@ -188,7 +227,7 @@ remper.cor.vector <- c(0.5)
 #model.number <- 6
 model.list <- 1:9
 
-for(m in 1:9){ 
+for(m in 6){ 
 
   model.number <- model.list[m]
 for(i in 1:17){# run for each of the 17 species
@@ -198,15 +237,15 @@ for(i in 1:17){# run for each of the 17 species
 
  
     for (j in 1:length(remper.cor.vector)){ # for the growth only model explore the consequences of other assumptions about remeasurement period
-      cat(paste("running stan mortality model ",model.number, " for SPCD", SPCD.df[i,]$SPCD, common.name$COMMON, " remper correction", remper.cor.vector[j]))
+      cat(paste("running stan mortality model ", model.number, " for SPCD", SPCD.df[i,]$SPCD, common.name$COMMON, " remper correction", remper.cor.vector[j]))
       
       fit.1 <- SPCD_run_stan(SPCD.id = SPCD.df[i,]$SPCD,
                              model.no = model.number,
-                             niter = 2000,
+                             niter = 1000,
                              nchains = 3,
                              remper.correction = remper.cor.vector[j],
                              model.file = 'modelcode/mort_model_general.stan', 
-                             output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/")
+                             output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/SPCD_stanoutput_full_standardized")
       SPCD.id <-  SPCD.df[i,]$SPCD
      
       # set up to make plots of the stan outputs 
@@ -214,7 +253,7 @@ for(i in 1:17){# run for each of the 17 species
       remp.cor <- remper.cor.vector[j]
       remper.correction <- remper.cor.vector[j]
       
-      output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
+      output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/SPCD_stanoutput_full_standardized"
       
       source("R/speciesModels/SPCD_plot_stan.R")
       rm(fit.1)
@@ -222,11 +261,12 @@ for(i in 1:17){# run for each of the 17 species
   }
 }
 
+
 # get the predicted AUC for each model 1-6:
-for(i in 1:17){# run for each of the 17 species
+for(i in 7:17){# run for each of the 17 species
   common.name <- nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON)
   
-  for(m in 2:6){  # run each of the 9 models
+  for(m in 6:9){  # run each of the 9 models
   # for(m in 7:9){ 
 
   model.number <- model.list[m]
@@ -248,53 +288,56 @@ for(i in 1:17){# run for each of the 17 species
   }
 }
 
-##########################################################################################
-# for model 6 vary the remper length
-##########################################################################################
+# ##########################################################################################
+# # for model 6 vary the remper length
+# ##########################################################################################
+# 
+# # this runs a stan model and saves the outputs
+# cleaned.data.full %>% group_by(SPCD) %>% summarise(n())
+# SPCD.df <- data.frame(SPCD = nspp[1:17, ]$SPCD, 
+#                       spcd.id = 1:17)
+# remper.cor.vector <- c(0.1, 0.3, 0.7, 0.9)
+# #model.number <- 6
+# model.list <- 6
+# 
+# for(i in 1:17){# run for each of the 17 species
+#   common.name <- nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON)
+#   
+#   for(m in 1:length(model.list)){  # run each of the 9 models
+#     model.number <- model.list[m]
+#     for (j in 1:length(remper.cor.vector)){ # for the gowoth only model explore the consequences of other assumptions about remeasurement period
+#       cat(paste("running stan mortality model ",model.number, " for SPCD", SPCD.df[i,]$SPCD, common.name$COMMON, " remper correction", remper.cor.vector[j]))
+#       
+#       fit.1 <- SPCD_run_stan(SPCD.id = SPCD.df[i,]$SPCD,
+#                              model.no = model.number,
+#                              niter = 3000,
+#                              nchains = 3,
+#                              remper.correction = remper.cor.vector[j],
+#                              model.file = 'modelcode/mort_model_general.stan', 
+#                              output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/")
+#       SPCD.id <-  SPCD.df[i,]$SPCD
+#       #saveRDS(fit.1, paste0("SPCD_stanoutput_full/samples/model_",model.number,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
+#       # save_diagnostics (stanfitobj = fit.1, nchains = 2, model.no = model.number, remper.correction = remper.cor.vector[j])
+#       
+#       model.name <- paste0("mort_model_",model.number,"_SPCD_", SPCD.id, "_remper_correction_", remper.cor.vector[j])
+#       remp.cor <- remper.cor.vector[j]
+#       remper.correction <- remper.cor.vector[j]
+#       
+#       output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
+#       
+#       source("R/SPCD_plot_stan.R")
+#       rm(fit.1)
+#     }
+#   }
+# }
+# 
+# 
+# # plotting effects of mortality model by species to compare remper growth effects
+# # for SPCD 316, plot all estimated values:
 
-# this runs a stan model and saves the outputs
-cleaned.data.full %>% group_by(SPCD) %>% summarise(n())
-SPCD.df <- data.frame(SPCD = nspp[1:17, ]$SPCD, 
-                      spcd.id = 1:17)
-remper.cor.vector <- c(0.1, 0.3, 0.7, 0.9)
-#model.number <- 6
-model.list <- 6
 
-for(i in 1:17){# run for each of the 17 species
-  common.name <- nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON)
-  
-  for(m in 1:length(model.list)){  # run each of the 9 models
-    model.number <- model.list[m]
-    for (j in 1:length(remper.cor.vector)){ # for the gowoth only model explore the consequences of other assumptions about remeasurement period
-      cat(paste("running stan mortality model ",model.number, " for SPCD", SPCD.df[i,]$SPCD, common.name$COMMON, " remper correction", remper.cor.vector[j]))
-      
-      fit.1 <- SPCD_run_stan(SPCD.id = SPCD.df[i,]$SPCD,
-                             model.no = model.number,
-                             niter = 3000,
-                             nchains = 3,
-                             remper.correction = remper.cor.vector[j],
-                             model.file = 'modelcode/mort_model_general.stan', 
-                             output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/")
-      SPCD.id <-  SPCD.df[i,]$SPCD
-      #saveRDS(fit.1, paste0("SPCD_stanoutput_full/samples/model_",model.number,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
-      # save_diagnostics (stanfitobj = fit.1, nchains = 2, model.no = model.number, remper.correction = remper.cor.vector[j])
-      
-      model.name <- paste0("mort_model_",model.number,"_SPCD_", SPCD.id, "_remper_correction_", remper.cor.vector[j])
-      remp.cor <- remper.cor.vector[j]
-      remper.correction <- remper.cor.vector[j]
-      
-      output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
-      
-      source("R/SPCD_plot_stan.R")
-      rm(fit.1)
-    }
-  }
-}
-
-
-# plotting effects of mortality model by species to compare remper growth effects
-# for SPCD 316, plot all estimated values:
-
+##############################################################################3
+# get the species-level covariates and make a big figure
 # run for model 6
 betas.list <- list()
 SPCD.id
@@ -305,7 +348,7 @@ get.beta.covariates <- function(SPCD.id, remper.cor.vector, model.no){
   print(SPCD.id)
   for(j in 1:length(remper.cor.vector)){
     print (paste0( "remper correction vector ", remper.cor.vector[j]))
-    fit <- readRDS(paste0(boxdir,"/SPCD_stanoutput_full/samples/model_",model.no,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
+    fit <- readRDS(paste0(output.folder,"/SPCD_stanoutput_full/samples/model_",model.no,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
     fit_ssm_df <- as_draws_df(fit) # takes awhile to convert to df
     
     # get all the covariates using posterior package
@@ -314,7 +357,7 @@ get.beta.covariates <- function(SPCD.id, remper.cor.vector, model.no){
       mutate(remper.cor = remper.cor.vector[j], 
              SPCD = SPCD.id)
     
-    saveRDS(betas.quant, paste0(boxdir, "/SPCD_stanoutput_full/betas/model_",model.no,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
+    saveRDS(betas.quant, paste0(output.folder, "/SPCD_stanoutput_full/betas/model_",model.no,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
     
     # betas.list[[j]] <- betas.quant
     
@@ -326,27 +369,26 @@ get.beta.covariates <- function(SPCD.id, remper.cor.vector, model.no){
 
 big.betas <- list()
 for(i in 1:17){
-  get.beta.covariates(SPCD.id = SPCD.df[i,]$SPCD, remper.cor.vector = remper.cor.vector, model.no = 6)
+  get.beta.covariates(SPCD.id = SPCD.df[i,]$SPCD, remper.cor.vector = remper.cor.vector, model.no = 5)
 }
 
 # read in all the betas from just model 6, 0.5:
 # read in all the betas:
-all.files.05 <- paste0(boxdir, "/SPCD_stanoutput_full/betas/", list.files(paste0(boxdir,"SPCD_stanoutput_full/betas/"), "0.5"))
+all.files.05 <- paste0(output.folder, "/SPCD_stanoutput_full/betas/", list.files(paste0(output.folder,"SPCD_stanoutput_full/betas/"), "0.5"))
 big.betas <- lapply(all.files.05, readRDS)
 betas.all.df <- do.call(rbind, big.betas)
 betas.all.df$remper.cor <- as.character(betas.all.df$remper.cor)
 betas.all.df$Species <- FIESTA::ref_species[match(betas.all.df$SPCD, ref_species$SPCD),]$COMMON
 
 # get model parameter names
-model.number <- 6
-load(paste0("SPCD_standata_general_full/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.number, ".Rdata")) # load the species code data
-
+model.number <- 5
+load(paste0("SPCD_standata_general_full/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.number, ".Rdata")) # load the species code data5
 param.names <- data.frame(Parameter = colnames(mod.data$xM), 
-                          variable = paste0("u_beta[", 1:48,"]"))
+                          variable = paste0("u_beta[", 1:18,"]"))
                           
 betas.all.df <- left_join(betas.all.df, param.names)
 betas.all.df
-spp.traits <- read.csv(paste0(boxdir, "NinemetsSpeciesTraits.csv"))
+spp.traits <- read.csv(paste0(output.folder, "NinemetsSpeciesTraits.csv"))
 betas.all.df <- left_join(betas.all.df, spp.traits)
 
 ggplot(data = na.omit(betas.all.df) %>% filter(variable %in% "u_beta[1]"), aes(x = Species, y = median, color = SFTWD_HRDWD))+geom_point()+
@@ -811,7 +853,7 @@ ggplot(data = na.omit(betas.quant) , aes(x = Species, y = median))+geom_point()+
 # DIA, Basal area, MATmax, Physio, Tmmin anom?
 
 # read in all the betas:
-all.files <- paste0("SPCD_stanoutput_full/betas/", list.files(paste0(boxdir,"SPCD_stanoutput_full/betas/")))
+all.files <- paste0("SPCD_stanoutput_full/betas/", list.files(paste0(output.folder,"SPCD_stanoutput_full/betas/")))
 big.betas <- lapply(all.files, readRDS)
 
 

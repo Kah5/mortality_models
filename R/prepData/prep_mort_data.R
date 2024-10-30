@@ -70,7 +70,7 @@ PLOT %>% filter( state == 10) %>% summarise(n())
 
 ocon <- dbConnect(odbc(), "fiadb01p")
 
-NE_plot <- dbGetQuery(ocon, "SELECT cn, statecd, unitcd, countycd, plot, invyr, plot_status_cd, cycle, lat, lon, elev
+NE_plot <- dbGetQuery(ocon, "SELECT cn, statecd, unitcd, countycd, plot, invyr, plot_status_cd, cycle, lat, lon, elev, designcd,
                       FROM fs_fiadb.plot
                       WHERE statecd =  ANY(09, 10, 23, 24, 25, 33, 34, 36, 39, 42, 44, 50, 54) 
                       and invyr < 2000") %>%
@@ -94,6 +94,7 @@ length(unique(NE_plot$cn))
 
 unique(NE_plot$statecd)
 length(unique(NE_plot$cn))
+length(unique(NE_plot$))
 #NE_plot %>% filter(statecd == 25 | statecd == 44) %>% group_by(statecd, invyr, designcd, kindcd) %>% summarise(n())
 # kindCD or design cd
 
@@ -453,11 +454,14 @@ TREE_growth.cov <- left_join(TREE_growth.cov, TREE.remeas.BAL) %>% distinct()
 PLOT.remeas.BAL <- TREE.remeas %>%
   mutate(ba_sq_ft = ((dbhcur^2))*0.005454) %>% 
   group_by(PLOT.ID, point, date, cndtn, SPCD) %>%
-  mutate(SPCD_BAL = sum(ba_sq_ft*volfac, na.rm =TRUE)) %>% ungroup() %>%
+  mutate(SPCD_BA = sum(ba_sq_ft*volfac, na.rm =TRUE), 
+         SPCD_density = sum(volfac, na.rm = TRUE)) %>% ungroup() %>%
   group_by(PLOT.ID, point, date, cndtn) %>%
-  mutate(BAL_total = sum(SPCD_BAL, na.rm =TRUE)) %>%
-  mutate(non_SPCD_BAL = BAL_total - SPCD_BAL) %>%  
-  select(PLOT.ID, point, date, cndtn, SPCD, SPCD_BAL, BAL_total, non_SPCD_BAL)
+  mutate(BA_total = sum(SPCD, na.rm =TRUE), 
+         density_total = sum(volfac, na.rm = TRUE)) %>%
+  mutate(non_SPCD_BA = BA_total - SPCD_BA, 
+         non_SPCD_density = density_total - SPCD_density) %>%  
+  select(PLOT.ID, point, date, cndtn, SPCD, SPCD_BA, BA_total, non_SPCD_BA, SPCD_density, density_total, non_SPCD_density)
 
 TREE_growth.cov <- left_join(TREE_growth.cov, PLOT.remeas.BAL) %>% distinct()
 
@@ -606,8 +610,12 @@ summary(RD.by.plot$RD)
 #RD.by.plot %>% filter(RD > 1)
 # why are there some very large values??
 
+
 saveRDS (RD.by.plot, "data/Relative_periodic_plot_densities.rds")
 cleaned.data2 <- left_join(cleaned.data, RD.by.plot)
+cleaned.data2 <- cleaned.data2  %>% ungroup() %>% 
+  mutate(BAL.ratio = SPCD_BA/BA_total, 
+         density.ratio = SPCD_density/total_density)
 
 saveRDS(cleaned.data2, "data/cleaned.data.mortality.TRplots.RDS")
 ggplot(cleaned.data2, aes(x = LONG_FIADB, y = LAT_FIADB))+geom_point()
@@ -620,7 +628,12 @@ rm(RD.by.plot, annual.ppt.anom, annual)
 # make some intital exploratory data plots
 # ------------------------------------------------------------------------------
 mort.17 <- cleaned.data2 %>% filter(SPCD %in% c(12, 97, 129, 241, 261, 316, 318, 371, 400, 531, 541, 621, 762, 802, 832, 833, 837))
-ggplot(mort.17, aes(x= as.character(M), y = RD))+geom_violin()+facet_wrap(~SPCD)
+
+
+ggplot(mort.17, aes(x= as.character(M), y = non_SPCD_BA))+geom_violin()+facet_wrap(~SPCD)
+ggplot(mort.17, aes(x= as.character(M), y = SPCD_BA))+geom_violin()+facet_wrap(~SPCD)
+ggplot(mort.17, aes(x= as.character(M), y = BAL.ratio))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+ggplot(mort.17, aes(x= as.character(M), y = density.ratio))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
 ggplot(mort.17, aes(x= as.character(M), y = RD))+geom_boxplot()+facet_wrap(~SPCD)
 ggplot(mort.17, aes(x= as.character(M), y = BAL))+geom_boxplot()+facet_wrap(~SPCD)
 ggplot(mort.17, aes(x= as.character(M), y = damage.total))+geom_boxplot()+facet_wrap(~SPCD)
