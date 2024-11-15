@@ -8,9 +8,14 @@ library(FIESTA)
 options(mc.cores = parallel::detectCores())
 #####
 #read in all the accuracy dataframes from the single species models
-accuracy.files <- list.files(path = "SPCD_stanoutput_full/", pattern = "Accuracy_df_model")
+output.folder <- "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
 
-accuracy.files.full <- paste0("SPCD_stanoutput_full/", accuracy.files)
+
+#paste0(output.folder, "SPCD_stanoutput_full/Accuracy_df_model_",,SPCD.df$SPCD
+accuracy.files <- list.files(path = paste0(output.folder, "SPCD_stanoutput_full_standardized/computational_resources/"), pattern = c("Accuracy_df_model_"))
+
+accuracy.files.full <- paste0(output.folder, "SPCD_stanoutput_full_standardized/computational_resources/", accuracy.files)
+
 accuracy.list <- lapply(accuracy.files.full, read.csv)
 accuracy.df <- do.call(rbind, accuracy.list) %>% filter(remper.correction %in% 0.5)
 accuracy.df$Species <- FIESTA::ref_species[match(accuracy.df$SPCD, FIESTA::ref_species$SPCD),]$COMMON
@@ -87,9 +92,9 @@ ggplot(AUC.summary, aes(x = Model.name, y = auc.oos.total, shape = Model.name %i
 ggsave("model_summary_full/AUC_oos_total_species_model.png")
 
 # read in the comptational efficiency results
-compute.files <- list.files(path = "SPCD_stanoutput_full/computational_resources/", pattern = "time_diag_SPCD_")
+compute.files <- list.files(path = paste0(output.folder,"SPCD_stanoutput_full_standardized/computational_resources/"), pattern = "time_diag_SPCD_")
 
-compute.files.full <- paste0("SPCD_stanoutput_full/computational_resources/", compute.files)
+compute.files.full <- paste0(output.folder,"SPCD_stanoutput_full_standardized/computational_resources/", compute.files)
 compute.list <- lapply(compute.files.full, read.csv)
 
 compute.df <- do.call(rbind, compute.list) %>% filter(remper %in% 0.5)
@@ -99,11 +104,11 @@ compute.df$Model.name <- paste0("model ", compute.df$model)
 
 
 # get the total number of in-sample observations
-all.full.data <- list.files("SPCD_standata_general_full/", pattern = "model_1.Rdata")
+all.full.data <- list.files(paste0(output.folder, "SPCD_standata_general_full/"), pattern = "remper_correction_0.5model_1.Rdata")
 Nobs <- list()
 
 for(i in 1:length(all.full.data)){
-  load(paste0("SPCD_standata_general_full/", all.full.data[[i]]))
+  load(paste0(output.folder,"SPCD_standata_general_full/", all.full.data[[i]]))
    
   Nobs[[i]] <- data.frame(SPCD = unique(test.data$SPCD),
             N = mod.data$N, 
@@ -112,8 +117,9 @@ for(i in 1:length(all.full.data)){
 
 Nobs <- do.call(rbind, Nobs)
 
+# chec these values
 model.complexity <- data.frame(model = 1:9, 
-                               nbetas = c(1, 2, 6, 12, 17, 48, 98, 143, 153))
+                               nbetas = c(1, 2, 5, 13, 18, 51, 103, 145, 159))
 compute.df <- left_join(compute.df, model.complexity)
 compute.df <- left_join(compute.df, Nobs)
 
