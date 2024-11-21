@@ -1,4 +1,6 @@
 # run the joint general species model for model 5
+install.packages("FIESTA")
+install.packages("mltools")
 library(rstan)
 library(MASS)
 #library(here)
@@ -38,11 +40,11 @@ spp.table <- data.frame(SPCD.id = nspp[1:17,]$SPCD,
 model.no <- 6
 SPCD.id <- spp.table[1,]$SPCD.id
 
-xM.list <- xMrep.list <-y.list <- y.test.list <- nSPP.list <- nSPP.rep.list <- list()
+xM.list <- xMrep.list <-y.list <- y.test.list <- nSPP.list <- nSPP.rep.list <- remper.list <-remper.rep.list<- list()
 for(i in 1:17){
   # SPCD.id
   SPCD.id <- spp.table[i,]$SPCD.id
-  load(paste0("data-store/data/iplant/home/kellyheilman/SPCD_standata_general_full/SPCD_",SPCD.id, "remper_correction_0.5model_",model.no, ".Rdata")) # load the species code data
+  load(paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id, "remper_correction_0.5model_",model.no, ".Rdata")) # load the species code data
   #mod.data$K <- ncol(mod.data$xM)
   
   
@@ -52,6 +54,9 @@ for(i in 1:17){
   y.test.list[[i]] <- mod.data$ytest
   nSPP.list[[i]] <- rep(i, length(mod.data$y))
   nSPP.rep.list[[i]] <- rep(i, length(mod.data$ytest))
+  
+  remper.list[[i]] <- train.data$remper
+  remper.rep.list[[i]] <- test.data$remper
 }
 
 
@@ -62,7 +67,9 @@ mod.data.full <-  list(xM = do.call(rbind, xM.list),
                        y = unlist(y.list), 
                        ytest = unlist(y.test.list), 
                        SPP = unlist(nSPP.list), 
-                       SPPrep = unlist( nSPP.rep.list))
+                       SPPrep = unlist( nSPP.rep.list), 
+                       Remper = unlist(remper.list), 
+                       Remperoos = unlist(remper.rep.list))
 mod.data.full$K <- ncol(mod.data.full$xM)
 mod.data.full$N <- length(mod.data.full$y)
 #mod.data.full$Nspp <- 3
@@ -74,8 +81,7 @@ mod.data.full <- readRDS ( paste0("SPCD_stanoutput_joint/all_SPCD_model_", model
 
 saveRDS(spp.table, "SPCD_stanoutput_joint/spp.table.rds")
 spp.table <- readRDS("SPCD_stanoutput_joint/spp.table.rds")
-#species.table <- data.frame(spp = unlist(nSPP.list))
-#species.table <- data.frame(spp = unlist(nSPP.list))
+
 
 unique(mod.data.full$SPP)
 mod.data.full$y 
@@ -99,24 +105,85 @@ mortrep.spp %>% group_by(ytest, SPPrep) %>% slice_sample(n = 1000)
 
 
 # null model:
+# function form 2 with an argument named `chain_id`
+initf2 <- function(chain_id = 1) {
+  # cat("chain_id =", chain_id, "\n")
+  list(mubeta = 1, sigma = 4, z = array(rnorm(6), dim = c(3,2)), alpha = chain_id)
+}
+
+# Function to generate initial values for the Stan model
+generate_initial_values <- function(K, S) {
+  # Set random seed for reproducibility
+  set.seed(123)
+  
+  # Initialize shared mean vector mu_beta
+  mu_beta_init <- rnorm(K, mean = 0, sd = 0.1)  # Small random values around 0
+  
+  # Initialize shared standard deviation vector sigma_beta
+  sigma_beta_init <- abs(rnorm(K, mean = 0.5, sd = 0.1))  # Positive values around 0.5
+  
+  # Initialize beta coefficients matrix for each species
+  beta_init <- matrix(0, nrow = K, ncol = S)
+  for (s in 1:S) {
+    beta_init[, s] <- rnorm(K, mean = mu_beta_init, sd = sigma_beta_init)  # Centered around mu_beta_init
+  }
+  
+  # Return list of initial values
+  list(mu_beta = mu_beta_init,
+       sigma_s = sigma_beta_init,
+       u_beta = beta_init)
+}
+
+# Example usage
+K <- 48  # Number of predictors
+S <- 17  # Number of species
+
+init_list <- generate_initial_values(K, S)
+
+# Display the generated initial values
+
+# test.data<- data.frame(y = mod.data.full$y, 
+#            xM = mod.data.full$xM[,1:2], 
+#            SPP = mod.data.full$SPP)
+# 
+# brms::make_stancode(formula  = y ~ (SPP|xM.annual.growth.scaled) + (SPP|xM.DIA_scaled) + (1|SPP),
+#          data= test.data, family = "bernoulli")
+
+
+rand.sample <- sample(1:mod.data.full$N, 50000)
+rand.sample.oos <- sample(1:mod.data.full$Nrep, 10000)
+mod.data.smol <- list(xM = mod.data.full$xM[rand.sample, ], 
+                      y = mod.data.full$y[rand.sample], 
+                      SPP = mod.data.full$SPP[rand.sample], 
+                      Remper = mod.data.full$Remper[rand.sample], 
+                      K = ncol(mod.data.full$xM), 
+                      N = length(rand.sample),
+                      Nspp = 17, 
+                      xMrep = mod.data.full$xMrep[rand.sample.oos,], 
+                      Nrep = length(rand.sample.oos),#mod.data.full$Nrep,
+                      SPPrep = mod.data.full$SPPrep[rand.sample.oos],
+                      Remperoos = mod.data.full$Remperoos[rand.sample.oos])
+
 
 num_cores <-  parallel::detectCores()
 # null model:
 start.time <- Sys.time()
-fit.1 <- stan(file = "mort_model_general_heiarchical.stan" , 
-              data = mod.data.full,
-              iter = 3000, 
-              chains = 2, 
+fit.1 <- stan(file = "modelcode/mort_model_general_hierarchical_non_centered.stan" , 
+              data = mod.data.smol,
+              seed = 22,
+              init = 0, 
+              iter = 100, 
+              chains = 1, 
               verbose=FALSE, 
-              ##control =  list(max_treedepth = 15),#list(adapt_delta = 0.99, stepsize = 0.5, max_treedepth = 15),#, stepsize = 0.01, max_treedepth = 15),
+              control =  list(max_treedepth = 12),#list(adapt_delta = 0.99, stepsize = 0.5, max_treedepth = 15),#, stepsize = 0.01, max_treedepth = 15),
               #sample_file = model.name, 
               #adapt_delta = 0.99, 
               pars =c("alpha_SPP", "u_beta", # the species-specific params
                       "alpha", "mu_beta",
-                      "sigma_s", "sigma_aS",
-                      "y_rep", "mMrep", "pSannualrep", ## in sample predictions
-                      "y_hat", "mMhat", "pSannualhat", ## out of sample predictions
-                      "log_lik")) #, "y_hat", 
+                      "sigma_s", 
+                      "y_rep", "mMrep", ## in sample predictions
+                      "y_hat", "mMhat")) ## out of sample predictions
+
 end.time <- Sys.time()
 # Calculate elapsed time in seconds
 elapsed_time <- as.numeric(difftime(end.time, start.time, units = "secs"))
@@ -153,8 +220,8 @@ saveRDS(fit.1, paste0("SPCD_stanoutput_joint/samples/model_",model.no,"all_SPCD_
 
 joint.samples <- as_draws_df(fit.1)
 
-alpha.p <- subset_draws(joint.samples, variable = "alpha", chain = 1:2, iteration = 500:1500)
-alpha.spp <- subset_draws(joint.samples, variable = "alpha_SPP", chain = 1:2, iteration = 500:1500)
+alpha.p <- subset_draws(joint.samples, variable = "alpha")
+alpha.spp <- subset_draws(joint.samples, variable = "alpha_SPP")
 
 saveRDS(alpha.p, paste0("SPCD_stanoutput_joint/samples/alpha.p_model_",model.no,"_1000samples.rds"))
 saveRDS(alpha.spp, paste0("SPCD_stanoutput_joint/samples/alpha.spp_model_",model.no,"_1000samples.rds"))
@@ -331,7 +398,7 @@ ggplot(data = na.omit(all.joint.betas), aes(x = COMMON, y = median, color = sign
   geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+facet_wrap(~parameter)+theme_bw(base_size = 10)+
   theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Parameter")+
   scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
-scale_shape_manual(values = c("TRUE" = 15, "FALSE" = 19))
+  scale_shape_manual(values = c("TRUE" = 15, "FALSE" = 19))
 
 ggsave(height = 10, width = 11, units = "in",paste0("SPCD_stanoutput_joint/images/Estimated_betas_all_model6.png"))
 
@@ -349,7 +416,7 @@ alphas.quant <- summarise_draws(alphas.estimates, median, ~quantile(.x, probs = 
 # alphas.quant <- mub.m %>% group_by(variable) %>% summarise(median = quantile(value, 0.5, na.rm =TRUE),
 #                                                            ci.lo = quantile(value, 0.005, na.rm =TRUE),
 #                                                            ci.hi = quantile(value, 0.975, na.rm =TRUE))
- alphas.quant$spp <- 1:17
+alphas.quant$spp <- 1:17
 
 
 alphas.quant <- left_join(alphas.quant, spp.table)
@@ -389,7 +456,7 @@ alphas.pop.quant <- left_join(alphas.pop.quant, main.table)
 
 
 alphas.pop.quant$`significance` <- ifelse(alphas.pop.quant$ci.lo < 0 & alphas.pop.quant$ci.hi < 0, "significant", 
-                                      ifelse(alphas.pop.quant$ci.lo > 0 & alphas.pop.quant$ci.hi > 0, "significant", "not overlapping zero"))
+                                          ifelse(alphas.pop.quant$ci.lo > 0 & alphas.pop.quant$ci.hi > 0, "significant", "not overlapping zero"))
 
 #alphas.quant <- alphas.quant %>% arrange(by = median)
 #alphas.quant$parameter <- factor(alphas.quant$parameter, levels = alphas.quant$parameter)
@@ -527,18 +594,18 @@ auc.oos.spp <- oos.all %>% group_by(COMMON, SPCD.id, spp) %>% summarise(auc.oosa
                                                                         accuracy.oos =  mean(as.vector(ypreds) == actuals))
 
 oos.population <- data.frame(COMMON= "population", 
-                            SPCD.id = 1000, 
-                            spp = 18, 
-                            auc.oosample = auc.oos, 
-                            accuracy.oos = accuracy.oos)
+                             SPCD.id = 1000, 
+                             spp = 18, 
+                             auc.oosample = auc.oos, 
+                             accuracy.oos = accuracy.oos)
 auc.oos.spp <- rbind(auc.oos.spp, oos.population)
 
 
 # get the species level in sample summaries
 is.all <- data.frame(actuals = mod.data.full$y,
-                      preds = as.vector(psurv.quant$median),
-                      ypreds = as.vector(yrep.quant$median),
-                      spp = mod.data.full$SPP)
+                     preds = as.vector(psurv.quant$median),
+                     ypreds = as.vector(yrep.quant$median),
+                     spp = mod.data.full$SPP)
 is.all <- left_join(is.all, spp.table)
 
 
@@ -559,7 +626,7 @@ model.assessment.df <- auc.df %>% rename(`SPCD`="SPCD.id") %>%
          remper.correction = remper.correction, 
          elpd_loo =NA,   p_loo =NA,    looic = NA)%>% select(SPCD, model, remper.correction, elpd_loo, 
                                                              p_loo, looic, auc.insample, accuracy.is, 
-                                                          auc.oosample, accuracy.oos)
+                                                             auc.oosample, accuracy.oos)
 
 write.csv(model.assessment.df , paste0("SPCD_stanoutput_full/Accuracy_df_model_",model.no, "_remper_0.5_species_joint_model_remper_corr_",remper.correction, ".csv" ), row.names = FALSE)
 write.csv(model.assessment.df, "SPCD_stanoutput_joint/Accuracy_df_model_6_remper_0.5_species_joint_model_remper_corr_0.5.csv", row.names = FALSE)
@@ -579,8 +646,8 @@ canada <- map_data("worldHires", "Canada")
 
 # plot distribution 
 ll.test.pmort  <- ll.test.pmort  %>% mutate(`p(mort)` = 1- median) %>%  mutate(Mort.quantiles = cut(`p(mort)`, 
-                                                                                                   breaks = c(0,0.01,0.05, 0.1, 0.2, 0.3, 0.40, 0.50, 1), 
-                                                                                                   include.lowest=TRUE))
+                                                                                                    breaks = c(0,0.01,0.05, 0.1, 0.2, 0.3, 0.40, 0.50, 1), 
+                                                                                                    include.lowest=TRUE))
 
 ggplot() +
   geom_polygon(data = canada, 
