@@ -530,7 +530,7 @@ spp.table <- data.frame(SPCD.id = nspp[1:17,]$SPCD,
                         COMMON = nspp[1:17,]$COMMON)
 
 
-joint.betas <- readRDS("SPCD_stanoutput/samples/model_6_u_beta_last1000samples.RDS")
+joint.betas <- readRDS(paste0(output.folder, "SPCD_stanoutput_joint_v2/u_betas_model_6_1000samples.RDS"))
 joint.betas.summary <- joint.betas %>% select(-.iteration, -.chain, -.draw)%>% reshape2::melt() %>%
                                 group_by(variable)%>% summarise(median = quantile(value, 0.5), 
                                                                 ci.lo = quantile(value, 0.025), 
@@ -540,9 +540,9 @@ joint.betas.summary <- joint.betas %>% select(-.iteration, -.chain, -.draw)%>% r
                                                                 log.odds.ci.hi = quantile(exp(value), 0.975))
 
 # read in the data used to fit
-mod.data.full <- readRDS ( paste0("full_stan_data/three_SPCD_model_6.RDS"))
-param.id = rep(1:48, each = 17)
-spp.id = rep(1:17, 48)
+mod.data.full <- readRDS ( paste0(output.folder,"SPCD_stanoutput_joint_v2/all_SPCD_model_6.RDS"))
+param.id = rep(1:51, each = 17)
+spp.id = rep(1:17, 51)
 beta.names.df <- data.frame(variable = unique(joint.betas.summary$variable), 
                             spp = spp.id, 
                             Param.id = param.id, 
@@ -559,6 +559,60 @@ ggplot()+geom_point(data = joint.betas.summary %>% filter(significance %in% "sig
 ggplot()+geom_point(data = joint.betas.summary  %>% filter(significance %in% "significant"), aes(x = Parameter.name, y = log.odds.median, color = log.odds.median >=1))+
   geom_errorbar(data = joint.betas.summary  %>% filter(significance %in% "significant"), aes(x = Parameter.name, ymin = log.odds.ci.lo, ymax = log.odds.ci.hi, color = log.odds.median >=1))+
   geom_hline(yintercept = 1, color = "red", linetype = "dashed")+facet_wrap(~COMMON, scales = "free")+theme(axis.text.x = element_text(hjust = 1, angle = 45), legend.position = "none")
-ggsave(filename = "SPCD_stanoutput/images/joint_model_log_odds_betas_significant.png", 
+ggsave(filename = paste0(output.folder,"SPCD_stanoutput_joint_v2/images/joint_model_log_odds_betas_significant.png"), 
+       height = 10, width =12, units = "in")
+
+##########################################################################################
+# join with the species level models and check that the values are similar
+##########################################################################################
+species.betas <- list()
+for (i in 1:17){
+  SPCD.id <- nspp[i,]$SPCD
+  species.betas[[i]] <- readRDS(paste0(output.folder, "SPCD_stanoutput_full_standardized/betas/model_6_SPCD_", SPCD.id,"_remper_correction_0.5.RDS"))
+}
+species.betas.df <- do.call(rbind, species.betas) 
+
+beta.names.species.level.df <- data.frame(variable = unique(species.betas.df$variable), 
+                            Parameter.name = colnames(mod.data.full$xM))
+species.betas.summary <- species.betas.df %>% left_join(., beta.names.species.level.df)%>%
+                                        select(median, ci.lo, ci.hi, Parameter.name, SPCD)%>%
+                                        mutate(Model = "Species")
+
+joint.betas.summary.small <- joint.betas.summary %>% select(median, ci.lo, ci.hi, Parameter.name, SPCD.id) %>%
+                                        mutate(Model = "Hierarchical") %>%
+                                        rename(`SPCD` = "SPCD.id")
+all.betas.summary <- rbind(species.betas.summary, joint.betas.summary.small)
+all.betas.summary$Species <- ref_species[match(all.betas.summary$SPCD, ref_species$SPCD),]$COMMON
+ggplot()+geom_point(data = all.betas.summary, aes(x = Species, y = median, color = Model))+
+  geom_errorbar(data = all.betas.summary, aes(x = Species, ymin = ci.lo, ymax = ci.hi))+
+  facet_wrap(~Parameter.name, scales = "free_y")+theme(axis.text.x = element_text(hjust = 1, angle = 45))
+ggsave(filename = paste0("model_summary_full/joint_and_species_model_betas.png"), 
+       height = 10, width =12, units = "in")
+
+
+# plot hieararchcial vs species effects
+
+spread.all.betas <- species.betas.summary %>% rename(`Species.median` = "median", 
+                                 `Species.ci.lo` = "ci.lo", 
+                                 `Species.ci.hi` = "ci.hi") %>% select(-Model) %>% left_join(., joint.betas.summary.small)
+
+spread.all.betas$Species.name <- ref_species[match(spread.all.betas$SPCD, ref_species$SPCD),]$COMMON
+
+ggplot(data = spread.all.betas, aes(x = Species.median, y = median))+geom_point()+
+  geom_errorbar(data = spread.all.betas, aes(x = Species.median, ymin = ci.lo, ymax = ci.hi), color = "red")+
+  geom_errorbarh(data = spread.all.betas, aes(y = median, xmin = Species.ci.lo, xmax = Species.ci.hi))+
+  geom_abline(aes(intercept = 0, slope = 1), linetype = "dashed", color = "darkgrey")+
+  facet_wrap(~Parameter.name, scales = "free")+theme_bw(base_size = 12)+theme(panel.grid = element_blank())+
+  ylab("Hierarchical model estimates")+xlab("Species model estimates")
+ggsave(filename = paste0("model_summary_full/joint_versus_species_model_betas.png"), 
+       height = 10, width =12, units = "in")
+
+ggplot(data = spread.all.betas, aes(x = Species.median, y = median))+geom_point()+
+  geom_errorbar(data = spread.all.betas, aes(x = Species.median, ymin = ci.lo, ymax = ci.hi), color = "red")+
+  geom_errorbarh(data = spread.all.betas, aes(y = median, xmin = Species.ci.lo, xmax = Species.ci.hi))+
+  geom_abline(aes(intercept = 0, slope = 1), linetype = "dashed", color = "darkgrey")+
+  facet_wrap(~Species.name, scales = "free")+theme_bw(base_size = 12)+theme(panel.grid = element_blank())+
+  ylab("Hierarchical model estimates")+xlab("Species model estimates")
+ggsave(filename = paste0("model_summary_full/joint_versus_species_model_betas_by_species.png"), 
        height = 10, width =12, units = "in")
 
