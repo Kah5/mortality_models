@@ -6,7 +6,7 @@ library(ggplot2)
 library(tidyverse)
 library(FIESTA)
 options(mc.cores = parallel::detectCores())
-#####
+##### SINGLE SPECIES MODELS
 #read in all the accuracy dataframes from the single species models
 output.folder <- "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
 
@@ -239,7 +239,7 @@ ggplot()+geom_point(data = compute.all.diff, aes(x = as.character(model), y = ra
   theme_bw()+theme(panel.grid = element_blank())+ylab("% change in core hours")+xlab("% change in accuracy")
 
 # read in the AUC values from the joint model:
-AUC.joint <- read.csv("SPCD_stanoutput_joint/Accuracy_df_model_6_remper_0.5_species_joint_model_remper_corr_0.5.csv")
+AUC.joint <- read.csv(paste0(output.folder,"SPCD_stanoutput_joint_v2/Accuracy_df_model_6_remper_0.5_species_joint_model_remper_corr_0.5.csv"))
 AUC.joint <- AUC.joint %>% rename(Species = COMMON) %>% dplyr::select(SPCD, auc.oosample, auc.insample, Species) %>%
   mutate(Model.name = "hierarchical")
 AUC.all <- rbind(AUC.singlespecies, AUC.joint)
@@ -268,7 +268,7 @@ oos.auc <- ggplot(AUC.all, aes(x = Model.name, y = auc.oosample, color = Model, 
                                  "hierarchical"="red" ))+
   theme_bw()+theme(axis.text.x = element_text(angle = 45,  hjust=1), legend.position = "none") +
   xlab("")+ylab("Out of Sample AUC")
-ggsave(paste0("model_summary/All_species_models_all9models_compare-auc-outofsample_plus_joint.png"), 
+ggsave(paste0("model_summary_full/All_species_models_all9models_compare-auc-outofsample_plus_joint.png"), 
        oos.auc,
        width = 10, height = 6)
 
@@ -445,13 +445,13 @@ dev.off()
 
 #--------------------------------------------------------------------------------------------------
 # make the same computational efficiency figures, but now with the joint-level model as a comparison
-
+# need to redo with basis function update
 # read in the computational files for the joint model
-joint.compute <- read.csv("SPCD_stanoutput_joint/joint_model_time_diag_SPCD_joint_model_6_remper_0.5.csv")
-joint.accuracy <- read.csv("SPCD_stanoutput_joint/Accuracy_df_model_6_remper_0.5_species_joint_model_remper_corr_0.5.csv")
+joint.compute <- read.csv(paste0(output.folder, "SPCD_stanoutput_joint_v2/joint_model_time_diag_SPCD_joint_model_6_remper_0.5.csv"))
+joint.accuracy <- read.csv(paste0(output.folder, "SPCD_stanoutput_joint_v2/Accuracy_df_model_6_remper_0.5_species_joint_model_remper_corr_0.5.csv"))
 
 joint.all.df <- left_join(joint.accuracy, joint.compute)
-colnames(compute.all.df)
+#colnames(compute.all.df)
 colnames(joint.all.df)
 
 joint.all.df  <- joint.all.df %>% rename(`Species` = "COMMON") %>% 
@@ -459,7 +459,7 @@ joint.all.df  <- joint.all.df %>% rename(`Species` = "COMMON") %>%
   mutate(Size_effect = "Linear") %>% 
   mutate(variety = "hierarchical")
 
-compute.all.df <- compute.all.df %>% 
+compute.all.df <- compute.df %>% 
   select(Species, SPCD, model, remper.correction, auc.insample, auc.oosample, accuracy.oos, core.hours, Size_effect) %>%
 
     mutate(variety = ifelse(Size_effect == "Linear", "Species", "Species basis"))
