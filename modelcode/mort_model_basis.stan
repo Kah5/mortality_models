@@ -10,7 +10,7 @@ data {
   ///out of sample data for generated quantities
   int<lower=0> Nrep;// N. held out observations
   matrix[Nrep,K] xMrep;        // Predictor matrix
-  int<lower = 0> Remperoos[N]; //list of out of sample remper observations
+  int<lower = 0> Remperoos[Nrep]; //list of out of sample remper observations
   
   
   //basis function data spline terms
@@ -49,7 +49,7 @@ model {
     pSannual[1:N] = alpha_SPP + xM[1:N]*u_beta + X_basis[1:N]*eta;
     
     // convert to remeasurement period survival rate
-    mM[1:N] = pow(pSannual[1:N], Remper[1:N]);
+    mM[1:N] = pSannual[1:N]^Remper[1:N];
     
     y ~ bernoulli_logit(mM);
 
