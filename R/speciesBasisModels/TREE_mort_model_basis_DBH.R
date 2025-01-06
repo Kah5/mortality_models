@@ -7,6 +7,7 @@ library(FIESTA)
 library(dplyr)
 library(mltools)
 library(splines)
+library(gt)
 
 options(mc.cores = parallel::detectCores())
 cleaned.data <- readRDS( "data/cleaned.data.mortality.TRplots.RDS")
@@ -36,7 +37,7 @@ nspp$Species <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$S
 
 nspp[1:17,]$COMMON
 
-library(gt)
+
 nspp[1:17,] %>% mutate(pct = round(pct, 3), 
                        cumulative.pct = round(cumulative.pct, 3)) %>% rename(`# of trees` = "n", 
                                                                              `% of trees` = "pct",
@@ -94,7 +95,7 @@ plot.medians <- unique(cleaned.data %>% ungroup()%>% dplyr::select(PLOT.ID, si, 
                                                                                                                                                                                                       MATmax.sd = sd(MATmax, na.rm =TRUE)
 )
 
-View(cleaned.data %>% group_by(SPGRPCD, SPCD) %>% summarise(n()))
+#View(cleaned.data %>% group_by(SPGRPCD, SPCD) %>% summarise(n()))
 
 cleaned.data.full <- cleaned.data
 cleaned.data.full$status
@@ -177,40 +178,42 @@ Covariate.table |> gt()
 
 # for each species group, fit a model, plot the outputs, and save the results
 # we source a function from another script
-source("R/SPCD_run_stan_basis.R")
+source("R/speciesBasisModels/SPCD_run_stan_basis.R")
 
 # this runs a stan model and saves the outputs
 # SPGRPCD 2 throws uncerialize socklist error--too big of a diataset to parallelisze?
 cleaned.data.full %>% group_by(SPCD) %>% summarise(n())
 SPCD.df <- data.frame(SPCD = nspp[1:17, ]$SPCD, 
                       spcd.id = 1:17)
-remper.cor.vector <- c(  0.5)
+remper.cor.vector <- c(0.5)
 #model.number <- 6
 model.list <- 3:5
 
-load("dbh_smooth_gams/BDBH_GAM_models_SPCD_318.Rdata")
-plot.gam(m.dbh.1)
-m.dbh.2$coefficients
-m.dbh.3$coefficients
-m.dbh.4$coefficients
-m.dbh.5$coefficients
-m.dbh.5$smooth[[1]]$knots
-
-b$smooth[[1]]
+# load("dbh_smooth_gams/BDBH_GAM_models_SPCD_318.Rdata")
+# plot.gam(m.dbh.1)
+# m.dbh.2$coefficients
+# m.dbh.3$coefficients
+# m.dbh.4$coefficients
+# m.dbh.5$coefficients
+# m.dbh.5$smooth[[1]]$knots
+# 
+# b$smooth[[1]]
 for(i in 1:17){# run for each of the 17 species
   common.name <- nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON)
   
   for(m in 1:length(model.list)){  # run each of the 9 models
     model.number <- model.list[m]
-    for (j in 1:length(remper.cor.vector)){ # for the gowoth only model explore the consequences of other assumptions about remeasurement period
+    for (j in 1:length(remper.cor.vector)){ # for the growth only model explore the consequences of other assumptions about remeasurement period
       cat(paste("running stan mortality model ",model.number, " for SPCD", SPCD.df[i,]$SPCD, common.name$COMMON, " remper correction", remper.cor.vector[j]))
       
       fit.1 <- SPCD_run_stan_basis(SPCD.id = SPCD.df[i,]$SPCD,
                              model.no = model.number,
-                             niter = 1000,
-                             nchains = 2,
+                             niter = 100,
+                             nchains = 1,
                              remper.correction = remper.cor.vector[j],
-                             model.file = 'modelcode/mort_model_basis.stan' )
+                             model.file = 'modelcode/mort_model_basis.stan',
+                             output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/SPCD_stanoutput_full_basis")
+      
       SPCD.id <-  SPCD.df[i,]$SPCD
       #saveRDS(fit.1, paste0("SPCD_stanoutput_full/samples/model_",model.number,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
       # save_diagnostics (stanfitobj = fit.1, nchains = 2, model.no = model.number, remper.correction = remper.cor.vector[j])

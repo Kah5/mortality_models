@@ -1,7 +1,7 @@
-SPCD_run_stan_basis <- function(SPCD.id, model.no = 1, niter = 1000, nchains = 2, remper.correction = 0.5,  model.file = 'modelcode/mort_model3_SPCD.stan'){
+SPCD_run_stan_basis <- function(SPCD.id, model.no = 1, niter = 1000, nchains = 2, remper.correction = 0.5,  model.file = 'modelcode/mort_model3_SPCD.stan', output.folder){
 
   model.name <- paste0("mort_model", model.no, "_single_SPCD_", SPCD.id, "remper_", remper.correction)
-  load(paste0("SPCD_standata_general_full/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.no, ".Rdata")) # load the species code data
+  load(paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.no, ".Rdata")) # load the species code data
   mod.data$K <- ncol(mod.data$xM)
   dia <- mod.data$xM[,"DIA_scaled"]
   diaMrep <- mod.data$xMrep[,"DIA_scaled"]
@@ -20,6 +20,7 @@ SPCD_run_stan_basis <- function(SPCD.id, model.no = 1, niter = 1000, nchains = 2
   mod.data.basis$S <- ncol( mod.data.basis$X_basis)
   mod.data.basis$xM <- mod.data$xM[,!colnames(mod.data$xM) %in% "DIA_scaled"]
   mod.data.basis$xMrep <- mod.data$xMrep[,!colnames(mod.data$xMrep) %in% "DIA_scaled"]
+  mod.data.basis$Remperoos <- test.data$remper
  mod.data <- mod.data.basis 
     save(train.data, 
        test.data, 
@@ -70,9 +71,9 @@ time.diag <- data.frame(model = model.no,
                         elapsed.time = elapsed_time, 
                         cores = num_cores)
 
-write.csv(time.diag, paste0("SPCD_stanoutput_full/computational_resources/time_diag_BASIS_SPCD_",SPCD.id, "_model_", model.no, "_remper_", remper.correction,".csv"))
+write.csv(time.diag, paste0(output.folder,"SPCD_stanoutput_full_basis/computational_resources/time_diag_BASIS_SPCD_",SPCD.id, "_model_", model.no, "_remper_", remper.correction,".csv"))
 # get the sampler diagnostics and save:
-saveRDS(fit.1, paste0("SPCD_stanoutput_full/samples/basis_model_",model.no,"_SPCD_",SPCD.id, "_remper_correction_", remper.correction, ".RDS"))
+saveRDS(fit.1, paste0(output.folder,"SPCD_stanoutput_full_basis/samples/basis_model_",model.no,"_SPCD_",SPCD.id, "_remper_correction_", remper.correction, ".RDS"))
 
 }
 
