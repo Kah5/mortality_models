@@ -3,7 +3,7 @@ library(loo)
 load(paste0("SPCD_standata_basis/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.number, ".Rdata")) # load the species code data
 #paste0("SPCD_standata_basis/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_1.Rdata")
 # read in the model fit
-fit.1 <- readRDS( paste0("SPCD_stanoutput_full/samples/basis_model_",model.number,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
+fit.1 <- readRDS(paste0(output.folder,"SPCD_stanoutput_full_basis/samples/basis_model_",model.no,"_SPCD_",SPCD.id, "_remper_correction_", remper.correction, ".RDS"))
 
 
 species.table <- unique(train.data[,c("SPCD","SPP")])
@@ -31,7 +31,7 @@ par.names = c("alpha_SPP", colnames(mod.data$xM), paste0("DIA_spline[", 1:mod.da
 nvariables <- length(par.names)
 nvariables
 #if(nvariables < 10){
-pdf( paste0("SPCD_stanoutput_full/images/traceplots_survival_model_basis_",model.number,"_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".pdf"))
+pdf( paste0(output.folder, "SPCD_stanoutput_full_basis/images/traceplots_survival_model_basis_",model.number,"_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".pdf"))
 #specify to save plots in 0x0 grid
 par(mfrow = c(8,3))
 for (p in 1:length(par.names)) {   
@@ -84,7 +84,7 @@ ggplot(data = na.omit(betas.quant), aes(x = Covariate, y = median, color = signi
   theme( axis.text.x = element_text(angle = 65, hjust = 1), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Parameter")+
   scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))
 
-ggsave(height = 5, width = 10, units = "in",paste0("SPCD_stanoutput_full/images/Estimated_effects_on_survival_model__bs_model",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
+ggsave(height = 5, width = 10, units = "in", paste0(output.folder, "SPCD_stanoutput_full_basis/images/Estimated_effects_on_survival_model__bs_model",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
 
 # plot out the basis function effects
 cov.estimates <- fit_ssm_df %>% dplyr::select(paste0("DIA_spline[", 1:mod.data$S, "]")) 
@@ -117,7 +117,7 @@ ggplot(data = na.omit(etas.quant), aes(x = Covariate, y = median, color = signif
   theme( axis.text.x = element_text(angle = 65, hjust = 1), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Parameter")+
   scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))
 
-ggsave(height = 5, width = 10, units = "in",paste0("SPCD_stanoutput_full/images/Estimated_basis_effects_on_survival_basis_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
+ggsave(height = 5, width = 10, units = "in", paste0(output.folder, "SPCD_stanoutput_full_basis/images/Estimated_basis_effects_on_survival_basis_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
 
 # plot out the spline effects based on the range of dia_scaled
 eff <- matrix(nrow = nrow(cov.estimates), ncol = nrow(basis_range_dia))
@@ -133,7 +133,7 @@ eff.m <- reshape2::melt(eff) %>% group_by(Var2) %>% summarise(median = median(va
 
 ggplot()+geom_ribbon(data = eff.m, aes(x = DIA_scaled, ymin = ci.lo, ymax = ci.hi), alpha = 0.5, fill = "forestgreen")+
  geom_line(data = eff.m, aes(x = DIA_scaled, y = median))
-ggsave(height = 5, width = 10, units = "in",paste0("SPCD_stanoutput_full/images/Estimated_basis_effect_DIA_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
+ggsave(height = 5, width = 10, units = "in",paste0(output.folder, "SPCD_stanoutput_full_basis/images/Estimated_basis_effect_DIA_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
 
 
 ##################################
@@ -153,7 +153,7 @@ psurv.quant$COMMON <- unique(species.table$COMMON)
 
 ggplot(psurv.quant, aes(as.character(Mobs), y = median, fill =Mobs ))+geom_violin()+ylab("Median predicted probability of survival")+
   xlab("In-sample Observed Survival Status")+scale_fill_manual(values = c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
-ggsave(height = 4, width = 4, units = "in",paste0("SPCD_stanoutput_full/images/psurv_vs_obs_in_sample_violin_basis_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
+ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_basis/images/psurv_vs_obs_in_sample_violin_basis_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
 
 # compare the observed status to the predicted status
 yrep.estimates <- fit_ssm_df %>% dplyr::select( paste0("yrep[",1:mod.data$N, "]")) 
@@ -169,11 +169,11 @@ yrep.quant$COMMON <- unique(species.table$COMMON)
 
 ggplot(yrep.quant, aes(as.character(Mobs), y = median, fill =Mobs ))+geom_violin()+ylab("Median predicted survival status")+
   xlab("Observed in-sample tree survival status")+scale_fill_manual(values =  c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
-ggsave(height = 4, width = 4, units = "in",paste0("SPCD_stanoutput_full/images/Yrepsurv_insample_median_vs_obs_violin_basis_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
+ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_basis/images/Yrepsurv_insample_median_vs_obs_violin_basis_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
 
 ggplot(yrep.quant, aes(as.character(Mobs), y = ci.hi, fill =Mobs ))+geom_violin()+ylab("97.5% quantile of predicted survival status")+
   xlab("Observed in-sample tree survival status")+scale_fill_manual(values =  c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
-ggsave(height = 4, width = 4, units = "in",paste0("SPCD_stanoutput_full/images/Yrepsurv_insample_95pct_vs_obs_violin_basis_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
+ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_basis/images/Yrepsurv_insample_95pct_vs_obs_violin_basis_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
 
 ##################################
 # out of sample plots
@@ -192,7 +192,7 @@ psurv.hat.quant$COMMON <- unique(species.table$COMMON)
 
 ggplot(psurv.hat.quant, aes(as.character(Mobs), y = median, fill =Mobs ))+geom_violin()+ylab("Median predicted probability of survival")+
   xlab("Out-of-sample Observed Tree Status")+scale_fill_manual(values = c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
-ggsave(height = 4, width = 4, units = "in",paste0("SPCD_stanoutput_full/images/psurv.hat_vs_obs_out_of_sample_violin_basis_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
+ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_basis/images/psurv.hat_vs_obs_out_of_sample_violin_basis_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
 
 yhat.estimates <- fit_ssm_df %>% dplyr::select( paste0("yhat[",1:mod.data$Nrep, "]")) 
 yhat.m <- reshape2::melt(yhat.estimates)
@@ -207,11 +207,11 @@ yhat.quant$COMMON <- unique(species.table$COMMON)
 
 ggplot(yhat.quant, aes(as.character(Mobs), y = median, fill =Mobs ))+geom_violin()+ylab("Median predicted survival status")+
   xlab("Observed in-sample tree status")+scale_fill_manual(values =  c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
-ggsave(height = 4, width = 4, units = "in",paste0("SPCD_stanoutput_full/images/YhatMort_out_of_sample_median_vs_obs_violin_basis_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
+ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_basis/images/YhatMort_out_of_sample_median_vs_obs_violin_basis_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
 
 ggplot(yhat.quant, aes(as.character(Mobs), y = ci.hi, fill =Mobs ))+geom_violin()+ylab("97.5% quantile of predicted survival status")+
   xlab("Observed in-sample tree status")+scale_fill_manual(values =  c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
-ggsave(height = 4, width = 4, units = "in",paste0("SPCD_stanoutput_full/images/YhatMort_out_of_sample_95pct_vs_obs_violin_basis_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
+ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_basis/images/YhatMort_out_of_sample_95pct_vs_obs_violin_basis_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
 
 ###########
 # Use the Loo package to compute PSIS-LOO and check diagnositcs
@@ -228,7 +228,7 @@ loo_1 <- loo(log_lik_1, r_eff = r_eff, save_psis = TRUE)
 print(loo_1)
 # save the loo_1 object
 
-save(log_lik_1, r_eff, loo_1, file = paste0("SPCD_stanoutput_full/LOO_basis_model_",model.number,"remper.corr_",remper.correction, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".Rdata"))
+save(log_lik_1, r_eff, loo_1, file = paste0(output.folder, "SPCD_stanoutput_full_basis/LOO_basis_model_",model.number,"remper.corr_",remper.correction, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".Rdata"))
 
 ###------------------------------------
 psis <- loo_1$psis_object
@@ -279,6 +279,6 @@ model.assessment.df <- data.frame(SPCD = SPCD.id,
                           auc.oosample = auc.oos,
                           accuracy.oos = accuracy.oos
                           )
-write.csv(model.assessment.df , paste0("SPCD_stanoutput_full/Accuracy_df_basis_model_",model.number, "_remper_0.5_species_", SPCD.id,"_remper_corr_", remper.cor.vector[j], ".csv" ), row.names = FALSE)
+write.csv(model.assessment.df , paste0(output.folder, "SPCD_stanoutput_full_basis/Accuracy_df_basis_model_",model.number, "_remper_0.5_species_", SPCD.id,"_remper_corr_", remper.cor.vector[j], ".csv" ), row.names = FALSE)
 
 

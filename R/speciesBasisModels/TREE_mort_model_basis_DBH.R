@@ -212,7 +212,7 @@ for(i in 1:17){# run for each of the 17 species
                              nchains = 1,
                              remper.correction = remper.cor.vector[j],
                              model.file = 'modelcode/mort_model_basis.stan',
-                             output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/SPCD_stanoutput_full_basis")
+                             output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/")
       
       SPCD.id <-  SPCD.df[i,]$SPCD
       #saveRDS(fit.1, paste0("SPCD_stanoutput_full/samples/model_",model.number,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
@@ -221,7 +221,8 @@ for(i in 1:17){# run for each of the 17 species
       model.name <- paste0("basis_model_",model.number,"_SPCD_", SPCD.id, "_remper_correction_", remper.cor.vector[j])
       remp.cor <- remper.cor.vector[j]
       remper.correction <- remper.cor.vector[j]
-      source("R/SPCD_plot_stan_basis.R")
+      output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
+      source("R/speciesBasisModels/SPCD_plot_stan_basis.R")
       rm(fit.1)
     }
   }
