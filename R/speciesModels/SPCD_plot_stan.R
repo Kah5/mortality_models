@@ -2,7 +2,7 @@ library(loo)
 #model.name <- paste0("mort_model3alphaRE_allspp_SPGRPCD_", SPGRPCD.id)
 load(paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.number, ".Rdata")) # load the species code data
 # read in the model fit
-fit.1 <- readRDS( paste0(output.folder, "/samples/model_",model.number,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
+fit.1 <- readRDS( paste0(output.folder, "SPCD_stanoutput_full_standardized/samples/model_",model.number,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
 
 
 species.table <- unique(train.data[,c("SPCD","SPP")])
@@ -12,14 +12,14 @@ species.table$SPP <- as.character(species.table$SPP)
 
 names(fit.1) <- c("alpha_SPP", colnames(mod.data$xM),
                   ## in sample predicted status
-                  # paste0("yrep[",1:mod.data$N, "]"),
-                   #paste0("psurv[",1:mod.data$N, "]"),
-                   #paste0("psurv.annual[",1:mod.data$N, "]"),
+                  paste0("yrep[",1:mod.data$N, "]"),
+                  paste0("psurv[",1:mod.data$N, "]"),
+                  #paste0("psurv.annual[",1:mod.data$N, "]"),
                   # 
                   # ## out of  sample predicted status
-                  # paste0("yhat[",1:mod.data$Nrep, "]"),
+                  paste0("yhat[",1:mod.data$Nrep, "]"),
                   # ## out of sample predicted prob mor
-                  # paste0("psurv.hat[",1:mod.data$Nrep, "]"),
+                   paste0("psurv.hat[",1:mod.data$Nrep, "]"),
                   # paste0("psurv.hat.annual[",1:mod.data$Nrep, "]"),
                   ## in sample predicted status
                  # paste0("log_lik[",1:mod.data$N, "]"),

@@ -263,10 +263,10 @@ for(i in 1:17){# run for each of the 17 species
 
 
 # get the predicted AUC for each model 1-6:
-for(i in 7:17){# run for each of the 17 species
+for(i in 1:17){# run for each of the 17 species
   common.name <- nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON)
   
-  for(m in 6:9){  # run each of the 9 models
+  for(m in 1:9){  # run each of the 9 models
   # for(m in 7:9){ 
 
   model.number <- model.list[m]
@@ -343,12 +343,13 @@ betas.list <- list()
 SPCD.id
 remper.cor.vector <- c(0.5)
 model.no <- 6
+output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
 
 get.beta.covariates <- function(SPCD.id, remper.cor.vector, model.no){
   print(SPCD.id)
   for(j in 1:length(remper.cor.vector)){
     print (paste0( "remper correction vector ", remper.cor.vector[j]))
-    fit <- readRDS(paste0(output.folder,"/SPCD_stanoutput_full/samples/model_",model.no,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
+    fit <- readRDS(paste0(output.folder,"/SPCD_stanoutput_full_standardized/samples/model_",model.no,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
     fit_ssm_df <- as_draws_df(fit) # takes awhile to convert to df
     
     # get all the covariates using posterior package
@@ -357,7 +358,7 @@ get.beta.covariates <- function(SPCD.id, remper.cor.vector, model.no){
       mutate(remper.cor = remper.cor.vector[j], 
              SPCD = SPCD.id)
     
-    saveRDS(betas.quant, paste0(output.folder, "/SPCD_stanoutput_full/betas/model_",model.no,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
+    saveRDS(betas.quant, paste0(output.folder, "/SPCD_stanoutput_full_standardized/betas/model_",model.no,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
     
     # betas.list[[j]] <- betas.quant
     
@@ -369,22 +370,24 @@ get.beta.covariates <- function(SPCD.id, remper.cor.vector, model.no){
 
 big.betas <- list()
 for(i in 1:17){
-  get.beta.covariates(SPCD.id = SPCD.df[i,]$SPCD, remper.cor.vector = remper.cor.vector, model.no = 5)
+  get.beta.covariates(SPCD.id = SPCD.df[i,]$SPCD, remper.cor.vector = remper.cor.vector, model.no = 6)
 }
 
 # read in all the betas from just model 6, 0.5:
 # read in all the betas:
-all.files.05 <- paste0(output.folder, "/SPCD_stanoutput_full/betas/", list.files(paste0(output.folder,"SPCD_stanoutput_full/betas/"), "0.5"))
+all.files.05 <- paste0(output.folder, "SPCD_stanoutput_full_standardized/betas/", list.files(paste0(output.folder,"SPCD_stanoutput_full_standardized/betas/"), "model_6"))
 big.betas <- lapply(all.files.05, readRDS)
 betas.all.df <- do.call(rbind, big.betas)
 betas.all.df$remper.cor <- as.character(betas.all.df$remper.cor)
 betas.all.df$Species <- FIESTA::ref_species[match(betas.all.df$SPCD, ref_species$SPCD),]$COMMON
 
 # get model parameter names
-model.number <- 5
-load(paste0("SPCD_standata_general_full/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.number, ".Rdata")) # load the species code data5
+model.number <- 6
+SPCD.id <- 318
+remper.correction <- 0.5
+load(paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.number, ".Rdata")) # load the species code data5
 param.names <- data.frame(Parameter = colnames(mod.data$xM), 
-                          variable = paste0("u_beta[", 1:18,"]"))
+                          variable = paste0("u_beta[", 1:51,"]"))
                           
 betas.all.df <- left_join(betas.all.df, param.names)
 betas.all.df
@@ -432,6 +435,7 @@ ggplot(data = na.omit(betas.quant) , aes(x = Species, y = median))+geom_point()+
   geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
   theme_bw(base_size = 12)+
   theme( axis.text.x = element_text(angle = 45, hjust = 1))+facet_wrap(~Parameter, scales = "free_y")
+ggsave(height = 5, width = 10, "summaryfigures/species_fixed_response_model_6_by_drought_tolerance.png")
 
 # ordered by flood tolerance
 betas.quant <- betas.all.df %>% arrange(by = FloodTol) 
@@ -508,6 +512,7 @@ tab_spanner(
   tab_spanner(
     label = "very shade tolerant",
     columns = 14:18) |> gtsave(filename = "summaryfigures/species_model_6_summary_by_shade_tolerance_circles.html")
+
 
 # only the values sorded by shade tolerance
 
@@ -716,6 +721,7 @@ ggsave(height = 5, width = 10, "summaryfigures/species_fixed_response_model_6_by
      "physio.scaled",
      "elev.scaled",
      "RD.scaled", 
+     "non_SPCD.BA.scaled",
      "slope.scaled",
      "MATmax.scaled",
      
@@ -731,7 +737,17 @@ ggsave(height = 5, width = 10, "summaryfigures/species_fixed_response_model_6_by
    
    
    spread( Species, test) %>% ungroup() |> 
-   gt() |> fmt_markdown() |>
+   gt() |> 
+   opt_css(
+     css = "
+    #mygt .gt_col_heading {
+      text-align: center;
+      transform: rotate(-90deg);
+      font-weight: bold;
+    }
+    "
+   )|>
+   fmt_markdown(columns = 2:18) |>
    gtsave(filename = "summaryfigures/species_model_6_summary_by_drought_tolerance_circle_scaled_color.html")
  
  # MAP.scaled, Physio.scaled, tmax.anom
@@ -849,8 +865,7 @@ ggplot(data = na.omit(betas.quant) , aes(x = Species, y = median))+geom_point()+
   geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
   theme_bw(base_size = 12)+
   theme( axis.text.x = element_text(angle = 45, hjust = 1))+facet_wrap(~Parameter, scales = "free_y")
-# variables related to wood density
-# DIA, Basal area, MATmax, Physio, Tmmin anom?
+
 
 # read in all the betas:
 all.files <- paste0("SPCD_stanoutput_full/betas/", list.files(paste0(output.folder,"SPCD_stanoutput_full/betas/")))
@@ -947,8 +962,5 @@ table.beta.param(b.names[14])
 # run the marginal posteriors for all species and generate plots
 #source("R/plot_marginal_posteriors_SPCD.R")
 
-# generate predictions for the test datasets
-# how to evaluate models?
-# predicted pmort vs observed mortality frequency?
-# classification errors?
+
 
