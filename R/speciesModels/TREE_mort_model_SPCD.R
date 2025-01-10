@@ -266,8 +266,8 @@ for(i in 1:17){# run for each of the 17 species
 for(i in 1:17){# run for each of the 17 species
   common.name <- nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON)
   
-  for(m in 1:9){  # run each of the 9 models
-  # for(m in 7:9){ 
+  for(m in c(7)){  # run each of the 9 models
+   #for(m in 8:9){ 
 
   model.number <- model.list[m]
   for (j in 1:length(remper.cor.vector)){ # for the growth only model explore the consequences of other assumptions about remeasurement period
