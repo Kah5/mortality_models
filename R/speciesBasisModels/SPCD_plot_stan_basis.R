@@ -140,6 +140,8 @@ ggsave(height = 5, width = 10, units = "in",paste0(output.folder, "SPCD_stanoutp
 # in-sample pred vs obs plots
 ##################################
 psurv.estimates <- fit_ssm_df %>% dplyr::select( paste0("psurv[",1:mod.data$N, "]")) 
+p.surv.all <- fit_ssm_df %>% select(paste0("psurv[",1:mod.data$N, "]"))
+
 psurv.m <- reshape2::melt(psurv.estimates)
 
 psurv.quant <- psurv.m %>% group_by(variable) %>% summarise(median = quantile(value, 0.5, na.rm =TRUE),
@@ -178,7 +180,8 @@ ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutpu
 ##################################
 # out of sample plots
 ##################################
-psurv.hat.estimates <- fit_ssm_df %>% dplyr::select( paste0("psurv.hat[",1:mod.data$Nrep, "]")) 
+psurv.hat.estimates <- fit_ssm_df %>% dplyr::select( paste0("psurv.hat[",1:mod.data$Nrep, "]"))
+psurv.hat.all <- fit_ssm_df %>% select(paste0("psurv.hat[",1:mod.data$Nrep, "]"))
 psurv.hat.m <- reshape2::melt(psurv.hat.estimates)
 
 psurv.hat.quant <- psurv.hat.m %>% group_by(variable) %>% summarise(median = quantile(value, 0.5, na.rm =TRUE),
@@ -253,32 +256,75 @@ accuracy.oos <- mean(as.vector(yhat.quant$median) == mod.data$ytest)
 # for in sample data
 actuals = mod.data$y
 preds = as.vector(psurv.quant$median)
-auc.is <-auc_roc(preds, actuals)  
+auc.is <-auc_roc(preds, actuals)
+
+# get the range of responses for each sample:
+auc.is.list <- list()
+
+auc.is.list <- lapply(1:nrow(p.surv.all), FUN = function(x){
+  auc_roc(preds, as.vector(as.numeric(p.surv.all[x,])))
+})
+
+AUC.is.df <- do.call(rbind, auc.is.list)
+full.auc.quants <- quantile(AUC.is.df[,1], c(0.025, 0.5, 0.975) )
 
 
-## for out of sampled data
+
+#
+#
+# ## for out of sampled data
 actuals = mod.data$ytest
 preds = as.vector(psurv.hat.quant$median)
 
-auc.oos <- auc_roc(preds, actuals)  
+auc.oos <- auc_roc(preds, actuals)
 
-# save in one model summary table:
+# get the range of responses for each sample:
+auc.oos.list <- list()
 
+auc.oos.list <- lapply(1:nrow(psurv.hat.all), FUN = function(x){
+  auc_roc(preds, as.vector(as.numeric(psurv.hat.all[x,])))
+})
+
+AUC.oos.df <- do.call(rbind, auc.oos.list)
+full.oos.auc.quants <- quantile(AUC.oos.df[,1], c(0.025, 0.5, 0.975) )
+
+#
+# # save in one model summary table:
+#
 model.assessment.df <- data.frame(SPCD = SPCD.id,
-                                  model = model.number, 
-                                  remper.correction = remper.correction, 
+                                  model = model.number,
+                                  remper.correction = remper.correction,
                                   
                                   # loo estimates
-                                  elpd_loo = loo_1$estimates[1,1],
-                                  p_loo = loo_1$estimates[2,1],
-                                  looic = loo_1$estimates[3,1],
+                                  #elpd_loo = loo_1$estimates[1,1],
+                                  #p_loo = loo_1$estimates[2,1],
+                                  #looic = loo_1$estimates[3,1],
                                   # in sample
                                   auc.insample = auc.is,
-                                  accuracy.is = accuracy.is,
-                                  # out of sample 
-                                  auc.oosample = auc.oos,
-                                  accuracy.oos = accuracy.oos
+                                  auc.insample.median = full.auc.quants[2],
+                                  auc.insample.lo = full.auc.quants[1], 
+                                  auc.insample.hi = full.auc.quants[3],
+                                  # out of sample
+                                  auc.oosample = auc.oos, 
+                                  auc.oosample.median = full.oos.auc.quants[2],
+                                  auc.oosample.lo = full.oos.auc.quants[1], 
+                                  auc.oosample.hi = full.oos.auc.quants[3]
+                                  #accuracy.oos = accuracy.oos
 )
 write.csv(model.assessment.df , paste0(output.folder, "SPCD_stanoutput_full_basis/Accuracy_df_basis_model_",model.number, "_remper_0.5_species_", SPCD.id,"_remper_corr_", remper.cor.vector[j], ".csv" ), row.names = FALSE)
 
-
+rm(p.surv.all, 
+   psurv.hat.m, 
+   psurv.hat.quant, 
+   psurv.m, 
+   psurv.quant, 
+   fit_ssm_df, 
+   yrep.m, 
+   yrep.quant, 
+   yrep.estimates, 
+   yhat.estimates, 
+   yhat.m, 
+   yhat.quant,
+   AUC.oos.df, 
+   AUC.is.df,
+   psurv.hat.all, fit.1, model.assessment.df )
