@@ -184,8 +184,8 @@ for(i in 1:17){# run for each of the 17 species
       
       fit.1 <- SPCD_run_stan_basis(SPCD.id = SPCD.df[i,]$SPCD,
                                    model.no = model.number,
-                                   niter = 100,
-                                   nchains = 1,
+                                   niter = 2000,
+                                   nchains = 2,
                                    remper.correction = remper.cor.vector[j],
                                    model.file = 'modelcode/mort_model_basis.stan',
                                    output.folder = "/home/rstudio/")
