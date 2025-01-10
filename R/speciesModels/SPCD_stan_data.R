@@ -3,10 +3,13 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   
   
  
-  
-  # scale the cleaned data tree-level diameters by species?
+if(remper.correction == "random"){
+  # uniform sample across the board for the remper year correction
+ 
+  # scale the cleaned data tree-level diameters by species
   cleaned.data <- cleaned.data %>% ungroup()  %>% group_by(SPCD) %>% 
-    mutate(rempercur = ifelse(M ==1, remper*remper.correction, remper), 
+    mutate(remper.sample = runif(length(cleaned.data$state)))%>%
+    mutate(rempercur = ifelse(M ==1, remper*remper.sample, remper), 
            annual.growth = DIA_DIFF/rempercur) %>% mutate(DIA.median = median(dbhcur, na.rm =TRUE), 
                                                           DIA.sd = sd(dbhcur, na.rm = TRUE),  
                                                           BAL.median = median(BAL, na.rm=TRUE),
@@ -25,7 +28,66 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
                                                                                     TRUE),
                                                           annual.growth.median = median(annual.growth, na.rm = TRUE), 
                                                           annual.growth.sd = sd(annual.growth, na.rm = TRUE)) %>% 
-   # rescale to values of 0 to 1
+    ungroup() %>% mutate(DIA_scaled = (dbhcur - DIA.median)/DIA.sd,
+                         annual.growth.scaled = (annual.growth - annual.growth.median)/annual.growth.sd,
+                         RD.scaled = (RD-RD.median)/RD.sd,
+                         BAL.scaled = (BAL-BAL.median)/BAL.sd,
+                         SPCD.BA.scaled = (SPCD_BA - SPCD_BA.median)/SPCD_BA.sd,
+                         non_SPCD.BA.scaled = (non_SPCD_BA - nonSPCD_BA_tot.median)/nonSPCD_BA_tot.sd,
+                         prop.focal.ba.scaled = ((SPCD_BA/BA_total) - prop.focal.ba.median)/prop.focal.ba.sd, 
+                         si.scaled = (si - plot.medians$si.median)/plot.medians$si.sd,
+                         ba.scaled = (ba - plot.medians$ba.median)/plot.medians$ba.sd,
+                         aspect.scaled = (aspect - plot.medians$aspect.median)/plot.medians$aspect.sd,
+                         slope.scaled = (slope - plot.medians$slope.median)/plot.medians$slope.sd,
+                         damage.scaled = (damage.total - plot.medians$damage.median)/plot.medians$damage.sd,
+                         MAP.scaled = (MAP-plot.medians$MAP.median)/plot.medians$MAP.sd,
+                         elev.scaled = (elev-plot.medians$elev.median)/plot.medians$elev.sd,
+                         Ndep.scaled = (Ndep.remper.avg- plot.medians$Ndep.median)/plot.medians$Ndep.sd,
+                         physio.scaled = (physio-plot.medians$physio.median)/plot.medians$physio.sd,
+                         MATmin.scaled = (MATmin- plot.medians$MATmin.median)/plot.medians$MATmin.sd,
+                         MATmax.scaled = (MATmax - plot.medians$MATmax.median)/plot.medians$MATmax.sd)
+    }else{
+    cleaned.data <- cleaned.data %>% ungroup()  %>% group_by(SPCD) %>% 
+      mutate(rempercur = ifelse(M ==1, remper*remper.correction, remper), 
+             annual.growth = DIA_DIFF/rempercur) %>% mutate(DIA.median = median(dbhcur, na.rm =TRUE), 
+                                                            DIA.sd = sd(dbhcur, na.rm = TRUE),  
+                                                            BAL.median = median(BAL, na.rm=TRUE),
+                                                            BAL.sd = sd(BAL, na.rm = TRUE),
+                                                            RD.median = median(RD, na.rm=TRUE), 
+                                                            RD.sd = sd(RD, na.rm =TRUE),
+                                                            nonSPCD_BA_tot.sd = sd(non_SPCD_BA, na.rm = TRUE),
+                                                            SPCD_BA.sd = sd(SPCD_BA, na.rm =
+                                                                              TRUE),
+                                                            prop.focal.ba.median = median(SPCD_BA/BA_total, na.rm =TRUE), 
+                                                            prop.focal.ba.sd = sd(SPCD_BA/BA_total, na.rm =TRUE), 
+                                                            BA_tot.median = median(BA_total, na.rm =
+                                                                                     TRUE),
+                                                            nonSPCD_BA_tot.median = median(non_SPCD_BA, na.rm = TRUE),
+                                                            SPCD_BA.median = median(SPCD_BA, na.rm =
+                                                                                      TRUE),
+                                                            annual.growth.median = median(annual.growth, na.rm = TRUE), 
+                                                            annual.growth.sd = sd(annual.growth, na.rm = TRUE)) %>% 
+      # rescale to 
+      ungroup() %>% mutate(DIA_scaled = (dbhcur - DIA.median)/DIA.sd,
+                           annual.growth.scaled = (annual.growth - annual.growth.median)/annual.growth.sd,
+                           RD.scaled = (RD-RD.median)/RD.sd,
+                           BAL.scaled = (BAL-BAL.median)/BAL.sd,
+                           SPCD.BA.scaled = (SPCD_BA - SPCD_BA.median)/SPCD_BA.sd,
+                           non_SPCD.BA.scaled = (non_SPCD_BA - nonSPCD_BA_tot.median)/nonSPCD_BA_tot.sd,
+                           prop.focal.ba.scaled = ((SPCD_BA/BA_total) - prop.focal.ba.median)/prop.focal.ba.sd, 
+                           si.scaled = (si - plot.medians$si.median)/plot.medians$si.sd,
+                           ba.scaled = (ba - plot.medians$ba.median)/plot.medians$ba.sd,
+                           aspect.scaled = (aspect - plot.medians$aspect.median)/plot.medians$aspect.sd,
+                           slope.scaled = (slope - plot.medians$slope.median)/plot.medians$slope.sd,
+                           damage.scaled = (damage.total - plot.medians$damage.median)/plot.medians$damage.sd,
+                           MAP.scaled = (MAP-plot.medians$MAP.median)/plot.medians$MAP.sd,
+                           elev.scaled = (elev-plot.medians$elev.median)/plot.medians$elev.sd,
+                           Ndep.scaled = (Ndep.remper.avg- plot.medians$Ndep.median)/plot.medians$Ndep.sd,
+                           physio.scaled = (physio-plot.medians$physio.median)/plot.medians$physio.sd,
+                           MATmin.scaled = (MATmin- plot.medians$MATmin.median)/plot.medians$MATmin.sd,
+                           MATmax.scaled = (MATmax - plot.medians$MATmax.median)/plot.medians$MATmax.sd)
+   }
+  # rescale to values of 0 to 1
      # ungroup()%>% mutate(DIA_scaled = rescale(dbhold,, 
      #                    annual.growth.scaled = rescale(annual.growth,,
      #                    RD.scaled = rescale(RD,,
@@ -55,24 +117,7 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
      #                    tmax.anom = rescale(tmax.anom,, 
      #                    tmin.anom = rescale(tmin.anom,)
   # old method of scaling                      
-    ungroup() %>% mutate(DIA_scaled = (dbhcur - DIA.median)/DIA.sd,
-                         annual.growth.scaled = (annual.growth - annual.growth.median)/annual.growth.sd,
-                         RD.scaled = (RD-RD.median)/RD.sd,
-                         BAL.scaled = (BAL-BAL.median)/BAL.sd,
-                         SPCD.BA.scaled = (SPCD_BA - SPCD_BA.median)/SPCD_BA.sd,
-                         non_SPCD.BA.scaled = (non_SPCD_BA - nonSPCD_BA_tot.median)/nonSPCD_BA_tot.sd,
-                         prop.focal.ba.scaled = ((SPCD_BA/BA_total) - prop.focal.ba.median)/prop.focal.ba.sd, 
-                         si.scaled = (si - plot.medians$si.median)/plot.medians$si.sd,
-                         ba.scaled = (ba - plot.medians$ba.median)/plot.medians$ba.sd,
-                         aspect.scaled = (aspect - plot.medians$aspect.median)/plot.medians$aspect.sd,
-                         slope.scaled = (slope - plot.medians$slope.median)/plot.medians$slope.sd,
-                         damage.scaled = (damage.total - plot.medians$damage.median)/plot.medians$damage.sd,
-                         MAP.scaled = (MAP-plot.medians$MAP.median)/plot.medians$MAP.sd,
-                         elev.scaled = (elev-plot.medians$elev.median)/plot.medians$elev.sd,
-                         Ndep.scaled = (Ndep.remper.avg- plot.medians$Ndep.median)/plot.medians$Ndep.sd,
-                         physio.scaled = (physio-plot.medians$physio.median)/plot.medians$physio.sd,
-                         MATmin.scaled = (MATmin- plot.medians$MATmin.median)/plot.medians$MATmin.sd,
-                         MATmax.scaled = (MATmax - plot.medians$MATmax.median)/plot.medians$MATmax.sd)
+   
 
   SPP.df <- data.frame(SPCD = unique(cleaned.data$SPCD), 
                        SPP = 1:length(unique(cleaned.data$SPCD)))
@@ -94,7 +139,7 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   # 1. Annual growth 
   
   
-  #ggplot(test.data, aes(x= as.character(M), y = density.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  ggplot(test.data, aes(x= as.character(M), y = annual.growth))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
   ggplot(test.data, aes(x= as.character(M), y = prop.focal.ba.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
   ggplot(test.data, aes(x= as.character(M), y = SPCD.BA.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
   #ggplot(test.data, aes(x= as.character(M), y = SPCD.density.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
