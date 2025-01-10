@@ -1,6 +1,6 @@
 library(loo)
 #model.name <- paste0("mort_basis_model3alphaRE_allspp_SPGRPCD_", SPGRPCD.id)
-load(paste0("SPCD_standata_basis/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.number, ".Rdata")) # load the species code data
+load(paste0("SPCD_stanoutput_full_basis/data/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.number, ".Rdata")) # load the species code data
 #paste0("SPCD_standata_basis/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_1.Rdata")
 # read in the model fit
 fit.1 <- readRDS(paste0(output.folder,"SPCD_stanoutput_full_basis/samples/basis_model_",model.no,"_SPCD_",SPCD.id, "_remper_correction_", remper.correction, ".RDS"))
@@ -15,13 +15,13 @@ names(fit.1) <- c("alpha_SPP", colnames(mod.data$xM),
                   ## in sample predicted status
                   paste0("yrep[",1:mod.data$N, "]"),
                   paste0("psurv[",1:mod.data$N, "]"),
-                  paste0("psurv.annual[",1:mod.data$N, "]"),
+                  #paste0("psurv.annual[",1:mod.data$N, "]"),
                   
                   ## out of  sample predicted status
                   paste0("yhat[",1:mod.data$Nrep, "]"),
                   ## out of sample predicted prob mor
                   paste0("psurv.hat[",1:mod.data$Nrep, "]"),
-                  paste0("psurv.hat.annual[",1:mod.data$Nrep, "]"),
+                  #paste0("psurv.hat.annual[",1:mod.data$Nrep, "]"),
                   ## in sample predicted status
                   paste0("log_lik[",1:mod.data$N, "]"),
                   paste0("DIA_spline[", 1:mod.data$S, "]"),
@@ -91,8 +91,8 @@ cov.estimates <- fit_ssm_df %>% dplyr::select(paste0("DIA_spline[", 1:mod.data$S
 cov.m <- reshape2::melt(cov.estimates)
 
 etas.quant <- cov.m %>% group_by(variable) %>% summarise(median = quantile(value, 0.5, na.rm =TRUE),
-                                                          ci.lo = quantile(value, 0.005, na.rm =TRUE),
-                                                          ci.hi = quantile(value, 0.975, na.rm =TRUE))
+                                                         ci.lo = quantile(value, 0.005, na.rm =TRUE),
+                                                         ci.hi = quantile(value, 0.975, na.rm =TRUE))
 
 
 # clean up the naming structure of this
@@ -109,7 +109,7 @@ etas.quant <- etas.quant %>% arrange(by = median)
 
 # get overlapping zero to color the error bars
 etas.quant$`significance` <- ifelse(etas.quant$ci.lo < 0 & etas.quant$ci.hi < 0, "significant", 
-                                     ifelse(etas.quant$ci.lo > 0 & etas.quant$ci.hi > 0, "significant", "not overlapping zero"))
+                                    ifelse(etas.quant$ci.lo > 0 & etas.quant$ci.hi > 0, "significant", "not overlapping zero"))
 
 ggplot(data = na.omit(etas.quant), aes(x = Covariate, y = median, color = significance))+geom_point()+
   geom_errorbar(data = na.omit(etas.quant), aes(x = Covariate , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
@@ -132,7 +132,7 @@ eff.m <- reshape2::melt(eff) %>% group_by(Var2) %>% summarise(median = median(va
   rename(`DIA_scaled` = "Var2")
 
 ggplot()+geom_ribbon(data = eff.m, aes(x = DIA_scaled, ymin = ci.lo, ymax = ci.hi), alpha = 0.5, fill = "forestgreen")+
- geom_line(data = eff.m, aes(x = DIA_scaled, y = median))
+  geom_line(data = eff.m, aes(x = DIA_scaled, y = median))
 ggsave(height = 5, width = 10, units = "in",paste0(output.folder, "SPCD_stanoutput_full_basis/images/Estimated_basis_effect_DIA_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
 
 
@@ -143,8 +143,8 @@ psurv.estimates <- fit_ssm_df %>% dplyr::select( paste0("psurv[",1:mod.data$N, "
 psurv.m <- reshape2::melt(psurv.estimates)
 
 psurv.quant <- psurv.m %>% group_by(variable) %>% summarise(median = quantile(value, 0.5, na.rm =TRUE),
-                                                          ci.lo = quantile(value, 0.005, na.rm =TRUE),
-                                                          ci.hi = quantile(value, 0.975, na.rm =TRUE))
+                                                            ci.lo = quantile(value, 0.005, na.rm =TRUE),
+                                                            ci.hi = quantile(value, 0.975, na.rm =TRUE))
 
 #hist(psurv.quant$median)
 psurv.quant$Mobs <- as.character(mod.data$y)
@@ -160,8 +160,8 @@ yrep.estimates <- fit_ssm_df %>% dplyr::select( paste0("yrep[",1:mod.data$N, "]"
 yrep.m <- reshape2::melt(yrep.estimates)
 
 yrep.quant <- yrep.m %>% group_by(variable) %>% summarise(median = quantile(value, 0.5, na.rm =TRUE),
-                                                            ci.lo = quantile(value, 0.005, na.rm =TRUE),
-                                                            ci.hi = quantile(value, 0.975, na.rm =TRUE))
+                                                          ci.lo = quantile(value, 0.005, na.rm =TRUE),
+                                                          ci.hi = quantile(value, 0.975, na.rm =TRUE))
 
 
 yrep.quant$Mobs <- as.character(mod.data$y)
@@ -182,8 +182,8 @@ psurv.hat.estimates <- fit_ssm_df %>% dplyr::select( paste0("psurv.hat[",1:mod.d
 psurv.hat.m <- reshape2::melt(psurv.hat.estimates)
 
 psurv.hat.quant <- psurv.hat.m %>% group_by(variable) %>% summarise(median = quantile(value, 0.5, na.rm =TRUE),
-                                                            ci.lo = quantile(value, 0.005, na.rm =TRUE),
-                                                            ci.hi = quantile(value, 0.975, na.rm =TRUE))
+                                                                    ci.lo = quantile(value, 0.005, na.rm =TRUE),
+                                                                    ci.hi = quantile(value, 0.975, na.rm =TRUE))
 
 #hist(psurv.hat.quant$median)
 psurv.hat.quant$Mobs <- as.character(mod.data$ytest)
@@ -213,34 +213,34 @@ ggplot(yhat.quant, aes(as.character(Mobs), y = ci.hi, fill =Mobs ))+geom_violin(
   xlab("Observed in-sample tree status")+scale_fill_manual(values =  c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
 ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_basis/images/YhatMort_out_of_sample_95pct_vs_obs_violin_basis_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
 
-###########
-# Use the Loo package to compute PSIS-LOO and check diagnositcs
-# this may take awhile..
-# Extract pointwise log-likelihood
-log_lik_1 <- extract_log_lik(fit.1, merge_chains = FALSE)
+# ###########
+# # Use the Loo package to compute PSIS-LOO and check diagnositcs
+# # this may take awhile..
+# # Extract pointwise log-likelihood
+# log_lik_1 <- extract_log_lik(fit.1, merge_chains = FALSE)
+# 
+# # provide relative effective sample sizes, to bettin estimate PSIS 
+# r_eff <- relative_eff(exp(log_lik_1))
+# 
+# # preferably use more than 0 cores (as many cores as possible)
+# # will use value of 'mc.cores' option if cores is not specified
+# loo_1 <- loo(log_lik_1, r_eff = r_eff, save_psis = TRUE)
+# print(loo_1)
+# # save the loo_1 object
+# 
+# save(log_lik_1, r_eff, loo_1, file = paste0(output.folder, "SPCD_stanoutput_full_basis/LOO_basis_model_",model.number,"remper.corr_",remper.correction, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".Rdata"))
 
-# provide relative effective sample sizes, to bettin estimate PSIS 
-r_eff <- relative_eff(exp(log_lik_1))
-
-# preferably use more than 0 cores (as many cores as possible)
-# will use value of 'mc.cores' option if cores is not specified
-loo_1 <- loo(log_lik_1, r_eff = r_eff, save_psis = TRUE)
-print(loo_1)
-# save the loo_1 object
-
-save(log_lik_1, r_eff, loo_1, file = paste0(output.folder, "SPCD_stanoutput_full_basis/LOO_basis_model_",model.number,"remper.corr_",remper.correction, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".Rdata"))
-
-###------------------------------------
-psis <- loo_1$psis_object
-keep_obs <- sample(1:length(mod.data$y), 100)
-lw <- weights(psis)
-
-
-ppc1 <- bayesplot::ppc_loo_intervals(mod.data$y, 
-                                     yrep = as.matrix(yrep.estimates), 
-                                     psis_object = psis, subset = keep_obs, order = "median") 
-# ppc0 <- rstantools::ppc_loo_pit_overlay(mod.data$y, yrep =  as.matrix(yrep.estimates), lw = lw)
-# ppc3 <- bayesplot::ppc_loo_pit_qq(mod.data$y, yrep =  as.matrix(yrep.estimates), lw = lw)
+# ###------------------------------------
+# psis <- loo_1$psis_object
+# keep_obs <- sample(1:length(mod.data$y), 100)
+# lw <- weights(psis)
+# 
+# 
+# ppc1 <- bayesplot::ppc_loo_intervals(mod.data$y, 
+#                                      yrep = as.matrix(yrep.estimates), 
+#                                      psis_object = psis, subset = keep_obs, order = "median") 
+# # ppc0 <- rstantools::ppc_loo_pit_overlay(mod.data$y, yrep =  as.matrix(yrep.estimates), lw = lw)
+# # ppc3 <- bayesplot::ppc_loo_pit_qq(mod.data$y, yrep =  as.matrix(yrep.estimates), lw = lw)
 
 ############################################################
 # get accuracy of prediction
@@ -265,20 +265,20 @@ auc.oos <- auc_roc(preds, actuals)
 # save in one model summary table:
 
 model.assessment.df <- data.frame(SPCD = SPCD.id,
-                          model = model.number, 
-                          remper.correction = remper.correction, 
-                          
-                          # loo estimates
-                          elpd_loo = loo_1$estimates[1,1],
-                          p_loo = loo_1$estimates[2,1],
-                          looic = loo_1$estimates[3,1],
-                          # in sample
-                          auc.insample = auc.is,
-                          accuracy.is = accuracy.is,
-                          # out of sample 
-                          auc.oosample = auc.oos,
-                          accuracy.oos = accuracy.oos
-                          )
+                                  model = model.number, 
+                                  remper.correction = remper.correction, 
+                                  
+                                  # loo estimates
+                                  elpd_loo = loo_1$estimates[1,1],
+                                  p_loo = loo_1$estimates[2,1],
+                                  looic = loo_1$estimates[3,1],
+                                  # in sample
+                                  auc.insample = auc.is,
+                                  accuracy.is = accuracy.is,
+                                  # out of sample 
+                                  auc.oosample = auc.oos,
+                                  accuracy.oos = accuracy.oos
+)
 write.csv(model.assessment.df , paste0(output.folder, "SPCD_stanoutput_full_basis/Accuracy_df_basis_model_",model.number, "_remper_0.5_species_", SPCD.id,"_remper_corr_", remper.cor.vector[j], ".csv" ), row.names = FALSE)
 
 

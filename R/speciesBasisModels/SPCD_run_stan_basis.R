@@ -1,5 +1,5 @@
 SPCD_run_stan_basis <- function(SPCD.id, model.no = 1, niter = 1000, nchains = 2, remper.correction = 0.5,  model.file = 'modelcode/mort_model3_SPCD.stan', output.folder){
-
+  
   model.name <- paste0("mort_model", model.no, "_single_SPCD_", SPCD.id, "remper_", remper.correction)
   load(paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.no, ".Rdata")) # load the species code data
   mod.data$K <- ncol(mod.data$xM)
@@ -14,15 +14,15 @@ SPCD_run_stan_basis <- function(SPCD.id, model.no = 1, niter = 1000, nchains = 2
   
   mod.data.basis <- mod.data
   mod.data.basis$K <- mod.data$K - 1
- 
+  
   mod.data.basis$X_basis <- data.frame(as.matrix(basis_functions))
   mod.data.basis$X_basisMrep <- data.frame(as.matrix(oos_basis_functions))
   mod.data.basis$S <- ncol( mod.data.basis$X_basis)
   mod.data.basis$xM <- mod.data$xM[,!colnames(mod.data$xM) %in% "DIA_scaled"]
   mod.data.basis$xMrep <- mod.data$xMrep[,!colnames(mod.data$xMrep) %in% "DIA_scaled"]
   mod.data.basis$Remperoos <- test.data$remper
- mod.data <- mod.data.basis 
-    save(train.data, 
+  mod.data <- mod.data.basis 
+  save(train.data, 
        test.data, 
        mod.data,
        mod.data.test, 
@@ -33,9 +33,9 @@ SPCD_run_stan_basis <- function(SPCD.id, model.no = 1, niter = 1000, nchains = 2
        basis_range_dia, 
        dia,
        dia.range,
-       file = paste0("SPCD_standata_basis/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_",model.no,".Rdata"))
+       file = paste0("SPCD_stanoutput_full_basis/data/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_",model.no,".Rdata"))
   
-   # y == 0 is mortality and y == 1 is survival
+  # y == 0 is mortality and y == 1 is survival
   num_cores <-  parallel::detectCores()
   # null model:
   start.time <- Sys.time()
@@ -44,74 +44,75 @@ SPCD_run_stan_basis <- function(SPCD.id, model.no = 1, niter = 1000, nchains = 2
                 iter = niter, 
                 chains = nchains, 
                 verbose=FALSE, 
+                init = 0,
                 ##control =  list(max_treedepth = 15),#list(adapt_delta = 0.99, stepsize = 0.5, max_treedepth = 15),#, stepsize = 0.01, max_treedepth = 15),
                 #sample_file = model.name, 
                 #adapt_delta = 0.99, 
                 pars =c("alpha_SPP", "u_beta", 
-                        "y_rep", "mMrep", "pSannualrep", ## in sample predictions
-                        "y_hat", "mMhat", "pSannualhat", ## out of sample predictions
+                        "y_rep", "mMrep", #"pSannualrep", ## in sample predictions
+                        "y_hat", "mMhat", #"pSannualhat", ## out of sample predictions
                         "log_lik", "eta")) #, "y_hat", 
   
- 
- 
-
-end.time <- Sys.time()
-
-
-# Calculate elapsed time in seconds
-elapsed_time <- as.numeric(difftime(end.time, start.time, units = "secs"))
-
-# Calculate core hours
-core_hours <- elapsed_time * num_cores / 3600  # convert seconds to hours
-
-time.diag <- data.frame(model = model.no, 
-                        SPCD = SPCD.id, 
-                        remper = remper.correction,
-                        core.hours = core_hours, 
-                        elapsed.time = elapsed_time, 
-                        cores = num_cores)
-
-write.csv(time.diag, paste0(output.folder,"SPCD_stanoutput_full_basis/computational_resources/time_diag_BASIS_SPCD_",SPCD.id, "_model_", model.no, "_remper_", remper.correction,".csv"))
-# get the sampler diagnostics and save:
-saveRDS(fit.1, paste0(output.folder,"SPCD_stanoutput_full_basis/samples/basis_model_",model.no,"_SPCD_",SPCD.id, "_remper_correction_", remper.correction, ".RDS"))
-
+  
+  
+  
+  end.time <- Sys.time()
+  
+  
+  # Calculate elapsed time in seconds
+  elapsed_time <- as.numeric(difftime(end.time, start.time, units = "secs"))
+  
+  # Calculate core hours
+  core_hours <- elapsed_time * num_cores / 3600  # convert seconds to hours
+  
+  time.diag <- data.frame(model = model.no, 
+                          SPCD = SPCD.id, 
+                          remper = remper.correction,
+                          core.hours = core_hours, 
+                          elapsed.time = elapsed_time, 
+                          cores = num_cores)
+  
+  write.csv(time.diag, paste0(output.folder,"SPCD_stanoutput_full_basis/computational_resources/time_diag_BASIS_SPCD_",SPCD.id, "_model_", model.no, "_remper_", remper.correction,".csv"))
+  # get the sampler diagnostics and save:
+  saveRDS(fit.1, paste0(output.folder,"SPCD_stanoutput_full_basis/samples/basis_model_",model.no,"_SPCD_",SPCD.id, "_remper_correction_", remper.correction, ".RDS"))
+  
 }
 
 save_diagnostics <- function(stanfitobj = fit.1, nchains = 2, model.no = 1, remper.correction = 0.5){
   model.name <-paste0("model_", model.no)
-    # get model diagnostics and save these to look at
-    sampler_params <- get_sampler_params(stanfitobj, inc_warmup = FALSE)
-    
-    mean_accept_stat_by_chain <- sapply(sampler_params, function(x) mean(x[, "accept_stat__"]))
-    sum_divergent_transitions_by_chain <- sapply(sampler_params, function(x) sum(x[, "divergent__"]))
-    sampler_diag <- data.frame(model.name = rep(model.name, nchains),
-                               chain = 1:nchains, 
-                               accept = mean_accept_stat_by_chain, 
-                               sum_divergent_transitions_by_chain = sum_divergent_transitions_by_chain, 
-                               n.samples = nrow(sampler_params[[1]]))
-    # we want few (no) divergent transitions so this is good
-    sampler_diag
-    # there are no divergent transistions in either chain, and acceptance rate > 0.89
-    write.csv(sampler_diag, paste0("SPCD_stanoutput/sample_diagnostics_", model.name,"_remper_",remper.correction, "_species_", SPCD.id , ".csv"), row.names = FALSE)
-    
-    
-    # get the convergence statistics of the model:
-    fit_ssm_df <- as.data.frame(stanfitobj) # takes awhile to convert to df
-    Rhats <- apply(fit_ssm_df, 2, Rhat)
-    hist(Rhats)
-    # most of the R hat values are below 1.01
-    ESS_bulks <- apply(fit_ssm_df, 2, ess_bulk)
-    hist(ESS_bulks)
-    ESS_tails <- apply(fit_ssm_df, 2, ess_tail)
-    hist(ESS_tails)
-    
-    convergence.stats <- as.data.frame(rbind(Rhats, ESS_bulks, ESS_tails))
-    convergence.stats$Statistic <- c("Rhat", "ESS_bulk", "ESS_tail")
-    
-    write.csv(convergence.stats,paste0("SPCD_stanoutput/Rhats_diagnostics_", model.name,"_remper_",remper.correction,  "_species_", SPCD.id , ".csv"))
+  # get model diagnostics and save these to look at
+  sampler_params <- get_sampler_params(stanfitobj, inc_warmup = FALSE)
+  
+  mean_accept_stat_by_chain <- sapply(sampler_params, function(x) mean(x[, "accept_stat__"]))
+  sum_divergent_transitions_by_chain <- sapply(sampler_params, function(x) sum(x[, "divergent__"]))
+  sampler_diag <- data.frame(model.name = rep(model.name, nchains),
+                             chain = 1:nchains, 
+                             accept = mean_accept_stat_by_chain, 
+                             sum_divergent_transitions_by_chain = sum_divergent_transitions_by_chain, 
+                             n.samples = nrow(sampler_params[[1]]))
+  # we want few (no) divergent transitions so this is good
+  sampler_diag
+  # there are no divergent transistions in either chain, and acceptance rate > 0.89
+  write.csv(sampler_diag, paste0("SPCD_stanoutput_full_basis/sample_diagnostics_", model.name,"_remper_",remper.correction, "_species_", SPCD.id , ".csv"), row.names = FALSE)
+  
+  
+  # get the convergence statistics of the model:
+  fit_ssm_df <- as.data.frame(stanfitobj) # takes awhile to convert to df
+  Rhats <- apply(fit_ssm_df, 2, Rhat)
+  hist(Rhats)
+  # most of the R hat values are below 1.01
+  ESS_bulks <- apply(fit_ssm_df, 2, ess_bulk)
+  hist(ESS_bulks)
+  ESS_tails <- apply(fit_ssm_df, 2, ess_tail)
+  hist(ESS_tails)
+  
+  convergence.stats <- as.data.frame(rbind(Rhats, ESS_bulks, ESS_tails))
+  convergence.stats$Statistic <- c("Rhat", "ESS_bulk", "ESS_tail")
+  
+  write.csv(convergence.stats,paste0("SPCD_stanoutput_full_basis/Rhats_diagnostics_", model.name,"_remper_",remper.correction,  "_species_", SPCD.id , ".csv"))
 }
-  #end.time <- Sys.time()
-  #mod1REtime <-  end.time - start.time 
+#end.time <- Sys.time()
+#mod1REtime <-  end.time - start.time 
 plot.stan.mort <- function(fit = fit.1, SPCD.id){
   
   names(fit.1) <- c("alpha_SPP", colnames(mod.data$xM), "lp__")
@@ -119,12 +120,12 @@ plot.stan.mort <- function(fit = fit.1, SPCD.id){
   
   
   
-  png(height = 12, width = 12, units = "in", res = 100, paste0("SPGRP_stanoutput/images/traceplots_mortality_", model.name,"_species_", SPCD.id , ".png"))
+  png(height = 12, width = 12, units = "in", res = 100, paste0("SPGRP_stanoutput_full_basis/images/traceplots_mortality_", model.name,"_species_", SPCD.id , ".png"))
   #par(mfrow = c(5, 3))
   traceplot (fit.1, pars = par.names, nrow = 7, ncol = 6, inc_warmup = FALSE) 
   dev.off()
   
-  png(height = 12, width = 12, units = "in", res = 100, paste0("SPCD_stanoutput/pairs_plot_mortality_", model.name, "_species_", SPCD.id , ".png"))
+  png(height = 12, width = 12, units = "in", res = 100, paste0("SPCD_stanoutput_full_basis/pairs_plot_mortality_", model.name, "_species_", SPCD.id , ".png"))
   pairs(fit.1, pars = "alpha", "u_beta")
   dev.off()
   
@@ -149,7 +150,7 @@ plot.stan.mort <- function(fit = fit.1, SPCD.id){
   
   
   # clean up the naming structure of this
- 
+  
   betas.quant$SPCD <- SPCD.id
   betas.quant$Covariate <-  colnames(mod.data$xM)
   
@@ -161,5 +162,5 @@ plot.stan.mort <- function(fit = fit.1, SPCD.id){
     geom_errorbar(data = na.omit(betas.quant), aes(x = Covariate , ymin = ci.lo, ymax = ci.hi), width = 0.1)+
     geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+facet_wrap(~COMMON)+theme_bw(base_size = 12)+
     theme( axis.text.x = element_text(angle = 45, hjust = 1))+ylab("Effect on mortality")+xlab("Parameter")
-  ggsave(height = 5, width = 7, units = "in",paste0("SPCD_stanoutput/images/Estimated_effects_on_mortality_",model.name, "_species_", SPCD.id , ".png"))
+  ggsave(height = 5, width = 7, units = "in",paste0("SPCD_stanoutput_full_basis/images/Estimated_effects_on_mortality_",model.name, "_species_", SPCD.id , ".png"))
 }
