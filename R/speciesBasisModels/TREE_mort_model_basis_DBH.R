@@ -107,7 +107,7 @@ mortality.summary <- cleaned.data.full %>% filter(SPCD %in% unique(nspp[1:17,]$S
   spread(M, ntrees) %>% rename("live" = `0`, 
                                "dead" = `1`)
 mortality.summary$`Common name` <- FIESTA::ref_species[match(mortality.summary$SPCD, FIESTA::ref_species$SPCD),]$COMMON
-mortality.summary %>% dplyr::select(`Common name`, SPCD, live, dead) %>% mutate(total = live + dead) %>% ungroup() |> gt()
+#mortality.summary %>% dplyr::select(`Common name`, SPCD, live, dead) %>% mutate(total = live + dead) %>% ungroup() |> gt()
 #-----------------------------------------------------------------------------------------
 # Make the species level datasets for the top 15 species to run the model
 #-----------------------------------------------------------------------------------------
@@ -177,14 +177,14 @@ model.list <- 3:5
 for(i in 1:17){# run for each of the 17 species
   common.name <- nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON)
   
-  for(m in 1:length(model.list)){  # run each of the 9 models
+  for(m in 1:3){  # run each of the 9 models
     model.number <- model.list[m]
     for (j in 1:length(remper.cor.vector)){ # for the growth only model explore the consequences of other assumptions about remeasurement period
       cat(paste("running stan mortality model ",model.number, " for SPCD", SPCD.df[i,]$SPCD, common.name$COMMON, " remper correction", remper.cor.vector[j]))
       
       fit.1 <- SPCD_run_stan_basis(SPCD.id = SPCD.df[i,]$SPCD,
                                    model.no = model.number,
-                                   niter = 2000,
+                                   niter = 1000,
                                    nchains = 2,
                                    remper.correction = remper.cor.vector[j],
                                    model.file = 'modelcode/mort_model_basis.stan',
@@ -193,7 +193,7 @@ for(i in 1:17){# run for each of the 17 species
       SPCD.id <-  SPCD.df[i,]$SPCD
       #saveRDS(fit.1, paste0("SPCD_stanoutput_full/samples/model_",model.number,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
       # save_diagnostics (stanfitobj = fit.1, nchains = 2, model.no = model.number, remper.correction = remper.cor.vector[j])
-      
+      model.no <- model.number
       model.name <- paste0("basis_model_",model.number,"_SPCD_", SPCD.id, "_remper_correction_", remper.cor.vector[j])
       remp.cor <- remper.cor.vector[j]
       remper.correction <- remper.cor.vector[j]
