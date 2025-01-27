@@ -884,7 +884,7 @@ mualpha <- readRDS("SPCD_stanoutput_joint/alpha.p_model_6_1000samples.rds")
 mubetas <- readRDS("SPCD_stanoutput_joint/beta_model_6_1000samples.rds")
 
 posterior.predict <- function(x){
- exp.x <- exp(as.data.frame( mualpha) %>% dplyr::select(alpha) + rowSums(as.data.frame(mubetas) %>% dplyr::select(paste0("mu_beta[", 1:48,"]"))*mod.data.6$xM[x,]))
+ exp.x <- exp(-1*as.data.frame( mualpha) %>% dplyr::select(alpha) + rowSums(as.data.frame(mubetas) %>% dplyr::select(paste0("mu_beta[", 1:48,"]"))*mod.data.6$xM[x,]))
   p.mort <- exp.x / (1+ exp.x)
   p.mort$alpha
   }

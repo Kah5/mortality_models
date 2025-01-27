@@ -29,6 +29,7 @@ SPCD.id <- 318
 model.no <- 6
 
 for(i in 17:1){
+  cat(i)
   
 SPCD.id <- nspp[i,]$SPCD
 output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
@@ -150,7 +151,7 @@ saveRDS(plot_data, paste0(output.folder, "SPCD_stanoutput_full_standardized/pred
 marginal_response <- list()
 for (i in 1:17){
   SPCD.id <- nspp[i,]$SPCD
-  marginal_response[[i]] <- readRDS( paste0(output.folder, "SPCD_stanoutput_full_standardized/predicted_mort/model_6_all_marginal_SPCD_", SPCD.id, "no_alpha.RDS") )
+  marginal_response[[i]] <- readRDS( paste0(output.folder, "SPCD_stanoutput_full_standardized/predicted_mort/model_6_all_marginal_SPCD_", SPCD.id, ".RDS") )
   
 }
 marginal_response_df <- do.call(rbind, marginal_response)
@@ -167,8 +168,8 @@ ggplot(marginal_response_df, aes(x = Value, y = 1-mean, color = Species)) +
     y = "Annual Probability of Mortality",
     title = "Effect of Covariates on Probability of Mortality"
   ) +
-  theme_minimal() 
-ggsave(height = 12, width = 12, paste0(output.folder, "images/predicted_mortality/model_6_species_level_models_all_species_marginal_effects_no_alpha.png"))
+  theme_bw(base_size = 12)+theme(panel.grid = element_blank()) 
+ggsave(height = 12, width = 12, paste0(output.folder, "images/predicted_mortality/model_6_species_level_models_all_species_marginal_effects.png"))
 
 
 ## split up by variable type:
@@ -190,6 +191,34 @@ diameter.climate.int <- c(unique(marginal_response_df$Covariate)[41:46])
 diameter.site.int <- c(unique(marginal_response_df$Covariate)[47:51])
 
 # generate figures for all of these separately 
+ggplot(marginal_response_df %>% filter( Covariate %in% c(growth.diam, competition, climate, site.vars  )), aes(x = Value, y = 1-mean, color = Species)) +
+  geom_line(size = 1) +
+  geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+  facet_wrap(~ Covariate, scales = "free") +
+  labs(
+    x = "Covariate Value",
+    y = "Annual Probability of Mortality",
+    title = "Effect of Covariates on Probability of Mortality"
+  ) +
+  theme_bw(base_size = 12)+theme(panel.grid = element_blank())
+ggsave(height = 8, width = 12, 
+       paste0(output.folder, "images/predicted_mortality/model_6_species_level_model_marginal_main_effects_no_alpha.png"))
+
+# balsam fir really domninates the graph so take it out to view
+ggplot(marginal_response_df %>% filter( Covariate %in% c(growth.diam, competition, climate, site.vars  ) & !Species %in% "balsam fir"), aes(x = Value, y = 1-mean, color = Species)) +
+  geom_line(size = 1) +
+  geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+  facet_wrap(~ Covariate, scales = "free") +
+  labs(
+    x = "Covariate Value",
+    y = "Annual Probability of Mortality",
+    title = "Effect of Covariates on Probability of Mortality"
+  ) +
+  theme_bw(base_size = 12)+theme(panel.grid = element_blank())
+ggsave(height = 8, width = 12, 
+       paste0(output.folder, "images/predicted_mortality/model_6_species_level_model_marginal_main_effects_no_balsam_fir.png"))
+
+
 ggplot(marginal_response_df %>% filter( Covariate %in% growth.diam ), aes(x = Value, y = 1-mean, color = Species)) +
   geom_line(size = 1) +
   geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
@@ -201,7 +230,7 @@ ggplot(marginal_response_df %>% filter( Covariate %in% growth.diam ), aes(x = Va
   ) +
   theme_bw(base_size = 12)+theme(panel.grid = element_blank())
 ggsave(height = 5, width = 12, 
-       paste0(output.folder, "images/predicted_mortality/model_6_species_level_model_marginal_growth_diam_no_alpha.png"))
+       paste0(output.folder, "images/predicted_mortality/model_6_species_level_model_marginal_growth_diam.png"))
 
 ggplot(marginal_response_df %>% filter( Covariate %in% competition ), aes(x = Value, y = 1-mean, color = Species)) +
   geom_line(size = 1) +
@@ -214,7 +243,7 @@ ggplot(marginal_response_df %>% filter( Covariate %in% competition ), aes(x = Va
   ) +
   theme_bw(base_size = 12)+theme(panel.grid = element_blank())
 ggsave(height = 5, width = 12, 
-       paste0(output.folder, "images/predicted_mortality/model_6_species_level_model_marginal_competition_no_alpha.png"))
+       paste0(output.folder, "images/predicted_mortality/model_6_species_level_model_marginal_competition.png"))
 
 
 ggplot(marginal_response_df %>% filter( Covariate %in% climate  ), aes(x = Value, y = 1-mean, color = Species)) +
@@ -228,7 +257,7 @@ ggplot(marginal_response_df %>% filter( Covariate %in% climate  ), aes(x = Value
   ) +
   theme_bw(base_size = 12)+theme(panel.grid = element_blank())
 ggsave(height = 8, width = 12, 
-       paste0(output.folder, "images/predicted_mortality/model_6_species_level_model_marginal_climate_vars_no_alpha.png"))
+       paste0(output.folder, "images/predicted_mortality/model_6_species_level_model_marginal_climate_vars.png"))
 
 
 ggplot(marginal_response_df %>% filter( Covariate %in% site.vars ), aes(x = Value, y = 1-mean, color = Species)) +
@@ -242,7 +271,7 @@ ggplot(marginal_response_df %>% filter( Covariate %in% site.vars ), aes(x = Valu
   ) +
   theme_bw(base_size = 12)+theme(panel.grid = element_blank())
 ggsave(height = 5, width = 15, 
-       paste0(output.folder, "images/predicted_mortality/model_6_species_level_model_marginal_site_vars_no_alpha.png"))
+       paste0(output.folder, "images/predicted_mortality/model_6_species_level_model_marginal_site_vars.png"))
 
 ### interaction terms
 ggplot(marginal_response_df %>% filter( Covariate %in% growth.competition.int & !Species %in% "balsam fir"), aes(x = Value, y = 1-mean, color = Species)) +
@@ -312,7 +341,7 @@ ggplot(marginal_response_df %>% filter( Covariate %in% diameter.climate.int & !S
   ) +
   theme_bw(base_size = 12)+theme(panel.grid = element_blank())
 ggsave(height = 8, width = 12, 
-       paste0(output.folder, "images/predicted_mortality/model_6_species_level_model_marginal_diameter_cliamte_noBF.png"))
+       paste0(output.folder, "images/predicted_mortality/model_6_species_level_model_marginal_diameter_climate_noBF.png"))
 
 ggplot(marginal_response_df %>% filter( Covariate %in% diameter.site.int & !Species %in% "balsam fir" ), aes(x = Value, y = 1-mean, color = Species)) +
   geom_line(size = 1) +

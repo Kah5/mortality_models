@@ -168,20 +168,20 @@ mod.data.smol <- list(xM = mod.data.full$xM[rand.sample, ],
 num_cores <-  parallel::detectCores()
 # null model:
 start.time <- Sys.time()
-fit.1 <- stan(file = "modelcode/mort_model_general_hierarchical_non_centered.stan" , 
-              data = mod.data.smol,
+fit.1 <- stan(file = "modelcode/reparam_hierarchical_model.stan" , 
+              data = mod.data.full,
               seed = 22,
               init = 0, 
               iter = 100, 
               chains = 1, 
               verbose=FALSE, 
-              control =  list(max_treedepth = 12),#list(adapt_delta = 0.99, stepsize = 0.5, max_treedepth = 15),#, stepsize = 0.01, max_treedepth = 15),
-              #sample_file = model.name, 
+              control =  list(max_treedepth = 15, adapt_delta = 0.99),#list(adapt_delta = 0.99, stepsize = 0.5, max_treedepth = 15),#, stepsize = 0.01, max_treedepth = 15),
+              sample_file = "hierarchical_model_6", 
               #adapt_delta = 0.99, 
+              # pars = c("alpha_species", "beta", "mu_alpha", "mu_beta"))
               pars =c("alpha_SPP", "u_beta", # the species-specific params
-                      "alpha", "mu_beta",
-                      "sigma_s", 
-                      "y_rep", "mMrep", ## in sample predictions
+                      "mu_alpha", "mu_beta", 
+                      "y_rep", "mMrep", ## out of sample predictions
                       "y_hat", "mMhat")) ## out of sample predictions
 
 end.time <- Sys.time()
@@ -300,201 +300,6 @@ dev.off()
 #                   ## in sample predicted status
 #                   paste0("log_lik[",1:mod.data$N, "]"),
 #                   "lp__")
-#---------------------------------------------------------------------------------------
-# look at outputs and plot traces
-bet0a.spp <- readRDS( paste0("SPCD_stanoutput_joint/u_betas_model_",model.no,"_1000samples.rds"))
-
-betas.quant <- summarise_draws(bet0a.spp, median, ~quantile(.x, probs = c(0.025, 0.975)))%>% rename(`ci.lo` = `2.5%`, `ci.hi` = `97.5%`)
-
-spp.ids <- rep(1:17, 48)
-param.ids <- rep(1:48, each = 17)
-# # note for model 0 there are no covariates
-# cov.estimates <- fit_ssm_df %>% dplyr::select(paste0("u_beta[", spp.ids, ",", param.ids, "]")) 
-# cov.m <- reshape2::melt(cov.estimates)
-# 
-# betas.quant <- cov.m %>% group_by(variable) %>% summarise(median = quantile(value, 0.5, na.rm =TRUE),
-#                                                           ci.lo = quantile(value, 0.025, na.rm =TRUE),
-#                                                           ci.hi = quantile(value, 0.975, na.rm =TRUE))
-
-
-# clean up the naming structure of this
-betas.quant$spp <- rep(1:17, 48)
-betas.quant$param.no <- rep(1:48, each = 17)
-
-betas.quant <- left_join(betas.quant, beta.names)
-
-betas.quant <- left_join(betas.quant, spp.table)
-
-# reorder by the value of the covariate
-betas.quant <- betas.quant %>% arrange(by = median) 
-# betas.quant$parameter <- factor(betas.quant$parameter, levels = betas.quant$parameter)
-
-# get overlapping zero to color the error bars
-betas.quant$`significance` <- ifelse(betas.quant$ci.lo < 0 & betas.quant$ci.hi < 0, "significant", 
-                                     ifelse(betas.quant$ci.lo > 0 & betas.quant$ci.hi > 0, "significant", "not overlapping zero"))
-
-ggplot(data = na.omit(betas.quant), aes(x = parameter, y = median, color = significance))+geom_point()+
-  geom_errorbar(data = na.omit(betas.quant), aes(x = parameter , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-  geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+facet_wrap(~COMMON)+theme_bw(base_size = 10)+
-  theme( axis.text.x = element_text(angle = 65, hjust = 1), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on mortality")+xlab("Parameter")+
-  scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))
-
-
-
-ggplot(data = na.omit(betas.quant), aes(x = COMMON, y = median, color = significance))+geom_point()+
-  geom_errorbar(data = na.omit(betas.quant), aes(x = COMMON , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-  geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+facet_wrap(~parameter)+theme_bw(base_size = 10)+
-  theme( axis.text.x = element_text(angle = 65, hjust = 1), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on mortality")+xlab("Parameter")+
-  scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))
-ggsave(height = 10, width = 10, units = "in",paste0("SPCD_stanoutput_joint/images/Estimated_effects_on_mortality_model_model6_all_species_betas.png"))
-
-# get the population estimates
-
-mubetas.estimates <- readRDS( paste0("SPCD_stanoutput_joint/beta_model_6_1000samples.RDS"))
-
-mubetas.quant <- summarise_draws(mubetas.estimates, median, ~quantile(.x, probs = c(0.025, 0.975)))%>% rename(`ci.lo` = `2.5%`, `ci.hi` = `97.5%`)
-
-# mubetas.estimates <- fit_ssm_df %>% dplyr::select(paste0("mu_beta[",1:48,"]")) 
-# mub.m <- reshape2::melt(mubetas.estimates)
-# 
-# 
-# mubetas.quant <- mub.m %>% group_by(variable) %>% summarise(median = quantile(value, 0.5, na.rm =TRUE),
-#                                                             ci.lo = quantile(value, 0.005, na.rm =TRUE),
-#                                                             ci.hi = quantile(value, 0.975, na.rm =TRUE))
-mubetas.quant$spp <- 18
-mubetas.quant$param.no <- 1:48
-
-mubetas.quant <- left_join(mubetas.quant, beta.names)
-main.table <- data.frame(SPCD.id = "1000", 
-                         COMMON = "population", 
-                         spp = 18)
-
-mubetas.quant <- left_join(mubetas.quant, main.table)
-
-
-mubetas.quant$`significance` <- ifelse(mubetas.quant$ci.lo < 0 & mubetas.quant$ci.hi < 0, "significant", 
-                                       ifelse(mubetas.quant$ci.lo > 0 & mubetas.quant$ci.hi > 0, "significant", "not overlapping zero"))
-
-mubetas.quant <- mubetas.quant %>% arrange(by = median)
-mubetas.quant$parameter <- factor(mubetas.quant$parameter, levels = mubetas.quant$parameter)
-
-ggplot(data = na.omit(mubetas.quant), aes(x = parameter, y = median, color = significance))+geom_point()+
-  geom_errorbar(data = na.omit(mubetas.quant), aes(x = parameter , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-  geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+facet_wrap(~COMMON)+theme_bw(base_size = 10)+
-  theme( axis.text.x = element_text(angle = 65, hjust = 1), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on mortality")+xlab("Parameter")+
-  scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))
-ggsave(height = 5, width = 10, units = "in",paste0("SPCD_stanoutput_joint/images/Estimated_effects_on_mortality_model_model6_all_species_population_betas.png"))
-
-
-
-### combine the betas together
-all.joint.betas <- rbind(mubetas.quant, betas.quant) 
-# reorder factors for better plotting
-all.joint.betas$COMMON <- factor(all.joint.betas$COMMON, levels = c("population", unique(betas.quant$COMMON)[order(unique(betas.quant$COMMON))]))
-all.joint.betas$parameter <- factor(all.joint.betas$parameter, levels = beta.names$parameter)
-
-ggplot(data = na.omit(all.joint.betas), aes(x = COMMON, y = median, color = significance, shape = COMMON %in% "population"))+geom_point()+
-  geom_errorbar(data = na.omit(all.joint.betas), aes(x = COMMON , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-  geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+facet_wrap(~parameter)+theme_bw(base_size = 10)+
-  theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Parameter")+
-  scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
-  scale_shape_manual(values = c("TRUE" = 15, "FALSE" = 19))
-
-ggsave(height = 10, width = 11, units = "in",paste0("SPCD_stanoutput_joint/images/Estimated_betas_all_model6.png"))
-
-
-
-# get the species alpha estimates
-alphas.estimates <- readRDS( paste0("SPCD_stanoutput_joint/alpha.spp_model_",model.no,"_1000samples.rds"))
-
-alphas.quant <- summarise_draws(alphas.estimates, median, ~quantile(.x, probs = c(0.025, 0.975)))%>% rename(`ci.lo` = `2.5%`, `ci.hi` = `97.5%`)
-
-# alphas.estimates <- fit_ssm_df %>% dplyr::select(paste0("alpha_SPP[",1:17,"]")) 
-# mub.m <- reshape2::melt(alphas.estimates)
-# 
-# 
-# alphas.quant <- mub.m %>% group_by(variable) %>% summarise(median = quantile(value, 0.5, na.rm =TRUE),
-#                                                            ci.lo = quantile(value, 0.005, na.rm =TRUE),
-#                                                            ci.hi = quantile(value, 0.975, na.rm =TRUE))
-alphas.quant$spp <- 1:17
-
-
-alphas.quant <- left_join(alphas.quant, spp.table)
-
-
-alphas.quant$`significance` <- ifelse(alphas.quant$ci.lo < 0 & alphas.quant$ci.hi < 0, "significant", 
-                                      ifelse(alphas.quant$ci.lo > 0 & alphas.quant$ci.hi > 0, "significant", "not overlapping zero"))
-
-#alphas.quant <- alphas.quant %>% arrange(by = median)
-#alphas.quant$parameter <- factor(alphas.quant$parameter, levels = alphas.quant$parameter)
-
-ggplot(data = na.omit(alphas.quant), aes(x = COMMON, y = median, color = significance))+geom_point()+
-  geom_errorbar(data = na.omit(alphas.quant), aes(x = COMMON , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-  geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+theme_bw(base_size = 10)+
-  theme( axis.text.x = element_text(angle = 65, hjust = 1), panel.grid  = element_blank(), legend.position = "none")+ylab("alpha estimate")+xlab("SPECIES")+
-  scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))
-ggsave(height = 5, width = 10, units = "in",paste0("SPCD_stanoutput_joint/images/Estimated_alpha_SPP_model6_all_species_alphas.png"))
-
-# combine the population and the species level betas
-
-## get population level alpha estimates:
-alphas.pop.estimates <- readRDS( paste0("SPCD_stanoutput_joint/alpha.p_model_",model.no,"_1000samples.rds"))
-
-alphas.pop.quant <- summarise_draws(alphas.pop.estimates, median, ~quantile(.x, probs = c(0.025, 0.975)))%>% rename(`ci.lo` = `2.5%`, `ci.hi` = `97.5%`)
-
-# alphas.estimates <- fit_ssm_df %>% dplyr::select(paste0("alpha_SPP[",1:17,"]")) 
-# mub.m <- reshape2::melt(alphas.estimates)
-# 
-# 
-# alphas.quant <- mub.m %>% group_by(variable) %>% summarise(median = quantile(value, 0.5, na.rm =TRUE),
-#                                                            ci.lo = quantile(value, 0.005, na.rm =TRUE),
-#                                                            ci.hi = quantile(value, 0.975, na.rm =TRUE))
-alphas.pop.quant$spp <- 18
-
-
-alphas.pop.quant <- left_join(alphas.pop.quant, main.table)
-
-
-alphas.pop.quant$`significance` <- ifelse(alphas.pop.quant$ci.lo < 0 & alphas.pop.quant$ci.hi < 0, "significant", 
-                                          ifelse(alphas.pop.quant$ci.lo > 0 & alphas.pop.quant$ci.hi > 0, "significant", "not overlapping zero"))
-
-#alphas.quant <- alphas.quant %>% arrange(by = median)
-#alphas.quant$parameter <- factor(alphas.quant$parameter, levels = alphas.quant$parameter)
-
-ggplot(data = na.omit(alphas.pop.quant), aes(x = COMMON, y = median, color = significance))+geom_point()+
-  geom_errorbar(data = na.omit(alphas.pop.quant), aes(x = COMMON , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-  geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+theme_bw(base_size = 10)+
-  theme( axis.text.x = element_text(angle = 65, hjust = 1), panel.grid  = element_blank(), legend.position = "none")+ylab("alpha estimate")+xlab("SPECIES")+
-  scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))
-
-
-### combine the alphas together
-all.joint.alphas <- rbind(alphas.pop.quant, alphas.quant) 
-all.joint.alphas$COMMON <- factor(all.joint.alphas$COMMON, levels = c("population", alphas.quant$COMMON[order(unique(alphas.quant$COMMON))]))
-
-ggplot(data = na.omit(all.joint.alphas), aes(x = COMMON, y = median, color = significance, shape = COMMON %in% "population"))+geom_point()+
-  geom_errorbar(data = na.omit(all.joint.alphas), aes(x = COMMON , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-  geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+theme_bw(base_size = 10)+
-  theme( axis.text.x = element_text(angle = 65, hjust = 1), panel.grid  = element_blank(), legend.position = "none")+ylab("alpha estimate")+xlab("SPECIES")+
-  scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
-  scale_shape_manual(values = c("TRUE" = 15, "FALSE" = 19))
-
-ggsave(height = 5, width = 6, units = "in",paste0("SPCD_stanoutput_joint/images/Estimated_alpha_all_model6.png"))
-
-## combine alphas and betas together to make the figure for the paper
-
-all.joint.alphas <- all.joint.alphas %>% mutate(parameter = "alpha") %>% select(variable, median, ci.lo, ci.hi, spp, parameter, SPCD.id, COMMON, significance)
-all.joint.betas <- all.joint.betas %>% select(-param.no)
-all.params <- rbind(all.joint.betas, all.joint.alphas)
-
-ggplot(data = na.omit(all.params), aes(x = COMMON, y = median, color = significance, shape = COMMON %in% "population"))+geom_point()+
-  geom_errorbar(data = na.omit(all.params), aes(x = COMMON , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-  geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+facet_wrap(~parameter)+theme_bw(base_size = 10)+
-  theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Parameter")+
-  scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
-  scale_shape_manual(values = c("TRUE" = 15, "FALSE" = 19))
-
-ggsave(height = 10, width = 11, units = "in",dpi = 350,paste0("SPCD_stanoutput_joint/images/Estimated_parameters_model6_joint.png"))
 
 # compare the observed status to the predicted status
 yrep.estimates <- readRDS( paste0("SPCD_stanoutput_joint/yrep_model_",model.no,"_1000samples.rds"))

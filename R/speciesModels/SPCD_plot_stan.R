@@ -2,7 +2,7 @@ library(loo)
 #model.name <- paste0("mort_model3alphaRE_allspp_SPGRPCD_", SPGRPCD.id)
 load(paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.number, ".Rdata")) # load the species code data
 # read in the model fit
-fit.1 <- readRDS( paste0(output.folder, "SPCD_stanoutput_full_standardized/samples/model_",model.number,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
+fit.1 <- readRDS( paste0(output.folder, "samples/model_",model.number,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
 
 
 species.table <- unique(train.data[,c("SPCD","SPP")])
@@ -37,9 +37,9 @@ for (p in 1:length(par.names)) {
 }
 dev.off()
 
-#png(height = (nvariables/0)*3, width = (nvariables/0)*3, units = "in", res = 100, paste0(output.folder, "SPCD_stanoutput_full/images/pairs_plot_survival_", model.name, "_species_", SPCD.id , ".png"))
-#pairs(fit.1, pars = par.names)
-#dev.off()
+png(height = (nvariables/2)*3, width = (nvariables/2)*3, units = "in", res = 100, paste0(output.folder, "images/pairs_plot_survival_", model.name, "_species_", SPCD.id , ".png"))
+pairs(fit.1, pars = par.names)
+dev.off()
 
 species.table <- unique(train.data[,c("SPCD","SPP")])
 species.table$COMMON <- FIESTA::ref_species[match(species.table$SPCD, FIESTA::ref_species$SPCD),]$COMMON_NAME

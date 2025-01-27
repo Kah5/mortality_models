@@ -12,9 +12,9 @@ output.folder <- "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortalit
 
 
 #paste0(output.folder, "SPCD_stanoutput_full/Accuracy_df_model_",,SPCD.df$SPCD
-accuracy.files <- list.files(path = paste0(output.folder, "SPCD_stanoutput_full_standardized/computational_resources/"), pattern = c("Accuracy_df_model_"))
+accuracy.files <- list.files(path = paste0(output.folder, "SPCD_stanoutput_full_standardized/"), pattern = c("Accuracy_df_model_"))
 
-accuracy.files.full <- paste0(output.folder, "SPCD_stanoutput_full_standardized/computational_resources/", accuracy.files)
+accuracy.files.full <- paste0(output.folder, "SPCD_stanoutput_full_standardized/", accuracy.files)
 
 accuracy.list <- lapply(accuracy.files.full, read.csv)
 accuracy.df <- do.call(rbind, accuracy.list) %>% filter(remper.correction %in% 0.5)
@@ -22,9 +22,10 @@ accuracy.df$Species <- FIESTA::ref_species[match(accuracy.df$SPCD, FIESTA::ref_s
 accuracy.df$Model.name <- paste0("model ", accuracy.df$model)
 accuracy.df$Size_effect <- "Linear"
 
-AUC.singlespecies <- accuracy.df %>% dplyr::select(SPCD, auc.oosample, auc.insample, Species, Model.name)
+AUC.singlespecies <- accuracy.df #%>% dplyr::select(SPCD, auc.oosample, auc.insample, Species, Model.name)
 
-is.auc <- ggplot(AUC.singlespecies, aes(x = Model.name, y = auc.insample, shape = Model.name %in% "model 6"))+geom_point()+
+is.auc <- ggplot(AUC.singlespecies, aes(x = Model.name, y = auc.insample.median, shape = Model.name %in% "model 6"))+geom_point()+
+  geom_errorbar(data = AUC.singlespecies, aes(x = Model.name, ymin = auc.insample.lo, ymax = auc.insample.hi))+
  # geom_hline(data = AUC.all %>% filter(Model.name %in% "hierarchical"), aes(yintercept =  auc.insample), linetype = "dashed", color = "red")+
   facet_wrap(~Species, scales =  "free_y")+
   scale_color_manual( values = c( "black" , 
@@ -37,7 +38,8 @@ ggsave(paste0("model_summary_full/All_species_models_all9models_compare-auc-insa
        width = 10, height = 6)
 
 
-oos.auc <- ggplot(AUC.singlespecies, aes(x = Model.name, y = auc.oosample))+geom_point()+facet_wrap(~Species, scales =  "free_y")+
+oos.auc <- ggplot(AUC.singlespecies, aes(x = Model.name, y = auc.oosample.median))+geom_point()+facet_wrap(~Species, scales =  "free_y")+
+  geom_errorbar(data = AUC.singlespecies, aes(x = Model.name, ymin = auc.oosample.lo, ymax = auc.oosample.hi))+
   theme_bw()+theme(axis.text.x = element_text(angle = 45,  hjust=1)) +
   xlab("")+ylab("Out of Sample AUC")
 ggsave(paste0("model_summary_full/All_species_models_all9models_compare-auc-outofsample.png"), 
@@ -47,12 +49,12 @@ ggsave(paste0("model_summary_full/All_species_models_all9models_compare-auc-outo
 
 
 AUC.summary <- AUC.singlespecies %>% group_by(Model.name) %>% 
-  summarise(auc.oos.median = median(auc.oosample), 
-            auc.is.median = median(auc.insample), 
-            auc.oos.mean = mean(auc.oosample), 
-            auc.is.mean = mean(auc.insample), 
-            auc.oos.total = sum(auc.oosample), 
-            auc.is.total = sum(auc.insample))
+  summarise(auc.oos.median = median(auc.oosample.median), 
+            auc.is.median = median(auc.insample.median), 
+            auc.oos.mean = mean(auc.oosample.median), 
+            auc.is.mean = mean(auc.insample.median), 
+            auc.oos.total = sum(auc.oosample.median), 
+            auc.is.total = sum(auc.insample.median))
 
 
 ggplot(AUC.summary, aes(x = Model.name, y = auc.is.mean, shape = Model.name %in% "model 6"))+geom_point()+
