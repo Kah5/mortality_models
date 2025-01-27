@@ -227,7 +227,7 @@ remper.cor.vector <- c(0.5)
 #model.number <- 6
 model.list <- 1:9
 
-for(m in 6){ 
+for(m in 1:9){ 
 
   model.number <- model.list[m]
 for(i in 1:17){# run for each of the 17 species
@@ -288,9 +288,12 @@ for(i in 1:17){# run for each of the 17 species
   }
 }
 
+
+
 # ##########################################################################################
 # # for model 6 vary the remper length
 # ##########################################################################################
+
 # 
 # # this runs a stan model and saves the outputs
 # cleaned.data.full %>% group_by(SPCD) %>% summarise(n())

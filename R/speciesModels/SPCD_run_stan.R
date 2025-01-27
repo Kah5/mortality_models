@@ -69,12 +69,13 @@ SPCD_run_stan <- function(SPCD.id, model.no = 1, niter = 1000, nchains = 2, remp
        chains = nchains, 
        verbose=FALSE, 
        init = 0,
-       ##control =  list(max_treedepth = 15),#list(adapt_delta = 0.99, stepsize = 0.5, max_treedepth = 15),#, stepsize = 0.01, max_treedepth = 15),
+       control =  list(max_treedepth = 15),#list(adapt_delta = 0.99, stepsize = 0.5, max_treedepth = 15),#, stepsize = 0.01, max_treedepth = 15),
        #sample_file = model.name, 
        #adapt_delta = 0.99, 
-       pars =c("alpha_SPP", "u_beta"))#, 
-              # "y_rep", "mMrep",## in sample predictions
-              # "y_hat", "mMhat", ## out of sample predictions
+       pars =c("alpha_SPP", "u_beta", 
+               "y_rep", "mMrep",## in sample predictions
+               "y_hat", "mMhat"))#, 
+                ## out of sample predictions
              #  "log_lik")) #, "y_hat", 
 end.time <- Sys.time()
 
