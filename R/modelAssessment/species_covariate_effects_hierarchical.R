@@ -82,7 +82,7 @@ model.no <- 6
     geom_errorbar(data = na.omit(betas.quant), aes(x = Species , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
     geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
     facet_wrap(~Covariate, scales= "free_y")+
-    theme_bw(base_size = 10)+
+    theme_bw(base_size = 14)+
     theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on mortality")+xlab("Parameter")+
     scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))
   ggsave(height = 10, width = 15, units = "in",paste0(output.folder,"SPCD_stanoutput_joint_v2/images/Estimated_effects_on_mortality_model_model6_all_species_betas.png"))
@@ -117,7 +117,7 @@ model.no <- 6
   
   ggplot(data = na.omit(mubetas.quant), aes(x = Covariate, y = median, color = significance))+geom_point()+
     geom_errorbar(data = na.omit(mubetas.quant), aes(x = Covariate , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-    geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+facet_wrap(~Species)+theme_bw(base_size = 10)+
+    geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+facet_wrap(~Species)+theme_bw(base_size = 14)+
     theme( axis.text.x = element_text(angle = 65, hjust = 1), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on mortality")+xlab("Covariate")+
     scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))
   ggsave(height = 5, width = 10, units = "in",paste0(output.folder, "SPCD_stanoutput_joint_v2/images/Estimated_effects_on_mortality_model_model6_all_species_population_betas.png"))
@@ -132,7 +132,7 @@ model.no <- 6
   
   ggplot(data = na.omit(all.joint.betas), aes(x = Species, y = median, color = significance, shape = Species %in% "population"))+geom_point()+
     geom_errorbar(data = na.omit(all.joint.betas), aes(x = Species , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-    geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+facet_wrap(~Covariate, scales = "free_y")+theme_bw(base_size = 10)+
+    geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+facet_wrap(~Covariate, scales = "free_y")+theme_bw(base_size = 14)+
     theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Covariate")+
     scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
     scale_shape_manual(values = c("TRUE" = 15, "FALSE" = 19))
@@ -141,7 +141,7 @@ model.no <- 6
   
   ggplot(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population"), aes(x = Species, y = median, color = significance, shape = Species %in% "population"))+geom_point()+
     geom_errorbar(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population"), aes(x = Species , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-    geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+facet_wrap(~Covariate, scales = "free_y")+theme_bw(base_size = 10)+
+    geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+facet_wrap(~Covariate, scales = "free_y")+theme_bw(base_size = 14)+
     theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Covariate")+
     scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
     scale_shape_manual(values = c("TRUE" = 15, "FALSE" = 19))
@@ -159,7 +159,7 @@ model.no <- 6
   ggplot(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population" & Covariate %in% main.effects), aes(x = Species, y = median, color = significance, shape = Species %in% "population"))+geom_point()+
     geom_errorbar(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population"& Covariate %in% main.effects), aes(x = Species , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
     geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
-    facet_wrap(~Covariate, scales = "free_y", ncol = 6)+theme_bw(base_size = 10)+
+    facet_wrap(~Covariate, scales = "free_y", ncol = 6)+theme_bw(base_size = 14)+
     theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Covariate")+
     scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
     scale_shape_manual(values = c("TRUE" = 15, "FALSE" = 19))
@@ -180,7 +180,7 @@ model.no <- 6
   ggplot(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population" & Covariate %in% main.effects), aes(x =Covariate, y = median, group = Species, color = Species, shape = Species %in% "population"))+geom_point(position= position_dodge(width = 1))+
     #geom_errorbar(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population"& Covariate %in% main.effects), aes(x = Species , ymin = ci.lo, ymax = ci.hi, group = Covariate, color = significance), width = 0.1)+
     geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
-    facet_wrap(~Class, scales = "free", ncol = 6)+theme_bw(base_size = 10)+
+    facet_wrap(~Class, scales = "free", ncol = 6)+theme_bw(base_size = 14)+
     theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Covariate")+
     #scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
     scale_shape_manual(values = c("TRUE" = 15, "FALSE" = 19))+coord_flip()
@@ -191,7 +191,7 @@ model.no <- 6
     geom_errorbar(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population"& Class %in% "Growth, Diameter, Disturbance"), aes(x = Species , ymin = ci.lo, ymax = ci.hi, group = Covariate, color = significance), width = 0.1)+
     geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
     facet_grid(rows = vars(Covariate), cols = vars(Class),, scales = "free_y")+
-    theme_bw(base_size = 10)+
+    theme_bw(base_size = 14)+
     theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+
    ylab("Effect on survival")+xlab(" ")+
     scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
@@ -202,7 +202,7 @@ model.no <- 6
     geom_errorbar(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population"& Class %in% "Competition"), aes(x = Species , ymin = ci.lo, ymax = ci.hi, group = Covariate, color = significance), width = 0.1)+
     geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
     facet_grid(rows = vars(Covariate), cols = vars(Class),, scales = "free_y")+
-    theme_bw(base_size = 10)+
+    theme_bw(base_size = 14)+
     theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+
     ylab("Effect on survival")+xlab(" ")+
     scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
@@ -213,7 +213,7 @@ model.no <- 6
     geom_errorbar(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population"& Class %in% "Climate Normals"), aes(x = Species , ymin = ci.lo, ymax = ci.hi, group = Covariate, color = significance), width = 0.1)+
     geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
     facet_grid(rows = vars(Covariate), cols = vars(Class),, scales = "free_y")+
-    theme_bw(base_size = 10)+
+    theme_bw(base_size = 14)+
     theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+
     ylab("Effect on survival")+xlab(" ")+
     scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
@@ -224,7 +224,7 @@ model.no <- 6
     geom_errorbar(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population"& Class %in% "Climate Anomalies"), aes(x = Species , ymin = ci.lo, ymax = ci.hi, group = Covariate, color = significance), width = 0.1)+
     geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
     facet_grid(rows = vars(Covariate), cols = vars(Class),, scales = "free_y")+
-    theme_bw(base_size = 10)+
+    theme_bw(base_size = 14)+
     theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+
     ylab("Effect on survival")+xlab(" ")+
     scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
@@ -234,7 +234,7 @@ model.no <- 6
     geom_errorbar(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population"& Class %in% "Site Position"), aes(x = Species , ymin = ci.lo, ymax = ci.hi, group = Covariate, color = significance), width = 0.1)+
     geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
     facet_grid(rows = vars(Covariate), cols = vars(Class),, scales = "free_y")+
-    theme_bw(base_size = 10)+
+    theme_bw(base_size = 14)+
     theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+
     ylab("Effect on survival")+xlab(" ")+
     scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
@@ -244,7 +244,7 @@ model.no <- 6
     geom_errorbar(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population"& Class %in% "Site Conditions"), aes(x = Species , ymin = ci.lo, ymax = ci.hi, group = Covariate, color = significance), width = 0.1)+
     geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
     facet_grid(rows = vars(Covariate), cols = vars(Class), scales = "free_y")+
-    theme_bw(base_size = 10)+
+    theme_bw(base_size = 14)+
     theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), 
            panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("")+
     scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
@@ -277,7 +277,7 @@ growth.diam <-  ggplot(data = na.omit(all.joint.betas) %>% filter(! Species %in%
   geom_errorbar(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population"& Class %in% "Growth, Diameter, Disturbance"), aes(x = Species , ymin = ci.lo, ymax = ci.hi, group = Covariate, color = significance), width = 0.1)+
   geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
   facet_grid(rows = vars(Covariate), cols = vars(Class),, scales = "free_y")+
-  theme_bw(base_size = 10)+
+  theme_bw(base_size = 12)+
   theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+
   ylab("Effect on survival")+xlab(" ")+
   scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
@@ -288,7 +288,7 @@ competition <- ggplot(data = na.omit(all.joint.betas) %>% filter(! Species %in% 
   geom_errorbar(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population"& Class %in% "Competition"), aes(x = Species , ymin = ci.lo, ymax = ci.hi, group = Covariate, color = significance), width = 0.1)+
   geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
   facet_grid(rows = vars(Covariate), cols = vars(Class),, scales = "free_y")+
-  theme_bw(base_size = 10)+
+  theme_bw(base_size = 12)+
   theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+
   ylab("Effect on survival")+xlab(" ")+
   scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
@@ -299,7 +299,7 @@ normals <- ggplot(data = na.omit(all.joint.betas) %>% filter(! Species %in% "pop
   geom_errorbar(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population"& Class %in% "Climate Normals"), aes(x = Species , ymin = ci.lo, ymax = ci.hi, group = Covariate, color = significance), width = 0.1)+
   geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
   facet_grid(rows = vars(Covariate), cols = vars(Class),, scales = "free_y")+
-  theme_bw(base_size = 10)+
+  theme_bw(base_size = 12)+
   theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+
   ylab("Effect on survival")+xlab(" ")+
   scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
@@ -310,7 +310,7 @@ anomalies <- ggplot(data = na.omit(all.joint.betas) %>% filter(! Species %in% "p
   geom_errorbar(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population"& Class %in% "Climate Anomalies"), aes(x = Species , ymin = ci.lo, ymax = ci.hi, group = Covariate, color = significance), width = 0.1)+
   geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
   facet_grid(rows = vars(Covariate), cols = vars(Class),, scales = "free_y")+
-  theme_bw(base_size = 10)+
+  theme_bw(base_size = 12)+
   theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+
   ylab("Effect on survival")+xlab(" ")+
   scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
@@ -320,7 +320,7 @@ positions <- ggplot(data = na.omit(all.joint.betas) %>% filter(! Species %in% "p
   geom_errorbar(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population"& Class %in% "Site Position"), aes(x = Species , ymin = ci.lo, ymax = ci.hi, group = Covariate, color = significance), width = 0.1)+
   geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
   facet_grid(rows = vars(Covariate), cols = vars(Class),, scales = "free_y")+
-  theme_bw(base_size = 10)+
+  theme_bw(base_size = 12)+
   theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+
   ylab("Effect on survival")+xlab(" ")+
   scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
@@ -330,7 +330,7 @@ site.cond <- ggplot(data = na.omit(all.joint.betas) %>% filter(! Species %in% "p
   geom_errorbar(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population"& Class %in% "Site Conditions"), aes(x = Species , ymin = ci.lo, ymax = ci.hi, group = Covariate, color = significance), width = 0.1)+
   geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
   facet_grid(rows = vars(Covariate), cols = vars(Class), scales = "free_y")+
-  theme_bw(base_size = 10)+
+  theme_bw(base_size = 12)+
   theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), 
          panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("")+
   scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
@@ -369,7 +369,7 @@ dev.off()
   
   ggplot(data = na.omit(alphas.quant), aes(x = COMMON, y = median, color = significance))+geom_point()+
     geom_errorbar(data = na.omit(alphas.quant), aes(x = COMMON , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-    geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+theme_bw(base_size = 10)+
+    geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+theme_bw(base_size = 14)+
     theme( axis.text.x = element_text(angle = 65, hjust = 1), panel.grid  = element_blank(), legend.position = "none")+ylab("alpha estimate")+xlab("SPECIES")+
     scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))
   ggsave(height = 5, width = 10, units = "in",paste0(output.folder,"SPCD_stanoutput_joint_v2/images/Estimated_alpha_SPP_model6_all_species_alphas.png"))
@@ -403,7 +403,7 @@ dev.off()
   
   ggplot(data = na.omit(alphas.pop.quant), aes(x = COMMON, y = median, color = significance))+geom_point()+
     geom_errorbar(data = na.omit(alphas.pop.quant), aes(x = COMMON , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-    geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+theme_bw(base_size = 10)+
+    geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+theme_bw(base_size = 14)+
     theme( axis.text.x = element_text(angle = 65, hjust = 1), panel.grid  = element_blank(), legend.position = "none")+ylab("alpha estimate")+xlab("SPECIES")+
     scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))
   
@@ -414,7 +414,7 @@ dev.off()
   
   ggplot(data = na.omit(all.joint.alphas), aes(x = COMMON, y = median, color = significance, shape = COMMON %in% "population"))+geom_point()+
     geom_errorbar(data = na.omit(all.joint.alphas), aes(x = COMMON , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-    geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+theme_bw(base_size = 10)+
+    geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+theme_bw(base_size = 14)+
     theme( axis.text.x = element_text(angle = 65, hjust = 1), panel.grid  = element_blank(), legend.position = "none")+ylab("alpha estimate")+xlab("SPECIES")+
     scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
     scale_shape_manual(values = c("TRUE" = 15, "FALSE" = 19))
@@ -429,7 +429,7 @@ dev.off()
   # 
   # ggplot(data = na.omit(all.params), aes(x = COMMON, y = median, color = significance, shape = COMMON %in% "population"))+geom_point()+
   #   geom_errorbar(data = na.omit(all.params), aes(x = COMMON , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-  #   geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+facet_wrap(~parameter)+theme_bw(base_size = 10)+
+  #   geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+facet_wrap(~parameter)+theme_bw(base_size = 14)+
   #   theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Parameter")+
   #   scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
   #   scale_shape_manual(values = c("TRUE" = 15, "FALSE" = 19))
