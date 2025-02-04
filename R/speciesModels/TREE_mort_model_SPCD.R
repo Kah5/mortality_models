@@ -181,22 +181,24 @@ summary(cleaned.data.full)
 # 8. model 6 + climate interactions
 # 9. All Fixed effects and all interactions
 
-stan.model.table <- data.frame(model = 1:9, 
-                               `Covariates` = c("Annual growth",  
-                                               "diameter + annual growth",
-                                               "diameter + annual growth + competition variables", 
-                                               "diameter + annual growth + competition variables  + climate variables", 
-                                               "diameter + annual growth + competition variables + climate variables + site/soil effects + ndep",
-                                               "All Fixed effects and all growth + diameter interactions",
+stan.model.table <- data.frame(Model = 1:9, 
+                               `Covariates` = c("annual growth",  
+                                               "annual growth & diameter ",
+                                               "annual growth, diameter  & competition variables", 
+                                               "annual growth, diameter, competition variables, climate variables", 
+                                               "annual growth, diameter, competition variables, climate variables, site conditions ",
+                                               "all fixed effects and all growth + diameter interactions",
                                                "model 5 + competition interactions",
                                                "model 6 + climate interactions",
-                                               "All Fixed effects and all interactions"))
-stan.model.table |> gt()
+                                               "all fixed effects and all interactions"), 
+                                  `Fixed.parameters` = c(1, 2, 7, 13, 18, 51, 103, 148, 158))
+stan.model.table |> gt() |> cols_label(Fixed.parameters = "# of fixed parameters") |> gtsave("C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_manuscript/figures/model_table_summary.png")
 
 # make another table with covariates
 Covariate.table <- read.csv("C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_manuscript/Covariate_descriptions_table.csv")
 Covariate.table %>% rename(`Covariate Group` = "Covariate.group", 
-                           `Spatial Scale` = "Spatial.Scale")|> gt()
+                           `Spatial Scale` = "Spatial.Scale")|> gt()|> 
+  gtsave("C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_manuscript/figures/covariate_table_summary.png")
 # script that generates all the testing and training datasets
 source("R/speciesModels/SPCD_stan_data.R")
 # write the data for all 26 different species groups:
@@ -241,11 +243,11 @@ for(i in 1:17){# run for each of the 17 species
       
       fit.1 <- SPCD_run_stan(SPCD.id = SPCD.df[i,]$SPCD,
                              model.no = model.number,
-                             niter = 1000,
-                             nchains = 3,
+                             niter = 100,
+                             nchains = 1,
                              remper.correction = remper.cor.vector[j],
                              model.file = 'modelcode/mort_model_general.stan', 
-                             output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/SPCD_stanoutput_full_standardized")
+                             output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/SPCD_stanoutput_full_standardized_v2")
       SPCD.id <-  SPCD.df[i,]$SPCD
      
       # set up to make plots of the stan outputs 
@@ -253,7 +255,7 @@ for(i in 1:17){# run for each of the 17 species
       remp.cor <- remper.cor.vector[j]
       remper.correction <- remper.cor.vector[j]
       
-      output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/SPCD_stanoutput_full_standardized"
+      output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/SPCD_stanoutput_full_standardized_v2/"
       
       source("R/speciesModels/SPCD_plot_stan.R")
       rm(fit.1)
@@ -266,7 +268,7 @@ for(i in 1:17){# run for each of the 17 species
 for(i in 1:17){# run for each of the 17 species
   common.name <- nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON)
   
-  for(m in c(7)){  # run each of the 9 models
+  for(m in c(1)){  # run each of the 9 models
    #for(m in 8:9){ 
 
   model.number <- model.list[m]
