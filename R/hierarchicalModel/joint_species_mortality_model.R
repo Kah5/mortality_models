@@ -10,11 +10,14 @@ library(FIESTA)
 library(dplyr)
 library(posterior)
 library(mltools)
+output.folder <- "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
 
 options(mc.cores = parallel::detectCores())
 
 # get the complete spcies list
 cleaned.data <- readRDS( "data-store/data/iplant/home/kellyheilman/mort_data/cleaned.data.mortality.TRplots.RDS")
+#cleaned.data <- readRDS( "data/cleaned.data.mortality.TRplots.RDS")
+
 cleaned.data <- cleaned.data %>% dplyr::select(state, county, pltnum, cndtn, point, tree, PLOT.ID, cycle, spp, dbhcur, dbhold, damage, Species, SPCD,
                                                remper, LAT_FIADB, LONG_FIADB, elev, DIA_DIFF, annual.growth, M, relative.growth, si, physio:RD) %>% distinct()
 
@@ -75,16 +78,13 @@ mod.data.full$N <- length(mod.data.full$y)
 #mod.data.full$Nspp <- 3
 mod.data.full$Nspp <- 17
 mod.data.full$Nrep <- length(mod.data.full$ytest)
-saveRDS (mod.data.full, paste0("SPCD_stanoutput_joint/all_SPCD_model_", model.no,".RDS"))
-mod.data.full <- readRDS ( paste0("SPCD_stanoutput_joint/all_SPCD_model_", model.no,".RDS"))
+saveRDS (mod.data.full, paste0(output.folder, "SPCD_stanoutput_joint_v2/all_SPCD_model_", model.no,".RDS"))
+mod.data.full <- readRDS ( paste0(output.folder, "SPCD_stanoutput_joint_v2/all_SPCD_model_", model.no,".RDS"))
 
 
-saveRDS(spp.table, "SPCD_stanoutput_joint/spp.table.rds")
-spp.table <- readRDS("SPCD_stanoutput_joint/spp.table.rds")
+saveRDS(spp.table, paste0(output.folder, "SPCD_stanoutput_joint_v2/spp.table.rds"))
+spp.table <- readRDS(paste0(output.folder, "SPCD_stanoutput_joint_v2/spp.table.rds"))
 
-
-unique(mod.data.full$SPP)
-mod.data.full$y 
 
 mort.spp <- data.frame(y = mod.data.full$y, 
                        SPP = mod.data.full$SPP)
@@ -211,53 +211,46 @@ time.diag <- data.frame(SPP = mod.data.full$SPP,
 #                         elapsed.time = elapsed_time, 
 #                         cores = num_cores)
 
-write.csv(time.diag, paste0("SPCD_stanoutput_joint/joint_model_time_diag_SPCD_joint_model_", model.no, "_remper_", remper.correction,".csv"))
+write.csv(time.diag, paste0(output.folder, "SPCD_stanoutput_joint_v2/joint_model_time_diag_SPCD_joint_model_", model.no, "_remper_", remper.correction,".csv"))
 
 # get the sampler diagnostics and save:
 # Time difference of 22.91259 mins for all 17 species but only 30% of the data
 
-saveRDS(fit.1, paste0("SPCD_stanoutput_joint/samples/model_",model.no,"all_SPCD_remper_correction_0.5.RDS"))
+saveRDS(fit.1, paste0(output.folder, "SPCD_stanoutput_joint_v2/samples/model_",model.no,"all_SPCD_remper_correction_0.5.RDS"))
 
 joint.samples <- as_draws_df(fit.1)
 
 alpha.p <- subset_draws(joint.samples, variable = "alpha")
 alpha.spp <- subset_draws(joint.samples, variable = "alpha_SPP")
 
-saveRDS(alpha.p, paste0("SPCD_stanoutput_joint/samples/alpha.p_model_",model.no,"_1000samples.rds"))
-saveRDS(alpha.spp, paste0("SPCD_stanoutput_joint/samples/alpha.spp_model_",model.no,"_1000samples.rds"))
+saveRDS(alpha.p, paste0(output.folder, "SPCD_stanoutput_joint_v2/alpha.p_model_",model.no,"_1000samples.rds"))
+saveRDS(alpha.spp, paste0(output.folder, "SPCD_stanoutput_joint_v2/alpha.spp_model_",model.no,"_1000samples.rds"))
 
 beta.p <- subset_draws(joint.samples, variable = "mu_beta", chain = 1:2, iteration = 500:1500)
 bet0a.spp <- subset_draws(joint.samples, variable = "u_beta", chain = 1:2, iteration = 500:1500)
-saveRDS(beta.p, paste0("SPCD_stanoutput_joint/samples/beta_model_",model.no,"_1000samples.rds"))
-saveRDS(bet0a.spp, paste0("SPCD_stanoutput_joint/samples/u_betas_model_",model.no,"_1000samples.rds"))
+saveRDS(beta.p, paste0(output.folder, "SPCD_stanoutput_joint_v2/beta_model_",model.no,"_1000samples.rds"))
+saveRDS(bet0a.spp, paste0(output.folder, "SPCD_stanoutput_joint_v2/u_betas_model_",model.no,"_1000samples.rds"))
 
 sigmas <- subset_draws(joint.samples, variable = c("sigma_s", "sigma_aS"), chain = 1:2, iteration = 500:1500)
-saveRDS(sigmas, paste0("SPCD_stanoutput_joint/samples/sigmas_model_",model.no,"_1000samples.rds"))
+saveRDS(sigmas, paste0(output.folder, "SPCD_stanoutput_joint_v2/sigmas_model_",model.no,"_1000samples.rds"))
 
 yrep <- subset_draws(joint.samples, variable = "y_rep", chain = 1:2, iteration = 500:1500)
 yhat <- subset_draws(joint.samples, variable = "y_hat", chain = 1:2, iteration = 500:1500)
-saveRDS(yrep, paste0("SPCD_stanoutput_joint/samples/yrep_model_",model.no,"_1000samples.rds"))
-saveRDS(yhat, paste0("SPCD_stanoutput_joint/samples/yhat_model_",model.no,"_1000samples.rds"))
+saveRDS(yrep, paste0(output.folder, "SPCD_stanoutput_joint_v2/yrep_model_",model.no,"_1000samples.rds"))
+saveRDS(yhat, paste0(output.folder, "SPCD_stanoutput_joint_v2/yhat_model_",model.no,"_1000samples.rds"))
 
-yhat <- readRDS(paste0("SPCD_stanoutput_joint/samples/yhat_model_",model.no,"_1000samples.rds"))
-yhat <- readRDS(paste0("SPCD_stanoutput_joint/samples/yrep_model_",model.no,"_1000samples.rds"))
 
 mMrep <- subset_draws(joint.samples, variable = "mMrep", chain = 1:2, iteration = 500:1500)
 mMhat <- subset_draws(joint.samples, variable = "mMhat", chain = 1:2, iteration = 500:1500)
-saveRDS(mMrep, paste0("SPCD_stanoutput_joint/samples/mMrep_model_",model.no,"_1000samples.rds"))
-saveRDS(mMhat, paste0("SPCD_stanoutput_joint/samples/mMhat_model_",model.no,"_1000samples.rds"))
+saveRDS(mMrep, paste0(output.folder, "SPCD_stanoutput_joint_v2/mMrep_model_",model.no,"_1000samples.rds"))
+saveRDS(mMhat, paste0(output.folder, "SPCD_stanoutput_joint_v2/mMhat_model_",model.no,"_1000samples.rds"))
 
-# save annual survival probabilities:
-pSannualrep <- subset_draws(joint.samples, variable = "pSannualhat", chain = 1:2, iteration = 500:1500)
-pSannualhat <- subset_draws(joint.samples, variable = "mMhat", chain = 1:2, iteration = 500:1500)
-saveRDS(pSannualrep, paste0("SPCD_stanoutput_joint/samples/pSannualrep_model_",model.no,"_1000samples.rds"))
-saveRDS(pSannualhat, paste0("SPCD_stanoutput_joint/samples/pSannualhat_model_",model.no,"_1000samples.rds"))
+## read in all the outputs to generate AUC scores
+mMrep <- readRDS( paste0(output.folder, "SPCD_stanoutput_joint_v2/mMrep_model_",model.no,"_1000samples.rds"))
+mMhat <- readRDS(mMhat, paste0(output.folder, "SPCD_stanoutput_joint_v2/mMhat_model_",model.no,"_1000samples.rds"))
 
-
-log_lik <- subset_draws(joint.samples, variable = "log_lik", chain = 1:2, iteration = 500:1500)
-saveRDS(log_lik, paste0("SPCD_stanoutput_joint/samples/log_lik_model_",model.no,"_1000samples.rds"))
-
-
+yhat <- readRDS(paste0(output.folder, "SPCD_stanoutput_joint_v2/yhat_model_",model.no,"_1000samples.rds"))
+yrep <- readRDS(paste0(output.folder, "SPCD_stanoutput_joint_v2/yrep_model_",model.no,"_1000samples.rds"))
 
 
 growth.params = c(paste0("u_beta[", 1:17, ",1]"), "mu_beta[1]")
@@ -280,7 +273,7 @@ nvariables <- length(names(fit.1))
 
 nvariables
 #if(nvariables < 10){
-pdf( paste0("SPCD_stanoutput/images/traceplots_mortality_model_6_all.species.pdf"))
+pdf( paste0("SPCD_stanoutput_v2/images/traceplots_mortality_model_6_all.species.pdf"))
 #specify to save plots in 0x0 grid
 par(mfrow = c(8,3))
 for (p in 1:nvariables) {   
@@ -302,70 +295,73 @@ dev.off()
 #                   "lp__")
 
 # compare the observed status to the predicted status
-yrep.estimates <- readRDS( paste0("SPCD_stanoutput_joint/yrep_model_",model.no,"_1000samples.rds"))
+yrep.estimates <- readRDS(paste0(output.folder, "SPCD_stanoutput_joint_v2/yrep_model_",model.no,"_1000samples.rds"))%>%
+                        subset_draws(chain = 1:3, iteration = 1000:1500)
 
 yrep.quant <- summarise_draws(yrep.estimates, median, ~quantile(.x, probs = c(0.025, 0.975)))%>% rename(`ci.lo` = `2.5%`, `ci.hi` = `97.5%`)
 
-yrep.quant$Mobs <- as.character(mod.data.full$y)
-yrep.quant$spp <- mod.data.full$SPP
+yrep.quant$Mobs <- as.character(mod.data.full$ytest)
+yrep.quant$spp <- mod.data.full$SPPrep
 yrep.quant <- left_join(yrep.quant, spp.table)
 
 ggplot(yrep.quant, aes(as.character(Mobs), y = median, fill =Mobs ))+geom_violin()+ylab("Median predicted survival status")+
-  xlab("Observed in-sample tree survival status")+scale_fill_manual(values =  c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
-ggsave(height = 8, width = 8, units = "in",paste0("SPCD_stanoutput_joint/images/Yrepsurv_insample_median_vs_obs_violin_model_",model.no, "_species_joint_model_remper_corr_", remper.correction, ".png"))
+  xlab("Observed out-of-sample tree survival status")+scale_fill_manual(values =  c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
+ggsave(height = 8, width = 8, units = "in",paste0(output.folder, "SPCD_stanoutput_joint_v2/images/Yrepsurv_oosample_median_vs_obs_violin_model_",model.no, "_species_joint_model_remper_corr_", remper.correction, ".png"))
 
 ggplot(yrep.quant, aes(as.character(Mobs), y = ci.hi, fill =Mobs ))+geom_violin()+ylab("97.5% quantile of predicted survival status")+
-  xlab("Observed in-sample tree survival status")+scale_fill_manual(values =  c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
-ggsave(height = 8, width = 8, units = "in",paste0("SPCD_stanoutput_full/images/Yrepsurv_insample_95pct_vs_obs_violin_model_",model.no, "_species_joint_model_remper_corr_", remper.correction, ".png"))
+  xlab("Observed out-of-sample tree survival status")+scale_fill_manual(values =  c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
+ggsave(height = 8, width = 8, units = "in",paste0(output.folder, "SPCD_stanoutput_joint_v2/images/Yrepsurv_oossample_95pct_vs_obs_violin_model_",model.no, "_species_joint_model_remper_corr_", remper.correction, ".png"))
 
 
 # compare the observed status to the predicted status
-yhat.estimates <- readRDS( paste0("SPCD_stanoutput_joint/yhat_model_",model.no,"_1000samples.rds"))
-
+yhat.estimates <- readRDS( paste0(output.folder, "SPCD_stanoutput_joint_v2/yhat_model_",model.no,"_1000samples.rds"))%>%
+                    subset_draws(chain = 1:3, iteration = 1000:1500)
 yhat.quant <- summarise_draws(yhat.estimates, median, ~quantile(.x, probs = c(0.025, 0.975)))%>% rename(`ci.lo` = `2.5%`, `ci.hi` = `97.5%`)
 
-yhat.quant$Mobs <- as.character(mod.data.full$ytest)
-yhat.quant$spp <- mod.data.full$SPPrep
+yhat.quant$Mobs <- as.character(mod.data.full$y)
+yhat.quant$spp <- mod.data.full$SPP
 yhat.quant <- left_join(yhat.quant, spp.table)
 
 ggplot(yhat.quant, aes(as.character(Mobs), y = median, fill =Mobs ))+geom_violin()+ylab("Median predicted survival status")+
-  xlab("Observed out-of-sample tree survival status")+scale_fill_manual(values =  c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
-ggsave(height = 8, width = 8, units = "in",paste0("SPCD_stanoutput_joint/images/Yhatsurv_oossample_median_vs_obs_violin_model_",model.no, "_species_joint_model_remper_corr_", remper.correction, ".png"))
+  xlab("Observed in-sample tree survival status")+scale_fill_manual(values =  c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
+ggsave(height = 8, width = 8, units = "in",paste0(output.folder, "SPCD_stanoutput_joint_v2/images/Yhatsurv_insample_median_vs_obs_violin_model_",model.no, "_species_joint_model_remper_corr_", remper.correction, ".png"))
 
 ggplot(yhat.quant, aes(as.character(Mobs), y = ci.hi, fill =Mobs ))+geom_violin()+ylab("97.5% quantile of predicted survival status")+
-  xlab("Observed out-of-sample tree survival status")+scale_fill_manual(values =  c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
-ggsave(height = 8, width = 8, units = "in",paste0("SPCD_stanoutput_joint/images/Yhatsurv_oossample_95pct_vs_obs_violin_model_",model.no, "_species_joint_model_remper_corr_", remper.correction, ".png"))
+  xlab("Observed in-sample tree survival status")+scale_fill_manual(values =  c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
+ggsave(height = 8, width = 8, units = "in",paste0(output.folder, "SPCD_stanoutput_joint_v2/images/Yhatsurv_insample_95pct_vs_obs_violin_model_",model.no, "_species_joint_model_remper_corr_", remper.correction, ".png"))
 
 
 # survival probability for in-sample data
-psurv.estimates <- readRDS( paste0("SPCD_stanoutput_joint/mMrep_model_",model.no,"_1000samples.rds"))
+psurv.estimates <- readRDS( paste0(output.folder, "SPCD_stanoutput_joint_v2/mMrep_model_",model.no,"_1000samples.rds"))%>%
+  subset_draws(chain = 1:3, iteration = 1000:1500)
 
 psurv.quant <- summarise_draws(psurv.estimates, median, ~quantile(.x, probs = c(0.025, 0.975)))%>% rename(`ci.lo` = `2.5%`, `ci.hi` = `97.5%`)
 
 #hist(psurv.quant$median)
 
-psurv.quant$Mobs <- as.character(mod.data.full$y)
-psurv.quant$spp <- mod.data.full$SPP
+psurv.quant$Mobs <- as.character(mod.data.full$ytest)
+psurv.quant$spp <- mod.data.full$SPPrep
 psurv.quant <- left_join(psurv.quant, spp.table)
 
-ll.train.pmort <- psurv.quant
-saveRDS(ll.train.pmort, "SPCD_stanoutput_joint/ll.train.pmort.RDS")
+ll.test.pmort <- psurv.quant
+saveRDS(ll.test.pmort, paste0(output.folder, "SPCD_stanoutput_joint_v2/ll.train.pmort.RDS"))
 
-
+rm(psurv.quant, yhat.quant, rep.quant)
 # survival probability for held out-sample data
-psurv.hat.estimates <- readRDS( paste0("SPCD_stanoutput_joint/mMhat_model_",model.no,"_1000samples.rds"))
+psurv.hat.estimates <- readRDS( paste0(output.folder, "SPCD_stanoutput_joint_v2/mMhat_model_",model.no,"_1000samples.rds"))%>%
+  subset_draws(chain = 1:3, iteration = 1000:1500)
 
 psurv.hat.quant <- summarise_draws(psurv.hat.estimates, median, ~quantile(.x, probs = c(0.025, 0.975)))%>% rename(`ci.lo` = `2.5%`, `ci.hi` = `97.5%`)
 
 
-psurv.hat.quant$Mobs <- as.character(mod.data.full$ytest)
-psurv.hat.quant$spp <- mod.data.full$SPPrep
+psurv.hat.quant$Mobs <- as.character(mod.data.full$y)
+psurv.hat.quant$spp <- mod.data.full$SPP
 psurv.hat.quant <- left_join(psurv.hat.quant, spp.table)
 
 
-ll.test.pmort <- psurv.hat.quant
+ll.train.pmort <- psurv.hat.quant
 
-saveRDS(ll.test.pmort, "SPCD_stanoutput_joint/ll.test.pmort.RDS")
+saveRDS(ll.train.pmort, "SPCD_stanoutput_joint_v2/ll.train.pmort.RDS")
 
 ############################################################
 # get accuracy of prediction
@@ -377,64 +373,113 @@ accuracy.oos <- mean(as.vector(yhat.quant$median) == mod.data.full$ytest)
 # AUC using mltools auc_roc function
 # for in sample data
 actuals = mod.data.full$y
-preds = as.vector(psurv.quant$median)
-auc.is <-auc_roc(preds, actuals)  
+preds = as.vector(psurv.hat.quant$median)
+auc.is <- auc_roc(preds, actuals)  
+
+# get the range of responses for each sample:
+auc.is.list <- list()
+p.surv.hat <- psurv.hat.estimates %>% select(paste0("mMhat[",1:mod.data.full$N, "]"))
+
+# need to split up by species
+
+auc.is.list <- lapply(1:nrow(psurv.hat.estimates), FUN = function(x){
+  spp.auc <- list()
+  for(s in unique(mod.data.full$SPP)){
+    spp.idx <- mod.data.full$SPP %in% s
+    spp.auc[[s]] <- auc_roc(mod.data.full$y[spp.idx], as.vector(as.numeric(p.surv.hat[x,spp.idx])))
+  }
+  spp.auc.df <- do.call(cbind, spp.auc)
+  
+  overall.auc <- auc_roc(mod.data.full$y, as.vector(as.numeric(p.surv.hat[x,])))
+  overall.auc
+  
+  all.auc.values <- cbind(overall.auc, spp.auc.df)
+  colnames(all.auc.values) <- c("overall", 1:17)
+  all.auc.values
+})
+
+AUC.is.df <- do.call(rbind, auc.is.list) %>% reshape2::melt() %>% group_by(Var2) %>% 
+                    summarise(median = median(value), 
+                              auc.ci.lo = quantile(value, 0.025), 
+                              auc.ci.hi = quantile(value, 0.975)) %>%
+  rename("spp" = "Var2")#
+
+
+AUC.is.df$spp <- c(18, 1:17)
+#full.auc.quants <- quantile(AUC.is.df[,1], c(0.025, 0.5, 0.975) )
 
 
 ## for out of sampled data
 actuals = mod.data.full$ytest
-preds = as.vector(psurv.hat.quant$median)
+preds = as.vector(psurv.quant$median)
 
 auc.oos <- auc_roc(preds, actuals)  
 
-# now get the species-level auc and accuracies
-oos.all <- data.frame(actuals = mod.data.full$ytest,
-                      preds = as.vector(psurv.hat.quant$median), 
-                      ypreds = as.vector(yhat.quant$median),
-                      spp = mod.data.full$SPPrep)
-oos.all <- left_join(oos.all, spp.table)
+# get the range of responses for each sample:
+auc.oos.list <- list()
+p.surv.rep <- psurv.estimates %>% select(paste0("mMrep[",1:mod.data.full$Nrep, "]"))
 
 
-auc.oos.spp <- oos.all %>% group_by(COMMON, SPCD.id, spp) %>% summarise(auc.oosample = auc_roc(preds, actuals), 
-                                                                        accuracy.oos =  mean(as.vector(ypreds) == actuals))
-
-oos.population <- data.frame(COMMON= "population", 
-                             SPCD.id = 1000, 
-                             spp = 18, 
-                             auc.oosample = auc.oos, 
-                             accuracy.oos = accuracy.oos)
-auc.oos.spp <- rbind(auc.oos.spp, oos.population)
-
-
-# get the species level in sample summaries
-is.all <- data.frame(actuals = mod.data.full$y,
-                     preds = as.vector(psurv.quant$median),
-                     ypreds = as.vector(yrep.quant$median),
-                     spp = mod.data.full$SPP)
-is.all <- left_join(is.all, spp.table)
-
-
-auc.is.spp <- is.all %>% group_by(COMMON, SPCD.id, spp) %>% summarise(auc.insample = auc_roc(preds, actuals),
-                                                                      accuracy.is =  mean(as.vector(ypreds) == actuals))
-is.population <- data.frame(COMMON= "population", 
-                            SPCD.id = 1000, 
-                            spp = 18, 
-                            auc.insample = auc.is, 
-                            accuracy.is = accuracy.is)
-auc.is.spp <- rbind(auc.is.spp, is.population)
-auc.df <- left_join(auc.is.spp, auc.oos.spp)
+auc.oos.list <- lapply(1:nrow(psurv.estimates), FUN = function(x){
+  
+  spp.auc <- list()
+  for(s in unique(mod.data.full$SPP)){
+    spp.idx <- mod.data.full$SPPrep %in% s
+    spp.auc[[s]] <- auc_roc(mod.data.full$ytest[spp.idx], as.vector(as.numeric(p.surv.rep[x,spp.idx])))
+  }
+  spp.auc.df <- do.call(cbind, spp.auc)
+  
+  overall.auc <- auc_roc(mod.data.full$ytest, as.vector(as.numeric(p.surv.rep[x,])))
+  overall.auc
+  
+  all.auc.values <- cbind(overall.auc, spp.auc.df)
+  colnames(all.auc.values) <- c("overall", 1:17)
+  all.auc.values
+  
+  
+})
 
 
-# save in one model summary table:
-model.assessment.df <- auc.df %>% rename(`SPCD`="SPCD.id") %>%
-  mutate(model = model.no, 
-         remper.correction = remper.correction, 
-         elpd_loo =NA,   p_loo =NA,    looic = NA)%>% select(SPCD, model, remper.correction, elpd_loo, 
-                                                             p_loo, looic, auc.insample, accuracy.is, 
-                                                             auc.oosample, accuracy.oos)
+AUC.oos.df <- do.call(rbind, auc.oos.list) %>% reshape2::melt() %>% group_by(Var2) %>% 
+  summarise(median.oos = median(value), 
+            auc.oos.ci.lo = quantile(value, 0.025), 
+            auc.oos.ci.hi = quantile(value, 0.975)) %>%
+  rename("spp" = "Var2") 
+AUC.oos.df$spp <- c(18, 1:17)
 
-write.csv(model.assessment.df , paste0("SPCD_stanoutput_full/Accuracy_df_model_",model.no, "_remper_0.5_species_joint_model_remper_corr_",remper.correction, ".csv" ), row.names = FALSE)
-write.csv(model.assessment.df, "SPCD_stanoutput_joint/Accuracy_df_model_6_remper_0.5_species_joint_model_remper_corr_0.5.csv", row.names = FALSE)
+#AUC.oos.df <- do.call(rbind, auc.oos.list)
+
+saveRDS(AUC.oos.df, paste0(output.folder, "SPCD_stanoutput_joint_v2/AUC_oos_with_uncertainty.rds"))
+saveRDS(AUC.is.df, paste0(output.folder, "SPCD_stanoutput_joint_v2/AUC_is_with_uncertainty.rds"))
+
+joint.table <- data.frame(SPCD.id= 1000, 
+                          spp = 18, 
+                          COMMON = "population")
+
+spp.joint.table <- rbind(spp.table, joint.table)
+
+AUC.is.df <- left_join(AUC.is.df, spp.joint.table)
+AUC.oos.df <- left_join(AUC.oos.df, spp.joint.table)
+
+model.assessment.df <- data.frame(SPCD = AUC.is.df$SPCD.id, 
+                                  COMMON = AUC.is.df$COMMON,
+                                  model =  "hierarchical",
+                                  remper.correction = remper.correction, 
+                                  
+                                  auc.insample = auc.is,
+                                  auc.insample.median = AUC.is.df$median,
+                                  auc.insample.lo = AUC.is.df$auc.ci.lo, 
+                                  auc.insample.hi = AUC.is.df$auc.ci.hi,
+                                  # out of sample
+                                  auc.oosample = auc.oos, 
+                                  auc.oosample.median = AUC.oos.df$median.oos,
+                                  auc.oosample.lo = AUC.oos.df$auc.oos.ci.lo, 
+                                  auc.oosample.hi = AUC.oos.df$auc.oos.ci.hi)
+                                 
+
+
+write.csv(model.assessment.df , paste0(output.folder,"SPCD_stanoutput_joint_v2/Accuracy_df_model_",model.no, "_remper_0.5_species_joint_model_remper_corr_",remper.correction, ".csv" ), row.names = FALSE)
+#write.csv(model.assessment.df, "SPCD_stanoutput_joint_v2/Accuracy_df_model_6_remper_0.5_species_joint_model_remper_corr_0.5.csv", row.names = FALSE)
 
 # make a big plot of the predictions
 

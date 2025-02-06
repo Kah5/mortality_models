@@ -242,14 +242,15 @@ ggplot()+geom_point(data = compute.all.diff, aes(x = as.character(model), y = ra
 
 # read in the AUC values from the joint model:
 AUC.joint <- read.csv(paste0(output.folder,"SPCD_stanoutput_joint_v2/Accuracy_df_model_6_remper_0.5_species_joint_model_remper_corr_0.5.csv"))
-AUC.joint <- AUC.joint %>% rename(Species = COMMON) %>% dplyr::select(SPCD, auc.oosample, auc.insample, Species) %>%
-  mutate(Model.name = "hierarchical")
+AUC.joint <- AUC.joint %>% rename(Species = COMMON) %>% mutate(Size_effect = "Linear", 
+                                                               Model.name = "hierarchical") %>% 
+  dplyr::select(colnames(AUC.singlespecies))
 AUC.all <- rbind(AUC.singlespecies, AUC.joint)
 AUC.all$Model <- ifelse(AUC.all$Model.name %in% "hierarchical", "hierarchical", "species model")
 AUC.all$Model.name <- factor(AUC.all$Model.name, levels = unique(AUC.all$Model.name))
 AUC.all <- AUC.all %>% filter(! Species %in% "population")
 is.auc <- ggplot(AUC.all , aes(x = Model.name, y = auc.insample, color = Model, shape = Model.name %in% "model 6"))+geom_point()+
-  geom_hline(data = AUC.all %>% filter(Model.name %in% "hierarchical"), aes(yintercept =  auc.insample), linetype = "dashed", color = "red")+
+  geom_hline(data = AUC.all %>% filter(Model.name %in% "hierarchical"), aes(yintercept =  auc.insample.median), linetype = "dashed", color = "red")+
   facet_wrap(~Species, scales =  "free_y")+
   scale_color_manual( values = c("species model" = "black" , 
                                 "hierarchical"="red" ))+
@@ -264,7 +265,7 @@ ggsave(paste0("model_summary_full/All_species_models_all9models_compare-auc-insa
 
 
 oos.auc <- ggplot(AUC.all, aes(x = Model.name, y = auc.oosample, color = Model, shape = Model.name %in% "model 6"))+geom_point()+
-  geom_hline(data = AUC.all %>% filter(Model.name %in% "hierarchical"), aes(yintercept =  auc.oosample), linetype = "dashed", color = "red")+
+  geom_hline(data = AUC.all %>% filter(Model.name %in% "hierarchical"), aes(yintercept =  auc.oosample.median), linetype = "dashed", color = "red")+
   facet_wrap(~Species, scales =  "free_y")+
   scale_color_manual( values = c("species model" = "black" , 
                                  "hierarchical"="red" ))+
@@ -273,6 +274,40 @@ oos.auc <- ggplot(AUC.all, aes(x = Model.name, y = auc.oosample, color = Model, 
 ggsave(paste0("model_summary_full/All_species_models_all9models_compare-auc-outofsample_plus_joint.png"), 
        oos.auc,
        width = 10, height = 6)
+
+# remake the AUC figure with uncertainty bounds
+
+
+is.auc <- ggplot(AUC.all, aes(x = Model.name, y = auc.insample.median, shape = Model.name %in% "model 6"))+geom_point()+
+  geom_errorbar(data = AUC.all, aes(x = Model.name, ymin = auc.insample.lo, ymax = auc.insample.hi))+
+  # geom_hline(data = AUC.all %>% filter(Model.name %in% "hierarchical"), aes(yintercept =  auc.insample), linetype = "dashed", color = "red")+
+  facet_wrap(~Species, scales =  "free_y")+
+  scale_color_manual( values = c( "black" , 
+                                  "red" ))+
+  theme_bw()+theme(axis.text.x = element_text(angle = 45,  hjust=1), legend.position = "none") +
+  xlab("")+ylab("In Sample AUC")
+
+ggsave(paste0("model_summary_full/All_species_models_all9models_compare-auc-insample_joint_species.png"), 
+       is.auc,
+       width = 10, height = 6)
+
+
+oos.auc <- ggplot(AUC.all, aes(x = Model.name, y = auc.oosample.median))+geom_point()+facet_wrap(~Species, scales =  "free_y")+
+  geom_errorbar(data = AUC.all, aes(x = Model.name, ymin = auc.oosample.lo, ymax = auc.oosample.hi))+
+  theme_bw()+theme(axis.text.x = element_text(angle = 45,  hjust=1)) +
+  xlab("")+ylab("Out of Sample AUC")
+ggsave(paste0("model_summary_full/All_species_models_all9models_compare-auc-outofsample_joint_species.png"), 
+       oos.auc,
+       width = 10, height = 6)
+
+
+
+
+
+
+
+
+
 
 # make figure with the total AUC, mean AUC, and median AUC for oos at the beginning
 AUC.summary.m <- AUC.summary %>% select(Model.name, auc.oos.median, auc.oos.mean, auc.oos.total)%>%
