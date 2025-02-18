@@ -1,6 +1,6 @@
 library(loo)
 #model.name <- paste0("mort_model3alphaRE_allspp_SPGRPCD_", SPGRPCD.id)
-load(paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.number, ".Rdata")) # load the species code data
+load(paste0("SPCD_standata_general_full_standardized_v2/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.number, ".Rdata")) # load the species code data
 # read in the model fit
 fit.1 <- readRDS( paste0(output.folder, "samples/model_",model.number,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
 
@@ -29,7 +29,7 @@ par.names = c("alpha_SPP", colnames(mod.data$xM)) #,
 nvariables <- length(par.names)
 nvariables
 #if(nvariables < 10){
-pdf( paste0(output.folder, "/images/traceplots_survival_model_",model.number,"_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".pdf"))
+pdf( paste0(output.folder, "images/traceplots_survival_model_",model.number,"_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".pdf"))
 #specify to save plots in 0x0 grid
 par(mfrow = c(8,3))
 for (p in 1:length(par.names)) {   

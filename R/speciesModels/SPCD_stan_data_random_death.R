@@ -1,23 +1,12 @@
 SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
-  cleaned.data <- cleaned.data.full %>% filter(SPCD %in% SPCD.id) %>% 
-                                        filter(dbhold > 1 & ! dbhcur-dbhold == 0)
-  
-  cleaned.data_old <- cleaned.data.full %>% filter(SPCD %in% SPCD.id)
-  
-  cleaned.data %>% group_by(M) %>% summarise(n())
-  
-  cleaned.data_old %>% group_by(M, dbhcur-dbhold == 0) %>% summarise(n())
+  cleaned.data <- cleaned.data.full %>% filter(SPCD %in% SPCD.id)
   
   
-  View(cleaned.data_old %>% select(M))
- 
-if(remper.correction == "random"){
-  # uniform sample across the board for the remper year correction
- 
-  # scale the cleaned data tree-level diameters by species
+  
+  
+  # scale the cleaned data tree-level diameters by species?
   cleaned.data <- cleaned.data %>% ungroup()  %>% group_by(SPCD) %>% 
-    mutate(remper.sample = runif(length(cleaned.data$state)))%>%
-    mutate(rempercur = ifelse(M ==1, remper*remper.sample, remper), 
+    mutate(rempercur = ifelse(M ==1, remper*remper.correction, remper), 
            annual.growth = DIA_DIFF/rempercur) %>% mutate(DIA.median = median(dbhcur, na.rm =TRUE), 
                                                           DIA.sd = sd(dbhcur, na.rm = TRUE),  
                                                           BAL.median = median(BAL, na.rm=TRUE),
@@ -36,6 +25,36 @@ if(remper.correction == "random"){
                                                                                     TRUE),
                                                           annual.growth.median = median(annual.growth, na.rm = TRUE), 
                                                           annual.growth.sd = sd(annual.growth, na.rm = TRUE)) %>% 
+    # rescale to values of 0 to 1
+    # ungroup()%>% mutate(DIA_scaled = rescale(dbhold,, 
+    #                    annual.growth.scaled = rescale(annual.growth,,
+    #                    RD.scaled = rescale(RD,,
+    #                    BAL.scaled = rescale(BAL,,
+    #                    
+    #                    SPCD.BA.scaled = rescale(SPCD_BA,,
+    #                    non_SPCD.BA.scaled = rescale(non_SPCD_BA,,
+    #                    prop.focal.ba = rescale(SPCD_BA/BA_total,, 
+    #                    
+    #                    density.scaled = rescale(density_total,,
+    #                    SPCD.density.scaled = rescale(SPCD_density,,
+    #                    non.SPCD.density.scaled = rescale(non_SPCD_density,,
+    #                    prop.focal.density = rescale(SPCD_density/density_total,, 
+    #                    
+    #                    si.scaled = rescale(si,,
+    #                    ba.scaled = rescale(BA_total,,
+    #                    aspect.scaled = rescale(aspect,,
+    #                    slope.scaled = rescale(slope,,
+    #                    damage.scaled = rescale(damage,,
+    #                    MAP.scaled = rescale(MAP,,
+    #                    elev.scaled = rescale(elev,,
+    #                    Ndep.scaled = rescale(Ndep.remper.avg,,
+    #                    physio.scaled = rescale(physio,,
+    #                    MATmin.scaled = rescale(MATmin,,
+    #                    MATmax.scaled = rescale(MATmax,, 
+    #                    ppt.anom = rescale(ppt.anom,, 
+    #                    tmax.anom = rescale(tmax.anom,, 
+    #                    tmin.anom = rescale(tmin.anom,)
+    # old method of scaling                      
     ungroup() %>% mutate(DIA_scaled = (dbhcur - DIA.median)/DIA.sd,
                          annual.growth.scaled = (annual.growth - annual.growth.median)/annual.growth.sd,
                          RD.scaled = (RD-RD.median)/RD.sd,
@@ -54,79 +73,7 @@ if(remper.correction == "random"){
                          physio.scaled = (physio-plot.medians$physio.median)/plot.medians$physio.sd,
                          MATmin.scaled = (MATmin- plot.medians$MATmin.median)/plot.medians$MATmin.sd,
                          MATmax.scaled = (MATmax - plot.medians$MATmax.median)/plot.medians$MATmax.sd)
-    }else{
-    cleaned.data <- cleaned.data %>% ungroup()  %>% group_by(SPCD) %>% 
-      mutate(rempercur = ifelse(M ==1, remper*remper.correction, remper), 
-             annual.growth = DIA_DIFF/rempercur) %>% mutate(DIA.median = median(dbhcur, na.rm =TRUE), 
-                                                            DIA.sd = sd(dbhcur, na.rm = TRUE),  
-                                                            BAL.median = median(BAL, na.rm=TRUE),
-                                                            BAL.sd = sd(BAL, na.rm = TRUE),
-                                                            RD.median = median(RD, na.rm=TRUE), 
-                                                            RD.sd = sd(RD, na.rm =TRUE),
-                                                            nonSPCD_BA_tot.sd = sd(non_SPCD_BA, na.rm = TRUE),
-                                                            SPCD_BA.sd = sd(SPCD_BA, na.rm =
-                                                                              TRUE),
-                                                            prop.focal.ba.median = median(SPCD_BA/BA_total, na.rm =TRUE), 
-                                                            prop.focal.ba.sd = sd(SPCD_BA/BA_total, na.rm =TRUE), 
-                                                            BA_tot.median = median(BA_total, na.rm =
-                                                                                     TRUE),
-                                                            nonSPCD_BA_tot.median = median(non_SPCD_BA, na.rm = TRUE),
-                                                            SPCD_BA.median = median(SPCD_BA, na.rm =
-                                                                                      TRUE),
-                                                            annual.growth.median = median(annual.growth, na.rm = TRUE), 
-                                                            annual.growth.sd = sd(annual.growth, na.rm = TRUE)) %>% 
-      # rescale to 
-      ungroup() %>% mutate(DIA_scaled = (dbhcur - DIA.median)/DIA.sd,
-                           annual.growth.scaled = (annual.growth - annual.growth.median)/annual.growth.sd,
-                           RD.scaled = (RD-RD.median)/RD.sd,
-                           BAL.scaled = (BAL-BAL.median)/BAL.sd,
-                           SPCD.BA.scaled = (SPCD_BA - SPCD_BA.median)/SPCD_BA.sd,
-                           non_SPCD.BA.scaled = (non_SPCD_BA - nonSPCD_BA_tot.median)/nonSPCD_BA_tot.sd,
-                           prop.focal.ba.scaled = ((SPCD_BA/BA_total) - prop.focal.ba.median)/prop.focal.ba.sd, 
-                           si.scaled = (si - plot.medians$si.median)/plot.medians$si.sd,
-                           ba.scaled = (ba - plot.medians$ba.median)/plot.medians$ba.sd,
-                           aspect.scaled = (aspect - plot.medians$aspect.median)/plot.medians$aspect.sd,
-                           slope.scaled = (slope - plot.medians$slope.median)/plot.medians$slope.sd,
-                           damage.scaled = (damage.total - plot.medians$damage.median)/plot.medians$damage.sd,
-                           MAP.scaled = (MAP-plot.medians$MAP.median)/plot.medians$MAP.sd,
-                           elev.scaled = (elev-plot.medians$elev.median)/plot.medians$elev.sd,
-                           Ndep.scaled = (Ndep.remper.avg- plot.medians$Ndep.median)/plot.medians$Ndep.sd,
-                           physio.scaled = (physio-plot.medians$physio.median)/plot.medians$physio.sd,
-                           MATmin.scaled = (MATmin- plot.medians$MATmin.median)/plot.medians$MATmin.sd,
-                           MATmax.scaled = (MATmax - plot.medians$MATmax.median)/plot.medians$MATmax.sd)
-   }
-  # rescale to values of 0 to 1
-     # ungroup()%>% mutate(DIA_scaled = rescale(dbhold,, 
-     #                    annual.growth.scaled = rescale(annual.growth,,
-     #                    RD.scaled = rescale(RD,,
-     #                    BAL.scaled = rescale(BAL,,
-     #                    
-     #                    SPCD.BA.scaled = rescale(SPCD_BA,,
-     #                    non_SPCD.BA.scaled = rescale(non_SPCD_BA,,
-     #                    prop.focal.ba = rescale(SPCD_BA/BA_total,, 
-     #                    
-     #                    density.scaled = rescale(density_total,,
-     #                    SPCD.density.scaled = rescale(SPCD_density,,
-     #                    non.SPCD.density.scaled = rescale(non_SPCD_density,,
-     #                    prop.focal.density = rescale(SPCD_density/density_total,, 
-     #                    
-     #                    si.scaled = rescale(si,,
-     #                    ba.scaled = rescale(BA_total,,
-     #                    aspect.scaled = rescale(aspect,,
-     #                    slope.scaled = rescale(slope,,
-     #                    damage.scaled = rescale(damage,,
-     #                    MAP.scaled = rescale(MAP,,
-     #                    elev.scaled = rescale(elev,,
-     #                    Ndep.scaled = rescale(Ndep.remper.avg,,
-     #                    physio.scaled = rescale(physio,,
-     #                    MATmin.scaled = rescale(MATmin,,
-     #                    MATmax.scaled = rescale(MATmax,, 
-     #                    ppt.anom = rescale(ppt.anom,, 
-     #                    tmax.anom = rescale(tmax.anom,, 
-     #                    tmin.anom = rescale(tmin.anom,)
-  # old method of scaling                      
-   
-
+  
   SPP.df <- data.frame(SPCD = unique(cleaned.data$SPCD), 
                        SPP = 1:length(unique(cleaned.data$SPCD)))
   
@@ -147,7 +94,7 @@ if(remper.correction == "random"){
   # 1. Annual growth 
   
   
-  ggplot(test.data, aes(x= as.character(M), y = annual.growth))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  #ggplot(test.data, aes(x= as.character(M), y = density.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
   ggplot(test.data, aes(x= as.character(M), y = prop.focal.ba.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
   ggplot(test.data, aes(x= as.character(M), y = SPCD.BA.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
   #ggplot(test.data, aes(x= as.character(M), y = SPCD.density.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
@@ -182,7 +129,7 @@ if(remper.correction == "random"){
                                                                  non_SPCD.BA.scaled,
                                                                  damage.scaled 
                                                                  
-                                                                 )))
+                     )))
   # model.4 data
   # 4. Diameter + Annual growth + competition variables (RD.scaled, BAL, damage) + Climate variables
   
@@ -216,7 +163,7 @@ if(remper.correction == "random"){
                                                                  BAL.scaled,
                                                                  non_SPCD.BA.scaled,
                                                                  damage.scaled,
-                                                                
+                                                                 
                                                                  MATmax.scaled, 
                                                                  MATmin.scaled, 
                                                                  MAP.scaled,
@@ -240,7 +187,7 @@ if(remper.correction == "random"){
                                                                  BAL.scaled, 
                                                                  non_SPCD.BA.scaled,
                                                                  damage.scaled,
-                                                                
+                                                                 
                                                                  MATmax.scaled, 
                                                                  MATmin.scaled, 
                                                                  MAP.scaled,
@@ -257,7 +204,7 @@ if(remper.correction == "random"){
                                                 .vars = vars(DIA_scaled:physio.scaled)) %>% 
                                       mutate_at(.funs = list(DIA.int = ~.*DIA_scaled), 
                                                 .vars = vars(RD.scaled:physio.scaled)) )) #%>% 
-                                     # mutate_at(scale, .vars = vars(DIA_scaled_growth.int:physio.scaled_DIA.int))))
+  # mutate_at(scale, .vars = vars(DIA_scaled_growth.int:physio.scaled_DIA.int))))
   
   
   
@@ -277,7 +224,7 @@ if(remper.correction == "random"){
                                                                  BAL.scaled, 
                                                                  non_SPCD.BA.scaled,
                                                                  damage.scaled,
-                                                                
+                                                                 
                                                                  MATmax.scaled, 
                                                                  MATmin.scaled, 
                                                                  MAP.scaled,
@@ -311,8 +258,8 @@ if(remper.correction == "random"){
                                       # generate damage interactions
                                       mutate_at(.funs = list(damage.int = ~.*damage.scaled), 
                                                 .vars = vars(MATmax.scaled:physio.scaled))#%>%
-                                      # make sure interactions terms are scaled to be closer to values
-                                      #mutate_at(.funs = function(x)(x/10), .vars = vars(physio.scaled_damage.int))
+                                    # make sure interactions terms are scaled to be closer to values
+                                    #mutate_at(.funs = function(x)(x/10), .vars = vars(physio.scaled_damage.int))
                                     # mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:physio.scaled_damage.int))
                      ))
   
@@ -386,9 +333,9 @@ if(remper.correction == "random"){
                                       # generate tmax.anom interactions
                                       mutate_at(.funs = list(tmax.anom.int = ~.*tmax.anom), 
                                                 .vars = vars(slope.scaled:physio.scaled))#%>%
-                                      # make sure interactions terms are scaled to be closer to values
-                                      #mutate_at(.funs = function(x)(x/10), .vars = vars(ba.scaled_RD.scaled.int:physio.scaled_damage.int))
-                                      #mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:physio.scaled_tmax.anom.int))
+                                    # make sure interactions terms are scaled to be closer to values
+                                    #mutate_at(.funs = function(x)(x/10), .vars = vars(ba.scaled_RD.scaled.int:physio.scaled_damage.int))
+                                    #mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:physio.scaled_tmax.anom.int))
                      ))
   
   # model.9 data
@@ -472,7 +419,7 @@ if(remper.correction == "random"){
                                                 .vars = vars(Ndep.scaled:physio.scaled)) %>%
                                       # generate Ndep interactions
                                       mutate(Ndep.physio.int = physio.scaled*Ndep.scaled) #%>%
-                                      #mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:Ndep.physio.int))
+                                    #mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:Ndep.physio.int))
                                     
                      ))
   
@@ -627,8 +574,8 @@ if(remper.correction == "random"){
                                            # generate damage interactions
                                            mutate_at(.funs = list(damage.int = ~.*damage.scaled), 
                                                      .vars = vars(MATmax.scaled:physio.scaled))#%>%
-                                           # make sure interactions terms are scaled to be closer to values
-                                           #mutate_at(.funs = function(x)(x/10), .vars = vars(physio.scaled_damage.int))
+                                         # make sure interactions terms are scaled to be closer to values
+                                         #mutate_at(.funs = function(x)(x/10), .vars = vars(physio.scaled_damage.int))
                                          #  mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:physio.scaled_damage.int))
                           ))
   
@@ -701,9 +648,9 @@ if(remper.correction == "random"){
                                            # generate tmax.anom interactions
                                            mutate_at(.funs = list(tmax.anom.int = ~.*tmax.anom), 
                                                      .vars = vars(slope.scaled:physio.scaled))#%>%
-                                           # make sure interactions terms are scaled to be closer to values
-                                           #mutate_at(.funs = function(x)(x/10), .vars = vars(ba.scaled_RD.scaled.int:physio.scaled_damage.int))
-                                           #mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:physio.scaled_tmax.anom.int))
+                                         # make sure interactions terms are scaled to be closer to values
+                                         #mutate_at(.funs = function(x)(x/10), .vars = vars(ba.scaled_RD.scaled.int:physio.scaled_damage.int))
+                                         #mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:physio.scaled_tmax.anom.int))
                           ))
   
   # model.9 data
@@ -787,7 +734,7 @@ if(remper.correction == "random"){
                                                      .vars = vars(Ndep.scaled:physio.scaled)) %>%
                                            # generate Ndep interactions
                                            mutate(Ndep.physio.int = physio.scaled*Ndep.scaled)#%>%
-                                          # mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:Ndep.physio.int))
+                                         # mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:Ndep.physio.int))
                                          
                           ))
   
@@ -810,7 +757,7 @@ if(remper.correction == "random"){
        mod.data,
        mod.data.test, 
        model.name, 
-       file = paste0("SPCD_standata_general_full_standardized_v2/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_1.Rdata"))
+       file = paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_1.Rdata"))
   
   mod.data <- mod.data.2
   mod.data.test <- mod.data.2.test
@@ -823,7 +770,7 @@ if(remper.correction == "random"){
        mod.data,
        mod.data.test, 
        model.name, 
-       file = paste0("SPCD_standata_general_full_standardized_v2/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_2.Rdata"))
+       file = paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_2.Rdata"))
   
   mod.data <- mod.data.3
   mod.data.test <- mod.data.3.test
@@ -836,7 +783,7 @@ if(remper.correction == "random"){
        mod.data,
        mod.data.test, 
        model.name, 
-       file = paste0("SPCD_standata_general_full_standardized_v2/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_3.Rdata"))
+       file = paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_3.Rdata"))
   
   mod.data <- mod.data.4
   mod.data.test <- mod.data.4.test
@@ -849,7 +796,7 @@ if(remper.correction == "random"){
        mod.data,
        mod.data.test, 
        model.name, 
-       file = paste0("SPCD_standata_general_full_standardized_v2/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_4.Rdata"))
+       file = paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_4.Rdata"))
   
   mod.data <- mod.data.5
   mod.data.test <- mod.data.5.test
@@ -862,7 +809,7 @@ if(remper.correction == "random"){
        mod.data,
        mod.data.test, 
        model.name, 
-       file = paste0("SPCD_standata_general_full_standardized_v2/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_5.Rdata"))
+       file = paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_5.Rdata"))
   
   mod.data <- mod.data.6
   mod.data.test <- mod.data.6.test
@@ -875,7 +822,7 @@ if(remper.correction == "random"){
        mod.data,
        mod.data.test, 
        model.name, 
-       file = paste0("SPCD_standata_general_full_standardized_v2/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_6.Rdata"))
+       file = paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_6.Rdata"))
   
   mod.data <- mod.data.7
   mod.data.test <- mod.data.7.test
@@ -888,7 +835,7 @@ if(remper.correction == "random"){
        mod.data,
        mod.data.test, 
        model.name, 
-       file = paste0("SPCD_standata_general_full_standardized_v2/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_7.Rdata"))
+       file = paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_7.Rdata"))
   
   mod.data <- mod.data.8
   mod.data.test <- mod.data.8.test
@@ -901,7 +848,7 @@ if(remper.correction == "random"){
        mod.data,
        mod.data.test, 
        model.name, 
-       file = paste0("SPCD_standata_general_full_standardized_v2/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_8.Rdata"))
+       file = paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_8.Rdata"))
   
   mod.data <- mod.data.9
   mod.data.test <- mod.data.9.test
@@ -914,6 +861,6 @@ if(remper.correction == "random"){
        mod.data,
        mod.data.test, 
        model.name, 
-       file = paste0("SPCD_standata_general_full_standardized_v2/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_9.Rdata"))
+       file = paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_9.Rdata"))
   
 }

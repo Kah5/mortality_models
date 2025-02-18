@@ -1,7 +1,7 @@
 SPCD_run_stan <- function(SPCD.id, model.no = 1, niter = 1000, nchains = 2, remper.correction = 0.5,  model.file = 'modelcode/mort_model3_SPCD.stan', output.folder ){
  
   model.name <- paste0("mort_model", model.no, "_single_SPCD_", SPCD.id, "remper_", remper.correction)
-  load(paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.no, ".Rdata")) # load the species code data
+  load(paste0("SPCD_standata_general_full_standardized_v2/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.no, ".Rdata")) # load the species code data
   mod.data$K <- ncol(mod.data$xM)
   # y == 0 is mortality and y == 1 is survival
   num_cores <-  parallel::detectCores()

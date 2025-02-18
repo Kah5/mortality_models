@@ -20,6 +20,7 @@ N.DAMAGE$damage_agent <- ref_damage[match(N.DAMAGE$damage, ref_damage$VALUE),]$M
 N.DAMAGE$damage_agent <- ifelse(N.DAMAGE$damage == 0, "None", N.DAMAGE$damage_agent)
 saveRDS(N.DAMAGE, "data/N.DAMAGE.table.RDS")
 
+hist(cleaned.data$dbhcur)
 
 nspp <- cleaned.data %>% group_by(SPCD) %>% summarise(n = n(), 
                                                       pct = n/nrow(cleaned.data)) %>% arrange (desc(`pct`))
@@ -213,8 +214,22 @@ for(i in 1:length(unique(nspp[1:17,]$SPCD))){
 #----------------------------------------------------------------------------------
 # running stan models with most important variables
 #----------------------------------------------------------------------------------
-
-
+# get minimum dbh 
+all.spp.list <- list()
+for(i in 1:length(unique(nspp[1:17,]$SPCD))){
+  cat(i)
+  SPCD.id = SPCD.df[i,]$SPCD
+  model.name <- paste0("mort_model6_single_SPCD_", SPCD.id, "remper_0.5")
+  load(paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.no, ".Rdata")) # load the species code data
+  all.spp <- rbind(test.data, train.data)
+  all.spp.summary <- all.spp %>% group_by(spp)%>% summarise(max(dbhcur), 
+                        min(dbhold), 
+                        min(annual.growth), 
+                        max(annual.growth)) 
+  all.spp.list[[i]]<- all.spp.summary
+ 
+}
+summary.dbh.spp.df <- do.call(rbind, all.spp.list)
 # for each species group, fit a model, plot the outputs, and save the results
 # we source a function from another script
 source("R/speciesModels/SPCD_run_stan.R")
