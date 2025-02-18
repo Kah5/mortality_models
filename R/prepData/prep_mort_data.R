@@ -174,6 +174,7 @@ library(ggmap)
 library(maps)
 library(mapdata)
 
+
 nspp <- TREE.remeas %>% group_by(spp) %>% summarise(n()) %>% arrange(desc(`n()`))
 nspp$Species <- FIESTA::ref_species[match(nspp$spp, FIESTA::ref_species$SPCD),]$COMMON_NAME
 nspp[1:15,]
@@ -339,7 +340,144 @@ TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) 
   )|>
   gtsave("images/filtering_exploration/TREE_size_dead_status.png")
 
+#############################################################
+# diameter difference distributions for trees > 5 in and < 5 in
+TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) %>% 
+  #dplyr::select(PLOT.ID, state, spp, remper, status, DIA_DIFF, dbhold, dbhcur, crcls, point, state, county, pltnum, tree, date) %>%
+  group_by(PLOT.ID, point, state, county, pltnum, tree, date) %>% 
+  mutate(annual.growth = ifelse(status %in% c(2, 3, 4) & ! is.na(dbhold) & ! remper == 0, 
+                                DIA_DIFF/(remper/2), DIA_DIFF/remper),
+         M = ifelse(status %in%  c(2, 3, 4), 1, 0), 
+         relative.growth = (annual.growth/dbhold)*100) %>% ungroup() %>% 
+  filter(SPCD %in% nspp[1:17,]$spp)%>%
+  mutate(Tree.status = ifelse(M == 1, "dead", "live"), 
+         DIAMETER_diff = ifelse(DIA_DIFF > 0, "positive", 
+                                ifelse(DIA_DIFF == 0,"zero", "negative")))%>%
+  
+  group_by(Species, SPCD, dbhold > 5) %>% 
+  ggplot(., aes(DIA_DIFF))+geom_histogram()+facet_wrap(~ Tree.status)
+ggsave("images/filtering_exploration/DIA_diff_hists.png")
 
+TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) %>% 
+  #dplyr::select(PLOT.ID, state, spp, remper, status, DIA_DIFF, dbhold, dbhcur, crcls, point, state, county, pltnum, tree, date) %>%
+  group_by(PLOT.ID, point, state, county, pltnum, tree, date) %>% 
+  mutate(annual.growth = ifelse(status %in% c(2, 3, 4) & ! is.na(dbhold) & ! remper == 0, 
+                                DIA_DIFF/(remper/2), DIA_DIFF/remper),
+         M = ifelse(status %in%  c(2, 3, 4), 1, 0), 
+         relative.growth = (annual.growth/dbhold)*100) %>% ungroup() %>% 
+  filter(SPCD %in% nspp[1:17,]$spp)%>%
+  mutate(Tree.status = ifelse(M == 1, "dead", "live"), 
+         DIAMETER_diff = ifelse(DIA_DIFF > 0, "positive", 
+                                ifelse(DIA_DIFF == 0,"zero", "negative")), 
+         mort.status = ifelse(status == 1, "live", 
+                              ifelse(status == 2, "dead (not salvagable)", 
+                                     ifelse(status == 3, "cut", 
+                                            ifelse(status == 4, "dead (salvagable)", "snag")))))%>%
+  
+  group_by(Species, SPCD, dbhold > 5) %>% 
+  ggplot(., aes(dbhold))+geom_histogram()+facet_wrap(~ mort.status, scales = "free_y", ncol = 5)
+
+ ggsave("images/filtering_exploration/DBHold_hists_by_morttype.png", height = 4, width = 8)
+
+ 
+ TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) %>% 
+   #dplyr::select(PLOT.ID, state, spp, remper, status, DIA_DIFF, dbhold, dbhcur, crcls, point, state, county, pltnum, tree, date) %>%
+   group_by(PLOT.ID, point, state, county, pltnum, tree, date) %>% 
+   mutate(annual.growth = ifelse(status %in% c(2, 3, 4) & ! is.na(dbhold) & ! remper == 0, 
+                                 DIA_DIFF/(remper/2), DIA_DIFF/remper),
+          M = ifelse(status %in%  c(2, 3, 4), 1, 0), 
+          relative.growth = (annual.growth/dbhold)*100) %>% ungroup() %>% 
+   filter(SPCD %in% nspp[1:17,]$spp)%>%
+   mutate(Tree.status = ifelse(M == 1, "dead", "live"), 
+          DIAMETER_diff = ifelse(DIA_DIFF > 0, "positive", 
+                                 ifelse(DIA_DIFF == 0,"zero", "negative")), 
+          mort.status = ifelse(status == 1, "live", 
+                               ifelse(status == 2, "dead (not salvagable)", 
+                                      ifelse(status == 3, "cut", 
+                                             ifelse(status == 4, "dead (salvagable)", "snag")))))%>%
+   
+   group_by(Species, SPCD, dbhold > 5) %>% 
+   ggplot(., aes(DIA_DIFF))+geom_histogram()+facet_wrap(~ mort.status, scales = "free_y", ncol = 5)
+ 
+ ggsave("images/filtering_exploration/DIAMETER_diff_hists_by_morttype.png", height = 4, width = 8)
+ 
+ 
+ 
+ TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) %>% 
+   #dplyr::select(PLOT.ID, state, spp, remper, status, DIA_DIFF, dbhold, dbhcur, crcls, point, state, county, pltnum, tree, date) %>%
+   group_by(PLOT.ID, point, state, county, pltnum, tree, date) %>% 
+   mutate(annual.growth = ifelse(status %in% c(2, 3, 4) & ! is.na(dbhold) & ! remper == 0, 
+                                 DIA_DIFF/(remper/2), DIA_DIFF/remper),
+          M = ifelse(status %in%  c(2, 3, 4), 1, 0), 
+          relative.growth = (annual.growth/dbhold)*100) %>% ungroup() %>% 
+   filter(SPCD %in% nspp[1:17,]$spp)%>%
+   mutate(Tree.status = ifelse(M == 1, "dead", "live"), 
+          DIAMETER_diff = ifelse(DIA_DIFF > 0, "positive", 
+                                 ifelse(DIA_DIFF == 0,"zero", "negative")))%>%
+   
+   group_by(Species, SPCD, dbhold > 5) %>% 
+   ggplot(., aes(dbhold))+geom_histogram()+facet_wrap(~ Tree.status)
+ 
+ ggsave("images/filtering_exploration/DBHold_hists.png")
+ 
+ 
+ 
+ nspp.nosmall <- TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) %>%
+   filter(dbhold >= 5)%>%
+   group_by(spp) %>% summarise(n()) %>% arrange(desc(`n()`))
+ nspp.nosmall$Species <- FIESTA::ref_species[match(nspp.nosmall$spp, FIESTA::ref_species$SPCD),]$COMMON_NAME
+ nspp.nosmall[1:17,] |> gt()gtsave("images/filtering_exploration/total_trees_top_17_no_small.png")
+ 
+ # filtering out all zero and negative diameter diff
+ nspp.nosmall <- TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) %>%
+   filter(dbhold >= 5 & DIA_DIFF > 0 & !status ==3)%>%
+   mutate(  M = ifelse(status %in%  c(2, 3, 4, 5), 1, 0))%>%
+   group_by(spp, M) %>% summarise(n()) %>% arrange(desc(`n()`)) %>% spread(M, `n()`)
+ nspp.nosmall$Species <- FIESTA::ref_species[match(nspp.nosmall$spp, FIESTA::ref_species$SPCD),]$COMMON_NAME
+ nspp.nosmall %>% filter(spp %in% nspp[1:17,]$spp) %>% ungroup() |> gt()#%>% gtsave("images/filtering_exploration/total_trees_top_17_no_small_no_negative_dia_dif.png")
+ 
+ # filtering out all negative diameter diff
+ nspp.nosmall.inc.zero <- TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) %>%
+   filter(dbhold >= 5 & DIA_DIFF >= 0 & !status ==3)%>%
+   mutate(  M = ifelse(status %in%  c(2, 3, 4, 5), 1, 0))%>%
+   group_by(spp, M) %>% summarise(n()) %>% arrange(desc(`n()`)) %>% spread(M, `n()`)
+ nspp.nosmall.inc.zero$Species <- FIESTA::ref_species[match(nspp.nosmall.inc.zero$spp, FIESTA::ref_species$SPCD),]$COMMON_NAME
+ nspp.nosmall.inc.zero %>% filter(spp %in% nspp[1:17,]$spp) %>% ungroup() |> gt()#%>% gtsave("images/filtering_exploration/total_trees_top_17_no_small_no_negative_dia_dif.png")
+ 
+ 
+ 
+ nspp.nosmall <- TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) %>%
+   filter(dbhold >= 5 & DIA_DIFF > 0)%>%
+   group_by(spp, status) %>% summarise(n()) %>% arrange(desc(`n()`))
+ nspp.nosmall$Species <- FIESTA::ref_species[match(nspp.nosmall$spp, FIESTA::ref_species$SPCD),]$COMMON_NAME
+ nspp %>% ungroup() |> gt()
+ 
+ ###################################################################
+ # sample logistic regression with just dia_diff and growth
+ ###################################################################
+ glm.data.all <- TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) %>% 
+   #dplyr::select(PLOT.ID, state, spp, remper, status, DIA_DIFF, dbhold, dbhcur, crcls, point, state, county, pltnum, tree, date) %>%
+   group_by(PLOT.ID, point, state, county, pltnum, tree, date) %>% 
+   mutate(annual.growth = ifelse(status %in% c(2, 3, 4) & ! is.na(dbhold) & ! remper == 0, 
+                                 DIA_DIFF/(remper/2), DIA_DIFF/remper),
+          M = ifelse(status %in%  c(2, 3, 4), 1, 0), 
+          relative.growth = (annual.growth/dbhold)*100) %>% ungroup() %>% 
+   filter(SPCD %in% nspp[1:17,]$spp)%>%
+   mutate(Tree.status = ifelse(M == 1, "dead", "live"), 
+          DIAMETER_diff = ifelse(DIA_DIFF > 0, "positive", 
+                                 ifelse(DIA_DIFF == 0,"zero", "negative")))
+ 
+ 
+ glm()
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
 #View(TREE.remeas2)
 #unique(TREE.remeas %>% filter(dbhcur > 100)%>% select(state, dat
 # filter out the trees that are not modeled exprem > 0 and 
