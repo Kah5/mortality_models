@@ -34,17 +34,17 @@ transformed parameters{
   
 for(s in 1:Nspp) { 
   alpha_SPP[s] = alpha + sigma_alpha * alpha_tilde[s];
-  u_beta[s, ] =  mu_beta +  beta_tilde[s,]*sigma_s ;
+  u_beta[s,] =  mu_beta +  beta_tilde[s,]*sigma_s ;
 }
   
   for (n in 1:N) {
     // annual survival probability
   
-    logit_p_annual[n] =  alpha_SPP[SPP[n]] + xM[n] * u_beta[SPP[n],]; //annual suvival probability
+    logit_p_annual[n] =  alpha_SPP[SPP[n]] + xM[n,] * to_vector(u_beta[SPP[n],]); //annual suvival probability
 }    
 
    vector<lower = 0, upper  = 1>[N] pSannual;//mean annual surivival for bernoulli logit
-   vector [N] mM;//mean survival probability over remeasurement for bernoulli logit
+   vector<lower = 0, upper  = 1> [N] mM;//mean survival probability over remeasurement for bernoulli logit
  
     pSannual = inv_logit(logit_p_annual);
     // convert to remeasurement period survival rate
@@ -57,13 +57,13 @@ model {
 
  alpha ~ normal(0,5);
  alpha_tilde ~ normal(0,1);//prior for non-centered alpha
- sigma_alpha ~ cauchy(0,5); //prior for the across-species variance for alphas
- 
+ sigma_alpha ~ cauchy(0,2.5); //prior for the across-species variance for alphas
  mu_beta[1:K] ~ normal(0, 5);
+ 
 for(s in 1:Nspp){
  beta_tilde[s,1:K] ~ normal(0,1);//prior for non-centered betas
 }
- sigma_s ~ cauchy(0,5);// prior for the K array of across-species variances for each parameter
+ sigma_s ~ cauchy(0,2.5);// prior for the K array of across-species variances for each parameter
 
 
  //priors for species=level means, centered on population level means
@@ -79,7 +79,7 @@ for(s in 1:Nspp){
   y ~ bernoulli(mM);
 
 }
-generated quantities{
+ generated quantities{
    // simulate data from the posterior
 
   vector[N] y_rep;//in sample predictions
