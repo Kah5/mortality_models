@@ -1,4 +1,4 @@
-library(rstan)
+#library(rstan)
 library(MASS)
 library(here)
 library(tidyverse)
@@ -7,6 +7,8 @@ library(FIESTA)
 library(dplyr)
 
 options(mc.cores = parallel::detectCores())
+#saveRDS(cleaned.data2, "data/cleaned.data.mortality.TRplots.RDS")
+
 cleaned.data <- readRDS( "data/cleaned.data.mortality.TRplots.RDS")
 
 # get summary of damages for later use:
@@ -56,7 +58,9 @@ View(cleaned.data %>% filter(SPCD %in% unique(nspp[1:17,]$SPCD))%>% group_by( SP
 
 # center and scale the covariate data
 # for covariates at the plot level, scale by the unique plots so the # of trees on the plot doesnt affect the mean and sd values:
-plot.means <- unique(cleaned.data %>% ungroup()%>% dplyr::select(PLOT.ID, si, ba, slope, aspect, MAP, MATmin, MATmax, damage.total, elev, Ndep.remper.avg)) %>% ungroup() %>% summarise(si.mean = mean(si, na.rm =TRUE), 
+plot.means <- unique(cleaned.data %>% ungroup()%>% 
+                       dplyr::select(PLOT.ID, si, ba, slope, aspect, MAP, MATmin, MATmax, damage.total, elev, Ndep.remper.avg)) %>% 
+  ungroup() %>% summarise(si.mean = mean(si, na.rm =TRUE), 
                                                                                           ba.mean = mean(ba, na.rm =TRUE), 
                                                                                           slope.mean = mean(slope, na.rm = TRUE), 
                                                                                           aspect.mean = mean(aspect, na.rm = TRUE),
@@ -86,55 +90,19 @@ View(cleaned.data %>% group_by(SPGRPCD, SPCD) %>% summarise(n()))
 cleaned.data.full <- cleaned.data
 
 #-----------------------------------------------------------------------------------------
-# Make the species level datasets for the top 15 species to run the model
+# Make the species level datasets for the top 17 species to run the model
 #-----------------------------------------------------------------------------------------
+# note: this now takes in the data built in prep_species_stan_data.R and remakes it for the glms
 length(unique(cleaned.data$SPCD))
 
 nspp[1:17,]$COMMON
 # save these as .RDA files so we can just load, run the model, and 
 SPCD.id <- 316#unique(cleaned.data$SPCD)[25]
 set.seed(22)
-
-SPCD.stan.data <- function(SPCD.id, remper.correction){
-      cleaned.data <- cleaned.data.full %>% filter(SPCD %in% SPCD.id)
-      
-      # scale the cleaned data tree-level diameters by species?
-      cleaned.data <- cleaned.data %>% ungroup()  %>% group_by(SPCD) %>% 
-      mutate(rempercur = ifelse(M ==1, remper*remper.correction, remper), 
-             annual.growth = DIA_DIFF/rempercur) %>% mutate(DIA.mean = mean(dbhcur, na.rm =TRUE), 
-                                                                               DIA.sd = sd(dbhcur, na.rm = TRUE),  
-                                                                            BAL.mean = mean(BAL, na.rm=TRUE),
-                                                                            BAL.sd = sd(BAL, na.rm = TRUE),
-                                                                               annual.growth.mean = mean(annual.growth, na.rm = TRUE), 
-                                                                               annual.growth.sd = sd(annual.growth, na.rm = TRUE)) %>% 
-        ungroup() %>% mutate(DIA_scaled = (dbhcur - DIA.mean)/DIA.sd, 
-                             annual.growth.scaled = (annual.growth - annual.growth.mean)/annual.growth.sd, 
-                             BAL.scaled = (BAL-BAL.mean)/BAL.sd,
-                             si.scaled = (si - plot.means$si.mean)/plot.means$si.sd, 
-                             ba.scaled = (ba - plot.means$ba.mean)/plot.means$ba.sd,
-                             aspect.scaled = (aspect - plot.means$aspect.mean)/plot.means$aspect.sd,
-                             slope.scaled = (slope - plot.means$slope.mean)/plot.means$slope.sd,
-                             damage.scaled = (damage.total - plot.means$damage.mean)/plot.means$damage.sd,
-                             MAP.scaled = (MAP-plot.means$MAP.mean)/plot.means$MAP.sd, 
-                             elev.scaled = (elev-plot.means$elev.mean)/plot.means$elev.sd,
-                             Ndep.scaled = (Ndep.remper.avg- plot.means$Ndep.mean)/plot.means$Ndep.sd,
-                             MATmin.scaled = (MATmin- plot.means$MATmin.mean)/plot.means$MATmin.sd,
-                             MATmax.scaled = (MATmax - plot.means$MATmax.mean)/plot.means$MATmax.sd)
-      
-      SPP.df <- data.frame(SPCD = unique(cleaned.data$SPCD), 
-                           SPP = 1:length(unique(cleaned.data$SPCD)))
-      
-      cleaned.data<- left_join(cleaned.data, SPP.df) 
-      cleaned.data <- cleaned.data %>%  filter(!is.na(si) & !is.na(dbhcur)& !is.na(M) & !is.na(annual.growth.scaled) & !is.na(ppt.anom))
-      #summary(cleaned.data$BAL.scaled)
- 
-      N_train <- nrow(cleaned.data)*0.7
-      N_test <- nrow(cleaned.data)*0.3
-      train_ind <- sample(c(1:nrow(cleaned.data)), size = N_train, replace = FALSE)
-      
-      train.data <- cleaned.data[train_ind,]
-      test.data <- cleaned.data[-train_ind, ]
-   
+remper.correction <- 0.5
+stan2glm.data <- function(SPCD.id, remper.correction){
+  
+      load( paste0("SPCD_standata_general_full_standardized_v2/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_9.Rdata"))
       
       mod.data <- list(N = nrow(train.data), 
                        Nspp = length(unique(train.data$SPCD)),
@@ -158,6 +126,11 @@ SPCD.stan.data <- function(SPCD.id, remper.correction){
                        MATmaxanom = train.data$tmax.anom,
                        PHYSIO = train.data$physio, 
                        RD = train.data$RD, 
+                       SPCD.BA = train.data$SPCD.BA.scaled,
+                       non_SPCD.BA.scaled = train.data$non_SPCD.BA.scaled,
+                       prop.focal.ba.scaled = train.data$prop.focal.ba.scaled, 
+                       DIA.diff  = train.data$DIA_DIFF,
+                       
                        
                        N_test = nrow(test.data),
                        si_test = test.data$si.scaled, 
@@ -178,22 +151,22 @@ SPCD.stan.data <- function(SPCD.id, remper.correction){
                        MATminanom_test = test.data$tmin.anom, 
                        MATmaxanom_test = test.data$tmax.anom, 
                        PHYSIO_test = test.data$physio, 
-                       RD_test = test.data$RD)
+                       RD_test = test.data$RD, 
+                       SPCD.BA_test = test.data$SPCD.BA.scaled,
+                       non_SPCD.BA.scaled_test = test.data$non_SPCD.BA.scaled,
+                       prop.focal.ba.scaled_test = test.data$prop.focal.ba.scaled, 
+                       DIA.diff_test  = test.data$DIA_DIFF)
       
       
       model.name <- paste0("simple_logistic_SPCD_", SPCD.id, "remper_",remper.correction)
       
-      save(train.data, test.data, mod.data, model.name, file = paste0("SPCD_standata/SPCD_",SPCD.id,"remper_correction_",remper.correction, ".Rdata"))
+      save(train.data, test.data, mod.data, model.name, file = paste0("SPCD_GLM_standata/SPCD_",SPCD.id,"remper_correction_",remper.correction, ".Rdata"))
 }
 
-# write the data for all 26 different species groups:
+# write the data for all 17 different species:
 for(i in 1:length(unique(nspp[1:17,]$SPCD))){
   cat(i)
-  SPCD.stan.data(SPCD.id = nspp[i,]$SPCD, remper.correction = 0.5)
-  SPCD.stan.data(SPCD.id = nspp[i,]$SPCD, remper.correction = 0.9)
-  SPCD.stan.data(SPCD.id = nspp[i,]$SPCD, remper.correction = 0.1)
-  SPCD.stan.data(SPCD.id = nspp[i,]$SPCD, remper.correction = 0.3)
-  SPCD.stan.data(SPCD.id = nspp[i,]$SPCD, remper.correction = 0.7)
+  stan2glm.data(SPCD.id = nspp[i,]$SPCD, remper.correction = 0.5)
 }
 
 #---------------------------------------------------------------------
@@ -206,21 +179,22 @@ remper.cor.vector <- c(0.5)
 j <- 1
 i <- 1
  
-for(i in 2:length(SPCD.df$SPCD)){
+for(i in 1:length(SPCD.df$SPCD)){
   SPCD.id <- SPCD.df[i,]$SPCD
-  common.name <- nspp[1:17,] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON)
+  common.name <- nspp[1:17,] %>% filter(SPCD %in% SPCD.id) %>% dplyr::select(COMMON)
   
-  if(SPCD.id == 621){
-    cat("Not running for yellow poplar, not enough data")
-  }else{
+  #if(SPCD.id == 621){
+   # cat("Not running for yellow poplar, not enough data")
+  #}else{
     
   for (j in 1:length(remper.cor.vector)){
     cat(paste("running glm mortality model for SPCD", SPCD.df[i,]$SPCD, common.name$COMMON, " remper correction", remper.cor.vector[j]))
     
     remper.correction <- remper.cor.vector[j]
-    load(paste0("SPCD_standata/SPCD_", SPCD.id, "remper_correction_", remper.correction, ".Rdata")) # load the species code data
+    load(paste0("SPCD_GLM_standata/SPCD_", SPCD.id, "remper_correction_", remper.correction, ".Rdata")) # load the species code data
     covariate.data <- data.frame(M = mod.data$y, 
                                  annual.growth = mod.data$annual_growth, 
+                                 dia.diff = mod.data$DIA.diff,
                                  DIA = mod.data$DIA, 
                                  si = mod.data$si, 
                                  slope = mod.data$slope, 
@@ -241,6 +215,7 @@ for(i in 2:length(SPCD.df$SPCD)){
     
     test.covariate.data <- data.frame(M = test.data$M,
                                       annual.growth = mod.data$annual_growth_test, 
+                                      dia.diff = mod.data$DIA.diff_test,
                                       DIA = mod.data$DIA_test, 
                                       si = mod.data$si_test, 
                                       slope = mod.data$slope_test, 
@@ -274,102 +249,105 @@ for(i in 2:length(SPCD.df$SPCD)){
   glm.K <-  glm(M ~ elev, data = covariate.data, family = "binomial")
   glm.L <-  glm(M ~ Ndep, data = covariate.data, family = "binomial")
   
-  glm.1 <-  glm(M ~ annual.growth, data = covariate.data, family = "binomial")
-  glm.2 <-  glm(M ~ annual.growth + DIA, data = covariate.data, family = "binomial")
-  glm.3 <-  glm(M ~ annual.growth + DIA + exp(DIA), data = covariate.data, family = "binomial")
-  #glm.2c <-  glm(M ~ annual.growth + DIA + (DIA)^2, data = covariate.data, family = "binomial")
+  # ggplot(data = covariate.data, aes(M, annual.growth))+geom_point()
+  # ggplot(data = covariate.data, aes(M, dia.diff))+geom_point()
+  # 
+  glm.1 <-  glm(M ~ dia.diff, data = covariate.data, family = "binomial")
+  glm.2 <-  glm(M ~ dia.diff + DIA, data = covariate.data, family = "binomial")
+  glm.3 <-  glm(M ~ dia.diff + DIA + exp(DIA), data = covariate.data, family = "binomial")
+  #glm.2c <-  glm(M ~ dia.diff + DIA + (DIA)^2, data = covariate.data, family = "binomial")
   
-  glm.4 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect, data = covariate.data, family = "binomial")
-  glm.5 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope , data = covariate.data, family = "binomial")
-  glm.6 <-  glm(M ~ annual.growth + DIA + exp(DIA) + aspect + slope + MATmax , data = covariate.data, family = "binomial")
+  glm.4 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect, data = covariate.data, family = "binomial")
+  glm.5 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope , data = covariate.data, family = "binomial")
+  glm.6 <-  glm(M ~ dia.diff + DIA + exp(DIA) + aspect + slope + MATmax , data = covariate.data, family = "binomial")
   
-  glm.7 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+  glm.7 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                 + MATmin , data = covariate.data, family = "binomial")
-  glm.8 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+  glm.8 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                 + MATmin+ MATmax , data = covariate.data, family = "binomial")
-  glm.9 <-  glm(M ~ annual.growth + DIA + exp(DIA) + aspect + slope + MATmax 
+  glm.9 <-  glm(M ~ dia.diff + DIA + exp(DIA) + aspect + slope + MATmax 
                 + MATmin+ MAP , data = covariate.data, family = "binomial")
   
-  glm.10 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+  glm.10 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                 + MATmin+ MAP + MATmaxanom , data = covariate.data, family = "binomial")
   
-  glm.11 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+  glm.11 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                 + MATmin+ MAP + MATmaxanom 
                 + MATminanom , data = covariate.data, family = "binomial")
   
   
-  glm.12 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+  glm.12 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                 + MATmin+ MAP + MATmaxanom 
                 + MATminanom + MAPanom , data = covariate.data, family = "binomial")
   
-  glm.13 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+  glm.13 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                 + MATmin+ MAP + MATmaxanom 
                 + MATminanom + MAPanom + BAL , data = covariate.data, family = "binomial")
   
-  glm.14<-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+  glm.14<-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                 + MATmin+ MAP + MATmaxanom 
                 + MATminanom + MAPanom + BAL + damage, data = covariate.data, family = "binomial")
  
-   glm.15 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+   glm.15 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                 + MATmin+ MAP + MATmaxanom 
                 + MATminanom + MAPanom + BAL + damage + si, data = covariate.data, family = "binomial")
  
-   glm.16 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+   glm.16 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                   + MATmin+ MAP + MATmaxanom 
                   + MATminanom + MAPanom + BAL + damage + si + PHYSIO, data = covariate.data, family = "binomial")
    
-   glm.17 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+   glm.17 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                   + MATmin+ MAP + MATmaxanom 
                   + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA , data = covariate.data, family = "binomial")
    
-   glm.18 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+   glm.18 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                   + MATmin+ MAP + MATmaxanom 
                   + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD , data = covariate.data, family = "binomial")
    
-   glm.19 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+   glm.19 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                   + MATmin+ MAP + MATmaxanom 
                   + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD +
                     elev, data = covariate.data, family = "binomial")
    
-   glm.20 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+   glm.20 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                   + MATmin+ MAP + MATmaxanom 
                   + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD +
                     elev + Ndep, data = covariate.data, family = "binomial")
    
-   glm.21 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+   glm.21 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                   + MATmin+ MAP + MATmaxanom 
                   + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
                     # annual growth interactcovarions
-                    DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth  
-                  + MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  
-                  + MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth +
-                    +  PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth, data = covariate.data, family = "binomial")
+                    DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
+                  + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
+                  + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
+                    +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff, data = covariate.data, family = "binomial")
    
    
 
   # all growth + diameter interaction terms
-  glm.22 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+  glm.22 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                  + MATmin+ MAP + MATmaxanom 
                  + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
                    # annual growth interactions
-                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth  
-                 + MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  
-                 + MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
-                   +  PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth+ elev*annual.growth + Ndep*annual.growth+ 
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
+                 + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff+ elev*dia.diff + Ndep*dia.diff+ 
                    # all diameter interactions
                   aspect*DIA  + slope*DIA  + MATmax*DIA  
                  + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
                  + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
                    PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA, data = covariate.data, family = "binomial")
   
-  glm.23 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+  glm.23 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                  + MATmin+ MAP + MATmaxanom 
                  + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
                    # annual growth interactions
-                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth  
-                 + MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  
-                 + MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
-                   +  PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth+ elev*annual.growth + Ndep*annual.growth + 
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
+                 + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff+ elev*dia.diff + Ndep*dia.diff + 
                    # all diameter interactions
                    aspect*DIA  + slope*DIA  + MATmax*DIA  
                  + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
@@ -384,14 +362,14 @@ for(i in 2:length(SPCD.df$SPCD)){
   
   
   
-  glm.24 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+  glm.24 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                  + MATmin+ MAP + MATmaxanom 
                  + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
                    # annual growth interactions
-                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth  
-                 + MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  
-                 + MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
-                   +  PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth +
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
+                 + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
                    # all diameter interactions
                    aspect*DIA  + slope*DIA  + MATmax*DIA  
                  + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
@@ -408,14 +386,14 @@ for(i in 2:length(SPCD.df$SPCD)){
                  + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope + 
                    PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope, data = covariate.data, family = "binomial")
   
-  glm.25 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+  glm.25 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                  + MATmin+ MAP + MATmaxanom 
                  + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD+ elev + Ndep +
                    # annual growth interactions
-                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth  
-                 + MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  
-                 + MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
-                    PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
+                 + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
+                    PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
                    # all diameter interactions
                    aspect*DIA  + slope*DIA  + MATmax*DIA  
                  + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
@@ -438,14 +416,14 @@ for(i in 2:length(SPCD.df$SPCD)){
                    PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax +  Ndep*MATmax, data = covariate.data, family = "binomial")
   
   
-  glm.26 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax 
+  glm.26 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                  + MATmin+ MAP + MATmaxanom 
                  + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD+ elev + Ndep + 
                    # annual growth interactions
-                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth  
-                 + MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  
-                 + MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth +
-                     PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
+                 + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
+                     PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
                    # all diameter interactions
                    aspect*DIA  + slope*DIA  + MATmax*DIA  
                  + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
@@ -474,14 +452,14 @@ for(i in 2:length(SPCD.df$SPCD)){
   
 
                    
-  glm.27 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax +
+  glm.27 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax +
                  MATmin+ MAP + MATmaxanom +
                  MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
                    # annual growth interactions
-                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
-                  MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
-                  MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
-                     PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth+ elev*annual.growth + Ndep*annual.growth + 
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
+                  MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
+                  MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
+                     PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff+ elev*dia.diff + Ndep*dia.diff + 
                    
                    # all diameter interactions
                    aspect*DIA  + slope*DIA  + MATmax*DIA  +
@@ -513,14 +491,14 @@ for(i in 2:length(SPCD.df$SPCD)){
                    PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP, data = covariate.data, family = "binomial")
   
 
-  glm.28 <-  glm(M ~ annual.growth + DIA + exp(DIA) + aspect + slope + MATmax +
+  glm.28 <-  glm(M ~ dia.diff + DIA + exp(DIA) + aspect + slope + MATmax +
                    MATmin+ MAP + MATmaxanom +
                    MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
                    # annual growth interactions
-                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
-                   MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
-                   MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
-                     PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
+                   MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
+                   MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
+                     PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
                    # all diameter interactions
                    aspect*DIA  + slope*DIA  + MATmax*DIA  +
                    MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
@@ -558,14 +536,14 @@ for(i in 2:length(SPCD.df$SPCD)){
                    MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
                    PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom + Ndep*MATminanom, data = covariate.data, family = "binomial")
   
-  glm.29 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax +
+  glm.29 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax +
                    MATmin+ MAP + MATmaxanom +
                    MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
                    # annual growth interactions
-                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
-                   MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
-                   MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  
-                   +  PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth  + Ndep*annual.growth +
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
+                   MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
+                   MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff  + Ndep*dia.diff +
                    # all diameter interactions
                    aspect*DIA  + slope*DIA  + MATmax*DIA  +
                    MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
@@ -608,14 +586,14 @@ for(i in 2:length(SPCD.df$SPCD)){
   
   
   
-  glm.30 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax +
+  glm.30 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax +
                    MATmin+ MAP + MATmaxanom +
                    MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
                    # annual growth interactions
-                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
-                   MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
-                   MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  
-                   +  PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
+                   MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
+                   MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
                    # all diameter interactions
                    aspect*DIA  + slope*DIA  + MATmax*DIA  +
                    MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
@@ -661,14 +639,14 @@ for(i in 2:length(SPCD.df$SPCD)){
                    BAL*MAPanom + damage*MAPanom + si*MAPanom +
                    PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom +elev*MAPanom + Ndep*MAPanom, data = covariate.data, family = "binomial")
   
-  glm.31 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax +
+  glm.31 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax +
                    MATmin+ MAP + MATmaxanom +
                    MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
                    # annual growth interactions
-                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
-                   MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
-                   MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
-                    PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
+                   MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
+                   MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
+                    PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
                    # all diameter interactions
                    aspect*DIA  + slope*DIA  + MATmax*DIA  +
                    MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
@@ -718,14 +696,14 @@ for(i in 2:length(SPCD.df$SPCD)){
                    damage*BAL + si*BAL + 
                    PHYSIO*BAL + BA*BAL + RD*BAL +elev*BAL + Ndep*BAL, data = covariate.data, family = "binomial")
   
-  glm.32 <-  glm(M ~  annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax +
+  glm.32 <-  glm(M ~  dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax +
                    MATmin+ MAP + MATmaxanom +
                    MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
                    # annual growth interactions
-                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
-                   MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
-                   MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
-                   PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
+                   MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
+                   MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
+                   PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
                    # all diameter interactions
                    aspect*DIA  + slope*DIA  + MATmax*DIA  +
                    MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
@@ -778,14 +756,14 @@ for(i in 2:length(SPCD.df$SPCD)){
                    
                    si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage, data = covariate.data, family = "binomial")
   
-  glm.33 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax +
+  glm.33 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax +
                    MATmin+ MAP + MATmaxanom +
                    MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
                    # annual growth interactions
-                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
-                   MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
-                   MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
-                   PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
+                   MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
+                   MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
+                   PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
                    # all diameter interactions
                    aspect*DIA  + slope*DIA  + MATmax*DIA  +
                    MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
@@ -839,14 +817,14 @@ for(i in 2:length(SPCD.df$SPCD)){
                    si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage+
                    PHYSIO*si + BA*si + RD*si + elev*si + Ndep*si , data = covariate.data, family = "binomial")
   
-  glm.34 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax +
+  glm.34 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax +
                    MATmin+ MAP + MATmaxanom +
                    MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
                    # annual growth interactions
-                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
-                   MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
-                   MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
-                   PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
+                   MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
+                   MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
+                   PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
                    # all diameter interactions
                    aspect*DIA  + slope*DIA  + MATmax*DIA  +
                    MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
@@ -902,14 +880,14 @@ for(i in 2:length(SPCD.df$SPCD)){
                     BA*PHYSIO + RD*PHYSIO + elev*PHYSIO + Ndep*PHYSIO, data = covariate.data, family = "binomial")
   
   
-  glm.35 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax +
+  glm.35 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax +
                    MATmin+ MAP + MATmaxanom +
                    MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
                    # annual growth interactions
-                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
-                   MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
-                   MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
-                   PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
+                   MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
+                   MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
+                   PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
                    # all diameter interactions
                    aspect*DIA  + slope*DIA  + MATmax*DIA  +
                    MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
@@ -966,14 +944,14 @@ for(i in 2:length(SPCD.df$SPCD)){
                    BA*RD + elev*RD + Ndep*RD, data = covariate.data, family = "binomial")
   
   
-  glm.36 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax +
+  glm.36 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax +
                    MATmin+ MAP + MATmaxanom +
                    MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
                    # annual growth interactions
-                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
-                   MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
-                   MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
-                   PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
+                   MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
+                   MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
+                   PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
                    # all diameter interactions
                    aspect*DIA  + slope*DIA  + MATmax*DIA  +
                    MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
@@ -1031,14 +1009,14 @@ for(i in 2:length(SPCD.df$SPCD)){
                    elev*BA + Ndep*BA, data = covariate.data, family = "binomial")
   
   
-  glm.37 <-  glm(M ~ annual.growth + DIA + exp(DIA)+ aspect + slope + MATmax +
+  glm.37 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax +
                    MATmin+ MAP + MATmaxanom +
                    MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
                    # annual growth interactions
-                   DIA*annual.growth + aspect*annual.growth  + slope*annual.growth  + MATmax*annual.growth +
-                   MATmin*annual.growth  + MAP*annual.growth  + MATmaxanom*annual.growth  +
-                   MATminanom*annual.growth  + MAPanom*annual.growth  + BAL*annual.growth  + damage*annual.growth  + si*annual.growth  +
-                   PHYSIO*annual.growth + BA*annual.growth + RD*annual.growth + elev*annual.growth + Ndep*annual.growth + 
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
+                   MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
+                   MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
+                   PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
                    # all diameter interactions
                    aspect*DIA  + slope*DIA  + MATmax*DIA  +
                    MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
@@ -1212,18 +1190,38 @@ for(i in 2:length(SPCD.df$SPCD)){
    ggtitle(paste0("Variable Importance, ", nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON) , " model ", Rsq.best$model.no))
  ggsave(filename = paste0("SPCD_glm_output/GLM_Rsq_best_VARIMP_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 5, width = 12)
  
-  }
+ ########################################################################
+ # VIF for the species covariates
+ #
+ vif_values <-  vif(glm.20)
+ VIF.cov <- data.frame(VIF = vif_values, 
+            covariates = names(vif_values))
+ 
+ggplot(VIF.cov, aes(x = covariates, y = VIF))+geom_bar(stat = "identity")+
+  theme(axis.text.x = element_text(angle = 90))
+ 
+
+# Creating a correlation matrix
+corr <- round(cor(covariate.data[,3:ncol(covariate.data)]), 1)
+library(ggcorrplot)
+# generate correlation plots here:
+ggcorrplot(corr, hc.order = TRUE, type = "lower",
+           lab = TRUE)
+ggsave(filename = paste0("SPCD_glm_output/GLM_Correlation_matrix", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 12, width = 12)
+saveRDS(corr, paste0("SPCD_glm_output/GLM_Correlation_matrix_SPCD_",SPCD.id,"_predictors.rds") )
   }
 }
+
 
 
 # make a big table with the model results:
 model.diags <- list()
 for(i in 1:length(SPCD.df[,]$SPCD)){
   SPCD.id <- SPCD.df[i,]$SPCD
-  if(SPCD.id == 621){}else{
+ # if(SPCD.id == 621){}else{
 model.diags[[i]] <- readRDS(paste0("SPCD_glm_output/GLM_model_diag_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".RDS") )
-}}
+#}
+}
 model.diag <- do.call(rbind, model.diags)
 model.diag %>% group_by(SPCD, COMMON)|> gt()
 
@@ -1261,10 +1259,10 @@ glm.model.table <- data.frame(model.no = 1:49,
                                               "Relative Density",
                                               "elevation", 
                                               "N depostion (wet + dry)", 
-                                              "average annual growth", 
+                                              "diameter difference", 
                                               
                                               ## sequentially adding in each variable
-                                              "average annual growth + Diameter", 
+                                              "diameter difference + Diameter", 
                                               "exp(Diameter)", 
                                               "aspect", 
                                               "slope", 
@@ -1326,6 +1324,6 @@ ggsave("SPCD_glm_output/GLM_all_species_AIC_AUC.png", height = 5, width = 8)
 ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, McFadden.Rsq,  label = as.character(model.no)))+geom_text(size = 2)+facet_wrap(~SPCD, scales = "free_y")
 ggsave("SPCD_glm_output/GLM_all_species_AUC_Rsq.png", height = 5, width = 8)
 
-library(tinytable)
-tt(glm.model.table) |> save_tt("SPCD_glm_output/GLM_table.png")
+#library(gt)
+#glm.model.table |> gt() |> gtsave("SPCD_glm_output/GLM_table.png")
 write.csv(glm.model.table, "GLM_table.csv", quote = TRUE)
