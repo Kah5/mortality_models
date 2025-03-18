@@ -120,7 +120,7 @@ NE_plot %>% filter(PLOT.ID %in% unique(PLOT$PLOT.ID))
 
 colnames(NE_plot) <- tolower(colnames(NE_plot))
 colnames(NE_plot)[9:10] <- c("LAT_FIADB", "LONG_FIADB")
-colnames(NE_plot)[12] <- "PLOT.ID"
+colnames(NE_plot)[13] <- "PLOT.ID"
 
 NE_plot_ll <- left_join(PLOT, NE_plot)
 length(NE_plot_ll$LAT_FIADB)
@@ -255,9 +255,9 @@ saveRDS(TREE.remeas, "data/unfiltered_TREE.remeas.rds")
 TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0) %>% 
   #dplyr::select(PLOT.ID, state, spp, remper, status, DIA_DIFF, dbhold, dbhcur, crcls, point, state, county, pltnum, tree, date) %>%
   group_by(PLOT.ID, point, state, county, pltnum, tree, date) %>% 
-  mutate(annual.growth = ifelse(status %in% c(2, 3, 4) & ! is.na(dbhold) & ! remper == 0, 
+  mutate(annual.growth = ifelse(status %in% c(2, 4, 5) & ! is.na(dbhold) & ! remper == 0, 
                                 DIA_DIFF/(remper/2), DIA_DIFF/remper),
-         M = ifelse(status %in%  c(2, 3, 4), 1, 0), 
+         M = ifelse(status %in%  c(2, 4, 5), 1, 0), 
          relative.growth = (annual.growth/dbhold)*100) %>% ungroup() %>% 
   filter(SPCD %in% nspp[1:17,]$spp)%>%
   mutate(Tree.status = ifelse(M == 1, "dead", "live"), 
@@ -273,9 +273,9 @@ TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0) %>%
 TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0) %>% 
   #dplyr::select(PLOT.ID, state, spp, remper, status, DIA_DIFF, dbhold, dbhcur, crcls, point, state, county, pltnum, tree, date) %>%
   group_by(PLOT.ID, point, state, county, pltnum, tree, date) %>% 
-  mutate(annual.growth = ifelse(status %in% c(2, 3, 4) & ! is.na(dbhold) & ! remper == 0, 
+  mutate(annual.growth = ifelse(status %in% c(2, 4, 5) & ! is.na(dbhold) & ! remper == 0, 
                                 DIA_DIFF/(remper/2), DIA_DIFF/remper),
-         M = ifelse(status %in%  c(2, 3, 4), 1, 0), 
+         M = ifelse(status %in%  c(2, 4, 5), 1, 0), 
          relative.growth = (annual.growth/dbhold)*100) %>% ungroup() %>% 
   filter(SPCD %in% nspp[1:17,]$spp)%>%
   mutate(Tree.status = ifelse(M == 1, "dead", "live"), 
@@ -294,9 +294,9 @@ TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0) %>%
 TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0) %>% 
   #dplyr::select(PLOT.ID, state, spp, remper, status, DIA_DIFF, dbhold, dbhcur, crcls, point, state, county, pltnum, tree, date) %>%
   group_by(PLOT.ID, point, state, county, pltnum, tree, date) %>% 
-  mutate(annual.growth = ifelse(status %in% c(2, 3, 4) & ! is.na(dbhold) & ! remper == 0, 
+  mutate(annual.growth = ifelse(status %in% c(2, 4, 5) & ! is.na(dbhold) & ! remper == 0, 
                                 DIA_DIFF/(remper/2), DIA_DIFF/remper),
-         M = ifelse(status %in%  c(2, 3, 4), 1, 0), 
+         M = ifelse(status %in%  c(2, 4, 5), 1, 0), 
          relative.growth = (annual.growth/dbhold)*100) %>% ungroup() %>% 
   filter(SPCD %in% nspp[1:17,]$spp)%>%
   mutate(Tree.status = ifelse(M == 1, "dead", "live"), 
@@ -318,9 +318,9 @@ TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0) %>%
 TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) %>% 
   #dplyr::select(PLOT.ID, state, spp, remper, status, DIA_DIFF, dbhold, dbhcur, crcls, point, state, county, pltnum, tree, date) %>%
   group_by(PLOT.ID, point, state, county, pltnum, tree, date) %>% 
-  mutate(annual.growth = ifelse(status %in% c(2, 3, 4) & ! is.na(dbhold) & ! remper == 0, 
+  mutate(annual.growth = ifelse(status %in% c(2, 4, 5) & ! is.na(dbhold) & ! remper == 0, 
                                 DIA_DIFF/(remper/2), DIA_DIFF/remper),
-         M = ifelse(status %in%  c(2, 3, 4), 1, 0), 
+         M = ifelse(status %in%  c(2, 4, 5), 1, 0), 
          relative.growth = (annual.growth/dbhold)*100) %>% ungroup() %>% 
   filter(SPCD %in% nspp[1:17,]$spp)%>%
   mutate(Tree.status = ifelse(M == 1, "dead", "live"), 
@@ -345,9 +345,9 @@ TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) 
 TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) %>% 
   #dplyr::select(PLOT.ID, state, spp, remper, status, DIA_DIFF, dbhold, dbhcur, crcls, point, state, county, pltnum, tree, date) %>%
   group_by(PLOT.ID, point, state, county, pltnum, tree, date) %>% 
-  mutate(annual.growth = ifelse(status %in% c(2, 3, 4) & ! is.na(dbhold) & ! remper == 0, 
+  mutate(annual.growth = ifelse(status %in% c(2, 4, 5) & ! is.na(dbhold) & ! remper == 0, 
                                 DIA_DIFF/(remper/2), DIA_DIFF/remper),
-         M = ifelse(status %in%  c(2, 3, 4), 1, 0), 
+         M = ifelse(status %in%  c(2, 4, 5), 1, 0), 
          relative.growth = (annual.growth/dbhold)*100) %>% ungroup() %>% 
   filter(SPCD %in% nspp[1:17,]$spp)%>%
   mutate(Tree.status = ifelse(M == 1, "dead", "live"), 
@@ -361,9 +361,9 @@ ggsave("images/filtering_exploration/DIA_diff_hists.png")
 TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) %>% 
   #dplyr::select(PLOT.ID, state, spp, remper, status, DIA_DIFF, dbhold, dbhcur, crcls, point, state, county, pltnum, tree, date) %>%
   group_by(PLOT.ID, point, state, county, pltnum, tree, date) %>% 
-  mutate(annual.growth = ifelse(status %in% c(2, 3, 4) & ! is.na(dbhold) & ! remper == 0, 
+  mutate(annual.growth = ifelse(status %in% c(2, 4, 5) & ! is.na(dbhold) & ! remper == 0, 
                                 DIA_DIFF/(remper/2), DIA_DIFF/remper),
-         M = ifelse(status %in%  c(2, 3, 4), 1, 0), 
+         M = ifelse(status %in%  c(2, 4, 5), 1, 0), 
          relative.growth = (annual.growth/dbhold)*100) %>% ungroup() %>% 
   filter(SPCD %in% nspp[1:17,]$spp)%>%
   mutate(Tree.status = ifelse(M == 1, "dead", "live"), 
@@ -383,9 +383,9 @@ TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) 
  TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) %>% 
    #dplyr::select(PLOT.ID, state, spp, remper, status, DIA_DIFF, dbhold, dbhcur, crcls, point, state, county, pltnum, tree, date) %>%
    group_by(PLOT.ID, point, state, county, pltnum, tree, date) %>% 
-   mutate(annual.growth = ifelse(status %in% c(2, 3, 4) & ! is.na(dbhold) & ! remper == 0, 
+   mutate(annual.growth = ifelse(status %in% c(2, 4, 5) & ! is.na(dbhold) & ! remper == 0, 
                                  DIA_DIFF/(remper/2), DIA_DIFF/remper),
-          M = ifelse(status %in%  c(2, 3, 4), 1, 0), 
+          M = ifelse(status %in%  c(2, 4, 5), 1, 0), 
           relative.growth = (annual.growth/dbhold)*100) %>% ungroup() %>% 
    filter(SPCD %in% nspp[1:17,]$spp)%>%
    mutate(Tree.status = ifelse(M == 1, "dead", "live"), 
@@ -406,9 +406,9 @@ TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) 
  TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) %>% 
    #dplyr::select(PLOT.ID, state, spp, remper, status, DIA_DIFF, dbhold, dbhcur, crcls, point, state, county, pltnum, tree, date) %>%
    group_by(PLOT.ID, point, state, county, pltnum, tree, date) %>% 
-   mutate(annual.growth = ifelse(status %in% c(2, 3, 4) & ! is.na(dbhold) & ! remper == 0, 
+   mutate(annual.growth = ifelse(status %in% c(2, 4, 5) & ! is.na(dbhold) & ! remper == 0, 
                                  DIA_DIFF/(remper/2), DIA_DIFF/remper),
-          M = ifelse(status %in%  c(2, 3, 4), 1, 0), 
+          M = ifelse(status %in%  c(2, 4, 5), 1, 0), 
           relative.growth = (annual.growth/dbhold)*100) %>% ungroup() %>% 
    filter(SPCD %in% nspp[1:17,]$spp)%>%
    mutate(Tree.status = ifelse(M == 1, "dead", "live"), 
@@ -422,45 +422,85 @@ TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) 
  
  
  
- nspp.nosmall <- TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) %>%
+ nspp.nosmall <- TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 3) %>%
    filter(dbhold >= 5)%>%
    group_by(spp) %>% summarise(n()) %>% arrange(desc(`n()`))
  nspp.nosmall$Species <- FIESTA::ref_species[match(nspp.nosmall$spp, FIESTA::ref_species$SPCD),]$COMMON_NAME
- nspp.nosmall[1:17,] |> gt()gtsave("images/filtering_exploration/total_trees_top_17_no_small.png")
+ nspp.nosmall[1:17,] |> gt()|> gtsave("images/filtering_exploration/total_trees_top_17_no_small.png")
  
  # filtering out all zero and negative diameter diff
- nspp.nosmall <- TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) %>%
+ nspp.nosmall <- TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 3) %>%
    filter(dbhold >= 5 & DIA_DIFF > 0 & !status ==3)%>%
    mutate(  M = ifelse(status %in%  c(2, 3, 4, 5), 1, 0))%>%
    group_by(spp, M) %>% summarise(n()) %>% arrange(desc(`n()`)) %>% spread(M, `n()`)
  nspp.nosmall$Species <- FIESTA::ref_species[match(nspp.nosmall$spp, FIESTA::ref_species$SPCD),]$COMMON_NAME
- nspp.nosmall %>% filter(spp %in% nspp[1:17,]$spp) %>% ungroup() |> gt()#%>% gtsave("images/filtering_exploration/total_trees_top_17_no_small_no_negative_dia_dif.png")
+ nspp.nosmall %>% filter(spp %in% nspp[1:17,]$spp) %>% ungroup() |> gt()|>
+   gtsave("images/filtering_exploration/total_trees_top_17_no_small_no_negative_no_zero_dia_dif.png")
  
  # filtering out all negative diameter diff
- nspp.nosmall.inc.zero <- TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) %>%
+ nspp.nosmall.inc.zero <- TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 3) %>%
    filter(dbhold >= 5 & DIA_DIFF >= 0 & !status ==3)%>%
    mutate(  M = ifelse(status %in%  c(2, 3, 4, 5), 1, 0))%>%
    group_by(spp, M) %>% summarise(n()) %>% arrange(desc(`n()`)) %>% spread(M, `n()`)
  nspp.nosmall.inc.zero$Species <- FIESTA::ref_species[match(nspp.nosmall.inc.zero$spp, FIESTA::ref_species$SPCD),]$COMMON_NAME
- nspp.nosmall.inc.zero %>% filter(spp %in% nspp[1:17,]$spp) %>% ungroup() |> gt()#%>% gtsave("images/filtering_exploration/total_trees_top_17_no_small_no_negative_dia_dif.png")
+ nspp.nosmall.inc.zero %>% filter(spp %in% nspp[1:17,]$spp) %>% ungroup() |> gt()|>
+   gtsave("images/filtering_exploration/total_trees_top_17_no_small_no_negative_dia_dif.png")
  
  
  
- nspp.nosmall <- TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) %>%
-   filter(dbhold >= 5 & DIA_DIFF > 0)%>%
+ nspp.nosmall <- TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 3) %>%
+   filter(dbhold >= 5 & DIA_DIFF >= 0)%>%
    group_by(spp, status) %>% summarise(n()) %>% arrange(desc(`n()`))
  nspp.nosmall$Species <- FIESTA::ref_species[match(nspp.nosmall$spp, FIESTA::ref_species$SPCD),]$COMMON_NAME
  nspp %>% ungroup() |> gt()
  
+ # omitting all the small trees removes balsam fir and adds sweet birch--balsam fir has alot of mortality in the dataset
+ # Keep the original species list?
+ nspp[1:17,]$Species
+ nspp.nosmall[1:17,]$Species
+ 
+ 
+ ################################################################################
+ # Actual filtering for mortality models
+ mort.model.data.all <- TREE.remeas %>% 
+  # for each tree caclulate annual growth if dbhold is not NA and the remper is > 0
+   group_by(PLOT.ID, point, state, county, pltnum, tree, date) %>% 
+   
+   # for dead trees (dead, non-salvable dead, and snags), calculate annual growth as diameter diff/ half of remper
+   # for live trees, calculate annual growht as diamber diff/remper
+   mutate(annual.growth = ifelse(status %in% c(2,  4, 5) & ! is.na(dbhold) & ! remper == 0, 
+                                 DIA_DIFF/(remper/2), DIA_DIFF/remper),
+          M = ifelse(status %in%  c(2, 4, 5), 1, 0), # if a tree is dead, non-salvable deead or a snag, mark as dead
+          relative.growth = (annual.growth/dbhold)*100) %>% ungroup() %>% 
+   # acutal filtering section
+   filter( exprem > 0 & # if exprem == 0, these could be modeled plots?
+          dbhold >= 5 & # need an initial dbh greater than 5
+          ! remper == 0 & # if remper is listed as zero, filter out
+          DIA_DIFF >= 0 & # filter out diameter differences >= 0
+          !status == 3 & # remove cut trees
+          SPCD %in% nspp[1:17,]$spp)%>% # filter species in the top 17 of all species
+   mutate(Tree.status = ifelse(M == 1, "dead", "live"), # add some labels to ID all dead trees
+          DIAMETER_diff = ifelse(DIA_DIFF > 0, "positive", 
+                                 ifelse(DIA_DIFF == 0,"zero", "negative")))
+ 
+ ggplot(mort.model.data.all, aes(x = DIA_DIFF, fill = Tree.status))+geom_histogram(position = "identity", alpha = 0.7)+
+   facet_wrap(~Species, scales = "free")
+ ggsave("images/filtering_exploration/DIA_diff_species_histograms.png", height = 6, width = 10)
+ 
+ mort.model.data.all %>% group_by(Species, Tree.status) %>% 
+   summarise(`# of trees` = n(), 
+             `mean diameter difference (in)` = mean (DIA_DIFF))|> gt() |> 
+   gtsave("images/filtering_exploration/diameter_difference_ntrees.png")
+ 
  ###################################################################
  # sample logistic regression with just dia_diff and growth
  ###################################################################
- glm.data.all <- TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) %>% 
+ glm.data.all <- TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 3) %>% 
    #dplyr::select(PLOT.ID, state, spp, remper, status, DIA_DIFF, dbhold, dbhcur, crcls, point, state, county, pltnum, tree, date) %>%
    group_by(PLOT.ID, point, state, county, pltnum, tree, date) %>% 
-   mutate(annual.growth = ifelse(status %in% c(2, 3, 4) & ! is.na(dbhold) & ! remper == 0, 
+   mutate(annual.growth = ifelse(status %in% c(2,  4, 5) & ! is.na(dbhold) & ! remper == 0, 
                                  DIA_DIFF/(remper/2), DIA_DIFF/remper),
-          M = ifelse(status %in%  c(2, 3, 4), 1, 0), 
+          M = ifelse(status %in%  c(2, 4, 5), 1, 0), 
           relative.growth = (annual.growth/dbhold)*100) %>% ungroup() %>% 
    filter(SPCD %in% nspp[1:17,]$spp)%>%
    mutate(Tree.status = ifelse(M == 1, "dead", "live"), 
@@ -468,7 +508,23 @@ TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) 
                                  ifelse(DIA_DIFF == 0,"zero", "negative")))
  
  
- glm()
+ glm(data = glm.data.all, formula = M ~ relative.growth, family = "binomial")
+ 
+ # REMOVE ALL ZERO GROWTH TREES
+ glm.data.non.zero.growth <- TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 3) %>% 
+   #dplyr::select(PLOT.ID, state, spp, remper, status, DIA_DIFF, dbhold, dbhcur, crcls, point, state, county, pltnum, tree, date) %>%
+   group_by(PLOT.ID, point, state, county, pltnum, tree, date) %>% 
+   mutate(annual.growth = ifelse(status %in% c(2,  4, 5) & ! is.na(dbhold) & ! remper == 0, 
+                                 DIA_DIFF/(remper/2), DIA_DIFF/remper),
+          M = ifelse(status %in%  c(2, 4, 5), 1, 0), 
+          relative.growth = (annual.growth/dbhold)*100) %>% ungroup() %>% 
+   filter(SPCD %in% nspp[1:17,]$spp)%>%
+   mutate(Tree.status = ifelse(M == 1, "dead", "live"), 
+          DIAMETER_diff = ifelse(DIA_DIFF > 0, "positive", 
+                                 ifelse(DIA_DIFF == 0,"zero", "negative"))) %>% 
+   filter(annual.growth > 0)
+ 
+ glm(data = glm.data.non.zero.growth, formula = M ~ relative.growth, family = "binomial")
  
  
  
@@ -476,29 +532,38 @@ TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) 
  
  
  
- 
- 
-#View(TREE.remeas2)
-#unique(TREE.remeas %>% filter(dbhcur > 100)%>% select(state, dat
-# filter out the trees that are not modeled exprem > 0 and 
-TREE_growth.mort <- TREE.remeas %>% filter(DIA_DIFF >= 0 & exprem > 0 & dbhold > 0 & ! remper == 0) %>% 
-  #dplyr::select(PLOT.ID, state, spp, remper, status, DIA_DIFF, dbhold, dbhcur, crcls, point, state, county, pltnum, tree, date) %>%
-  group_by(PLOT.ID, point, state, county, pltnum, tree, date) %>% 
-  mutate(annual.growth = ifelse(status %in% c(2, 3, 4) & ! is.na(dbhold) & ! remper == 0, 
+
+TREE_growth.mort <- TREE.remeas %>% 
+  # for dead trees (dead, non-salvable dead, and snags), calculate annual growth as diameter diff/ half of remper
+  # for live trees, calculate annual growth as diameterr diff/remper
+  mutate(annual.growth = ifelse(status %in% c(2,  4, 5) & ! is.na(dbhold) & ! remper == 0, 
                                 DIA_DIFF/(remper/2), DIA_DIFF/remper),
-         M = ifelse(status %in%  c(2, 3, 4), 1, 0), 
-         relative.growth = (annual.growth/dbhold)*100)
-#hist(TREE_growth.mort$annual.growth)
+         M = ifelse(status %in%  c(2, 4, 5), 1, 0), # if a tree is dead, non-salvagable dead or a snag, mark as dead
+         relative.growth = (annual.growth/dbhold)*100) %>% ungroup() %>% 
+  # actual filtering section
+  filter( exprem > 0 & # if exprem == 0, these could be modeled plots?
+            dbhold >= 5 & # need an initial dbh greater than 5
+            ! remper == 0 & # if remper is listed as zero, filter out
+            DIA_DIFF >= 0 & # filter out diameter differences >= 0
+            !status == 3 & # remove cut trees
+            SPCD %in% nspp[1:17,]$spp & # filter species in the top 17 of all species
+          !is.na(status) & # filter out trees with no status
+            !is.na(elev) &# filter out plots with no FIADB lat long for elevation
+          !is.na(relative.growth)) # remove any trees with NA for growth
+ 
 
-# # revised model
-# TREE_remeas <- readRDS("data/periodic.nonharvest.data.RDS")
-# summary(TREE_remeas$ba)
-# # get the annualized growth rate:
-# 
-# TREE_remeas$INVYR <- substr(TREE_remeas$mdate, 1,2)
-# TREE_remeas$DIA_DIFF <- TREE_remeas$dbhcur - TREE_remeas$dbhold
-# hist(TREE_remeas$DIA_DIFF)
+TREE_growth.mort %>% ungroup()%>% group_by(stname) %>% 
+  mutate(maxINVYR = max(date, na.rm = TRUE))%>%
+  filter(date == maxINVYR)%>% summarise(n())
 
+TREE_growth.mort %>% ungroup()%>% group_by(stname) %>% 
+  mutate(maxINVYR = max(date, na.rm = TRUE))%>%
+  summarise(n())
+
+TREE_growth.mort %>% filter(stname %in% "NY") %>% select(date) %>% distinct()
+TREE_growth.mort %>% filter(stname %in% "NH") %>% select(date) %>% distinct()
+TREE_growth.mort %>% filter(stname %in% "VT") %>% select(date) %>% distinct()
+TREE_growth.mort %>% filter(stname %in% "ME") %>% select(date) %>% distinct()
 
 hist(TREE_growth.mort$annual.growth)
 head(TREE_growth.mort$spp)
@@ -506,7 +571,7 @@ head(TREE_growth.mort$spp)
 # join up with si information from PLOT
 
 
-cleaned.data <- TREE_growth.mort %>% filter(!is.na(annual.growth) & !is.na(status) & DIA_DIFF >=0 & !is.na(elev) )
+cleaned.data <- TREE_growth.mort 
 # View(cleaned.data %>% group_by(M, spp) %>% summarise(n()))
 # View(cleaned.data %>% group_by(M, state) %>% summarise(n()))
 # View(cleaned.data %>% group_by(M) %>% summarise(n()))
@@ -677,7 +742,7 @@ cleaned.data <- TREE_growth.cov %>% filter(!is.na(annual.growth) & !is.na(status
 
 
 summary(cleaned.data$elev)
-saveRDS(cleaned.data, "data/cleaned.data.mortality.TRplots.RDS")
+saveRDS(cleaned.data, "data/cleaned.data.mortality.TRplots_noN.RDS")
 
 #----------------------------------------------------------------------
 # Get the N deposition data for all the plots
@@ -727,7 +792,7 @@ png(height = 6, width = 10, units = "in", res = 150, "images/Ndep_map_trees_NE_F
 map.ndep.trees
 dev.off()
 
-saveRDS(cleaned.data, "data/cleaned.data.mortality.TRplots.RDS")
+saveRDS(cleaned.data, "data/cleaned.data.mortality.TRplots_N.RDS")
 
 
 #----------------------------------------------------------------
@@ -747,7 +812,7 @@ summary(TREE$crcls)
 unique(TREE$crcls)
 
 
-PLOT <- read_delim("data/formatted_older_matching_plts_PLOT.txt")
+PLOT <- read_delim(paste0(boxdir,"data/formatted_older_matching_plts_PLOT.txt"))
 colnames(PLOT)
 summary(PLOT$ba)
 PLOT$typcur
@@ -762,7 +827,7 @@ PLOT.tpa.all <- PLOT.tpa %>% dplyr::select(state, county, pltnum,SPCD, typcur, b
 
 unique(PLOT.tpa.all$typcur)
 
-cleaned.data <- readRDS( "data/cleaned.data.mortality.TRplots.RDS")
+#cleaned.data <- readRDS( "data/cleaned.data.mortality.TRplots.RDS")
 test.m <- left_join(cleaned.data, PLOT[, c("state", "county", "pltnum", "typcur")])
 
 
@@ -816,6 +881,14 @@ cleaned.data2 <- cleaned.data2  %>% ungroup() %>%
 
 saveRDS(cleaned.data2, "data/cleaned.data.mortality.TRplots.RDS")
 ggplot(cleaned.data2, aes(x = LONG_FIADB, y = LAT_FIADB))+geom_point()
+
+
+
+summary(cleaned.data2$DIA_DIFF)
+summary(cleaned.data2$remper)
+summary(cleaned.data2$elev)
+summary(cleaned.data2$volfac)
+
 
 unique(cleaned.data2$SPCD)
 colnames(cleaned.data2)
