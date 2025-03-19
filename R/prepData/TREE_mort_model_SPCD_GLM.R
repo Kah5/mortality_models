@@ -5,6 +5,8 @@ library(tidyverse)
 library(gt)
 library(FIESTA)
 library(dplyr)
+library(ggcorrplot)
+library(car)
 
 options(mc.cores = parallel::detectCores())
 #saveRDS(cleaned.data2, "data/cleaned.data.mortality.TRplots.RDS")
@@ -211,7 +213,11 @@ for(i in 1:length(SPCD.df$SPCD)){
                                  BA = mod.data$BA, 
                                  RD = mod.data$RD, 
                                  elev = mod.data$elev, 
-                                 Ndep = mod.data$Ndep)
+                                 Ndep = mod.data$Ndep, 
+                                 SPCD.BA = mod.data$SPCD.BA,
+                                 non_SPCD.BA = mod.data$non_SPCD.BA.scaled,
+                                 prop.focal.ba = mod.data$prop.focal.ba.scaled 
+                                 )
     
     test.covariate.data <- data.frame(M = test.data$M,
                                       annual.growth = mod.data$annual_growth_test, 
@@ -232,7 +238,10 @@ for(i in 1:length(SPCD.df$SPCD)){
                                       BA = mod.data$PHYSIO_test, 
                                       RD = mod.data$RD_test, 
                                       elev = mod.data$elev_test, 
-                                      Ndep = mod.data$Ndep_test)
+                                      Ndep = mod.data$Ndep_test, 
+                                      SPCD.BA = mod.data$SPCD.BA_test,
+                                      non_SPCD.BA = mod.data$non_SPCD.BA.scaled_test,
+                                      prop.focal.ba = mod.data$prop.focal.ba.scaled_test )
     
    
   
@@ -248,14 +257,15 @@ for(i in 1:length(SPCD.df$SPCD)){
   glm.J <-  glm(M ~ RD , data = covariate.data, family = "binomial")
   glm.K <-  glm(M ~ elev, data = covariate.data, family = "binomial")
   glm.L <-  glm(M ~ Ndep, data = covariate.data, family = "binomial")
+  glm.M <-  glm(M ~ SPCD.BA, data = covariate.data, family = "binomial")
+  glm.N <-  glm(M ~ non_SPCD.BA, data = covariate.data, family = "binomial")
+  glm.O <-  glm(M ~ prop.focal.ba, data = covariate.data, family = "binomial")
   
-  # ggplot(data = covariate.data, aes(M, annual.growth))+geom_point()
-  # ggplot(data = covariate.data, aes(M, dia.diff))+geom_point()
-  # 
+  
+ 
   glm.1 <-  glm(M ~ dia.diff, data = covariate.data, family = "binomial")
   glm.2 <-  glm(M ~ dia.diff + DIA, data = covariate.data, family = "binomial")
   glm.3 <-  glm(M ~ dia.diff + DIA + exp(DIA), data = covariate.data, family = "binomial")
-  #glm.2c <-  glm(M ~ dia.diff + DIA + (DIA)^2, data = covariate.data, family = "binomial")
   
   glm.4 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect, data = covariate.data, family = "binomial")
   glm.5 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope , data = covariate.data, family = "binomial")
@@ -264,12 +274,12 @@ for(i in 1:length(SPCD.df$SPCD)){
   glm.7 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                 + MATmin , data = covariate.data, family = "binomial")
   glm.8 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
-                + MATmin+ MATmax , data = covariate.data, family = "binomial")
+                + MATmin + MATmax , data = covariate.data, family = "binomial")
   glm.9 <-  glm(M ~ dia.diff + DIA + exp(DIA) + aspect + slope + MATmax 
-                + MATmin+ MAP , data = covariate.data, family = "binomial")
+                + MATmin + MAP , data = covariate.data, family = "binomial")
   
   glm.10 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
-                + MATmin+ MAP + MATmaxanom , data = covariate.data, family = "binomial")
+                + MATmin + MAP + MATmaxanom , data = covariate.data, family = "binomial")
   
   glm.11 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                 + MATmin+ MAP + MATmaxanom 
@@ -314,14 +324,33 @@ for(i in 1:length(SPCD.df$SPCD)){
                   + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD +
                     elev + Ndep, data = covariate.data, family = "binomial")
    
+   # add in the 3 additional variables
+   glm.20.a <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
+                  + MATmin+ MAP + MATmaxanom 
+                  + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD +
+                    elev + Ndep + SPCD.BA, data = covariate.data, family = "binomial")
+   
+   glm.20.b <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
+                    + MATmin+ MAP + MATmaxanom 
+                    + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD +
+                      elev + Ndep + SPCD.BA + non_SPCD.BA, data = covariate.data, family = "binomial")
+   
+   glm.20.c <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
+                    + MATmin+ MAP + MATmaxanom 
+                    + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD +
+                      elev + Ndep + SPCD.BA + non_SPCD.BA + prop.focal.ba, data = covariate.data, family = "binomial")
+   
+   
    glm.21 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                   + MATmin+ MAP + MATmaxanom 
                   + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
-                    # annual growth interactcovarions
+                   SPCD.BA + non_SPCD.BA + prop.focal.ba +
+                      # annual growth interactcovarions
                     DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
                   + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
                   + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
-                    +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff, data = covariate.data, family = "binomial")
+                    +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
+                    SPCD.BA*dia.diff + non_SPCD.BA*dia.diff + prop.focal.ba*dia.diff , data = covariate.data, family = "binomial")
    
    
 
@@ -329,762 +358,1099 @@ for(i in 1:length(SPCD.df$SPCD)){
   glm.22 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                  + MATmin+ MAP + MATmaxanom 
                  + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
-                   # annual growth interactions
+                   SPCD.BA + non_SPCD.BA + prop.focal.ba +
+                   # annual growth interactcovarions
                    DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
                  + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
-                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
-                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff+ elev*dia.diff + Ndep*dia.diff+ 
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
+                   SPCD.BA*dia.diff + non_SPCD.BA*dia.diff + prop.focal.ba*dia.diff +
                    # all diameter interactions
                   aspect*DIA  + slope*DIA  + MATmax*DIA  
                  + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
                  + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
-                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA, data = covariate.data, family = "binomial")
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA +
+                   SPCD.BA*DIA + non_SPCD.BA*DIA + prop.focal.ba*DIA , data = covariate.data, family = "binomial")
   
   glm.23 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                  + MATmin+ MAP + MATmaxanom 
                  + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
-                   # annual growth interactions
+                   SPCD.BA + non_SPCD.BA + prop.focal.ba +
+                   # annual growth interactcovarions
                    DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
                  + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
-                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
-                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff+ elev*dia.diff + Ndep*dia.diff + 
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
+                   SPCD.BA*dia.diff + non_SPCD.BA*dia.diff + prop.focal.ba*dia.diff +
                    # all diameter interactions
                    aspect*DIA  + slope*DIA  + MATmax*DIA  
                  + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
-                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
-                   
-                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA +
+                   SPCD.BA*DIA + non_SPCD.BA*DIA + prop.focal.ba*DIA + 
                    # all aspect interactions
                    slope*aspect  + MATmax*aspect  
                  + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
                  + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect +
-                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect, data = covariate.data, family = "binomial")
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect+
+                   SPCD.BA*aspect + non_SPCD.BA*aspect + prop.focal.ba*aspect, data = covariate.data, family = "binomial")
   
   
   
   glm.24 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                  + MATmin+ MAP + MATmaxanom 
                  + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
-                   # annual growth interactions
+                   SPCD.BA + non_SPCD.BA + prop.focal.ba +
+                   # annual growth interactcovarions
                    DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
                  + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
-                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
                    +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
+                   SPCD.BA*dia.diff + non_SPCD.BA*dia.diff + prop.focal.ba*dia.diff +
                    # all diameter interactions
                    aspect*DIA  + slope*DIA  + MATmax*DIA  
                  + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
-                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
-                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA + 
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA +
+                   SPCD.BA*DIA + non_SPCD.BA*DIA + prop.focal.ba*DIA + 
                    # all aspect interactions
                    slope*aspect  + MATmax*aspect  
                  + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
-                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
-                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect +
+                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect +
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect+
+                   SPCD.BA*aspect + non_SPCD.BA*aspect + prop.focal.ba*aspect +
                    # all slope interactions
                     MATmax*slope  
                  + MATmin*slope  + MAP*slope  + MATmaxanom*slope  
                  + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope + 
-                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope, data = covariate.data, family = "binomial")
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope +
+                   SPCD.BA*slope + non_SPCD.BA*slope + prop.focal.ba*slope, data = covariate.data, family = "binomial")
   
   glm.25 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                  + MATmin+ MAP + MATmaxanom 
-                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD+ elev + Ndep +
-                   # annual growth interactions
+                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   SPCD.BA + non_SPCD.BA + prop.focal.ba +
+                   # annual growth interactcovarions
                    DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
                  + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
-                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
-                    PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
+                   SPCD.BA*dia.diff + non_SPCD.BA*dia.diff + prop.focal.ba*dia.diff +
                    # all diameter interactions
                    aspect*DIA  + slope*DIA  + MATmax*DIA  
                  + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
-                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
-                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA + 
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA +
+                   SPCD.BA*DIA + non_SPCD.BA*DIA + prop.focal.ba*DIA + 
                    # all aspect interactions
                    slope*aspect  + MATmax*aspect  
                  + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
-                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
-                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect +
+                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect +
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect+
+                   SPCD.BA*aspect + non_SPCD.BA*aspect + prop.focal.ba*aspect +
                    # all slope interactions
                    MATmax*slope  
                  + MATmin*slope  + MAP*slope  + MATmaxanom*slope  
-                 + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
-                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
+                 + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope + 
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope +
+                   SPCD.BA*slope + non_SPCD.BA*slope + prop.focal.ba*slope+ 
                     # all MATmax interactions
                    
                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  
                  + MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax +
-                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax +  Ndep*MATmax, data = covariate.data, family = "binomial")
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax +  Ndep*MATmax +
+                   SPCD.BA*MATmax + non_SPCD.BA*MATmax + prop.focal.ba*MATmax, data = covariate.data, family = "binomial")
   
   
   glm.26 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
                  + MATmin+ MAP + MATmaxanom 
-                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD+ elev + Ndep + 
-                   # annual growth interactions
+                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   SPCD.BA + non_SPCD.BA + prop.focal.ba +
+                   # annual growth interactcovarions
                    DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
                  + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
                  + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
-                     PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
+                   SPCD.BA*dia.diff + non_SPCD.BA*dia.diff + prop.focal.ba*dia.diff +
                    # all diameter interactions
                    aspect*DIA  + slope*DIA  + MATmax*DIA  
                  + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
-                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
-                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA +
+                   SPCD.BA*DIA + non_SPCD.BA*DIA + prop.focal.ba*DIA + 
                    # all aspect interactions
                    slope*aspect  + MATmax*aspect  
                  + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
-                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
-                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect + 
-                    # all slope interactions
+                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect +
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect+
+                   SPCD.BA*aspect + non_SPCD.BA*aspect + prop.focal.ba*aspect +
+                   # all slope interactions
                    MATmax*slope  
                  + MATmin*slope  + MAP*slope  + MATmaxanom*slope  
-                 + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
-                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
-                     # all MATmax interactions
+                 + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope + 
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope +
+                   SPCD.BA*slope + non_SPCD.BA*slope + prop.focal.ba*slope+ 
+                   # all MATmax interactions
                    
                    MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  
-                 + MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
-                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax + 
+                 + MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax +
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax +  Ndep*MATmax +
+                   SPCD.BA*MATmax + non_SPCD.BA*MATmax + prop.focal.ba*MATmax+ 
                     # all MATmin interactions
                    
                    MAP*MATmin + MATminanom*MATmin
                  + MATminanom*MATmin + MAPanom*MATmin + BAL*MATmin + damage*MATmin + si*MATmin +
-                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin, data = covariate.data, family = "binomial")
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin +
+                   SPCD.BA*MATmin + non_SPCD.BA*MATmin + prop.focal.ba*MATmin, data = covariate.data, family = "binomial")
   
 
                    
-  glm.27 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax +
-                 MATmin+ MAP + MATmaxanom +
-                 MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
-                   # annual growth interactions
-                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
-                  MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
-                  MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
-                     PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff+ elev*dia.diff + Ndep*dia.diff + 
-                   
+  glm.27 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
+                 + MATmin+ MAP + MATmaxanom 
+                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   SPCD.BA + non_SPCD.BA + prop.focal.ba +
+                   # annual growth interactcovarions
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
+                 + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
+                   SPCD.BA*dia.diff + non_SPCD.BA*dia.diff + prop.focal.ba*dia.diff +
                    # all diameter interactions
-                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
-                 MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
-                  MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
-                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  
+                 + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA +
+                   SPCD.BA*DIA + non_SPCD.BA*DIA + prop.focal.ba*DIA + 
                    # all aspect interactions
-                   slope*aspect  + MATmax*aspect  +
-                  MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
-                 MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
-                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect +
-                    # all slope interactions
-                   MATmax*slope +  
-                 MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
-                  MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
-                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
-                    # all MATmax interactions
+                   slope*aspect  + MATmax*aspect  
+                 + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
+                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect +
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect+
+                   SPCD.BA*aspect + non_SPCD.BA*aspect + prop.focal.ba*aspect +
+                   # all slope interactions
+                   MATmax*slope  
+                 + MATmin*slope  + MAP*slope  + MATmaxanom*slope  
+                 + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope + 
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope +
+                   SPCD.BA*slope + non_SPCD.BA*slope + prop.focal.ba*slope+ 
+                   # all MATmax interactions
                    
-                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
-                  MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
-                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax + 
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  
+                 + MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax +
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax +  Ndep*MATmax +
+                   SPCD.BA*MATmax + non_SPCD.BA*MATmax + prop.focal.ba*MATmax+ 
                    # all MATmin interactions
-                  MAP*MATmin+ MATminanom*MATmin +
-                  MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin + 
-                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin + 
+                   
+                   MAP*MATmin + MATminanom*MATmin
+                 + MATminanom*MATmin + MAPanom*MATmin + BAL*MATmin + damage*MATmin + si*MATmin +
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin +
+                   SPCD.BA*MATmin + non_SPCD.BA*MATmin + prop.focal.ba*MATmin+ 
                      # all MAP interatction
                   MATminanom*MAP +
                  MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP +
-                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP, data = covariate.data, family = "binomial")
+                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   SPCD.BA*MAP + non_SPCD.BA*MAP + prop.focal.ba*MAP, data = covariate.data, family = "binomial")
   
 
-  glm.28 <-  glm(M ~ dia.diff + DIA + exp(DIA) + aspect + slope + MATmax +
-                   MATmin+ MAP + MATmaxanom +
-                   MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
-                   # annual growth interactions
-                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
-                   MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
-                   MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
-                     PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
+  glm.28 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
+                 + MATmin+ MAP + MATmaxanom 
+                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   SPCD.BA + non_SPCD.BA + prop.focal.ba +
+                   # annual growth interactcovarions
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
+                 + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
+                   SPCD.BA*dia.diff + non_SPCD.BA*dia.diff + prop.focal.ba*dia.diff +
                    # all diameter interactions
-                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
-                   MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
-                   MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
-                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA + 
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  
+                 + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA +
+                   SPCD.BA*DIA + non_SPCD.BA*DIA + prop.focal.ba*DIA + 
                    # all aspect interactions
-                   slope*aspect  + MATmax*aspect  +
-                   MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
-                   MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
-                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect +
-                    # all slope interactions
-                   MATmax*slope +  
-                   MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
-                   MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
-                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
+                   slope*aspect  + MATmax*aspect  
+                 + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
+                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect +
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect+
+                   SPCD.BA*aspect + non_SPCD.BA*aspect + prop.focal.ba*aspect +
+                   # all slope interactions
+                   MATmax*slope  
+                 + MATmin*slope  + MAP*slope  + MATmaxanom*slope  
+                 + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope + 
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope +
+                   SPCD.BA*slope + non_SPCD.BA*slope + prop.focal.ba*slope+ 
                    # all MATmax interactions
                    
-                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
-                   MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
-                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax + 
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  
+                 + MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax +
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax +  Ndep*MATmax +
+                   SPCD.BA*MATmax + non_SPCD.BA*MATmax + prop.focal.ba*MATmax+ 
+                   # all MATmin interactions
                    
-                   # all MATmaxinteractions
-                   MAP*MATmin+ MATminanom*MATmin +
-                   MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin + 
+                   MAP*MATmin + MATminanom*MATmin
+                 + MATminanom*MATmin + MAPanom*MATmin + BAL*MATmin + damage*MATmin + si*MATmin +
                    PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin +
-                   
-                    # all MAP interatction
+                   SPCD.BA*MATmin + non_SPCD.BA*MATmin + prop.focal.ba*MATmin+ 
+                   # all MAP interatction
                    MATminanom*MAP +
-                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP+
-                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP + 
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP +
+                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   SPCD.BA*MAP + non_SPCD.BA*MAP + prop.focal.ba*MAP + 
                  
                  
                  # all MATminanom interatction
                  
                    MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
-                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom + Ndep*MATminanom, data = covariate.data, family = "binomial")
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom + Ndep*MATminanom +
+                   SPCD.BA*MATminanom + non_SPCD.BA*MATminanom + prop.focal.ba*MATminanom, data = covariate.data, family = "binomial")
   
-  glm.29 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax +
-                   MATmin+ MAP + MATmaxanom +
-                   MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
-                   # annual growth interactions
-                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
-                   MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
-                   MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  
-                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff  + Ndep*dia.diff +
+  glm.29 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
+                 + MATmin+ MAP + MATmaxanom 
+                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   SPCD.BA + non_SPCD.BA + prop.focal.ba +
+                   # annual growth interactcovarions
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
+                 + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
+                   SPCD.BA*dia.diff + non_SPCD.BA*dia.diff + prop.focal.ba*dia.diff +
                    # all diameter interactions
-                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
-                   MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
-                   MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
-                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  
+                 + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA +
+                   SPCD.BA*DIA + non_SPCD.BA*DIA + prop.focal.ba*DIA + 
                    # all aspect interactions
-                   slope*aspect  + MATmax*aspect  +
-                   MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
-                   MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
-                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect + 
-                     # all slope interactions
-                   MATmax*slope +  
-                   MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
-                   MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
+                   slope*aspect  + MATmax*aspect  
+                 + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
+                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect +
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect+
+                   SPCD.BA*aspect + non_SPCD.BA*aspect + prop.focal.ba*aspect +
+                   # all slope interactions
+                   MATmax*slope  
+                 + MATmin*slope  + MAP*slope  + MATmaxanom*slope  
+                 + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope + 
                    PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope +
+                   SPCD.BA*slope + non_SPCD.BA*slope + prop.focal.ba*slope+ 
                    # all MATmax interactions
                    
-                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
-                   MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
-                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax + 
-                   # all MATmaxinteractions
-                   MAP*MATmin+ MATminanom*MATmin +
-                   MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin +
-                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin + 
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  
+                 + MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax +
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax +  Ndep*MATmax +
+                   SPCD.BA*MATmax + non_SPCD.BA*MATmax + prop.focal.ba*MATmax+ 
+                   # all MATmin interactions
                    
+                   MAP*MATmin + MATminanom*MATmin
+                 + MATminanom*MATmin + MAPanom*MATmin + BAL*MATmin + damage*MATmin + si*MATmin +
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin +
+                   SPCD.BA*MATmin + non_SPCD.BA*MATmin + prop.focal.ba*MATmin+ 
                    # all MAP interatction
                    MATminanom*MAP +
-                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP+
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP +
                    PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   SPCD.BA*MAP + non_SPCD.BA*MAP + prop.focal.ba*MAP + 
                    
                    
                    # all MATminanom interatction
                    
                    MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
-                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom + Ndep*MATminanom + 
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom + Ndep*MATminanom +
+                   SPCD.BA*MATminanom + non_SPCD.BA*MATminanom + prop.focal.ba*MATminanom+ 
                     # all MATmaxanom interatction
                    
                  MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
-                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom, data = covariate.data, family = "binomial")
+                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom +
+                   SPCD.BA*MATmaxanom + non_SPCD.BA*MATmaxanom + prop.focal.ba*MATmaxanom, data = covariate.data, family = "binomial")
   
   
   
-  glm.30 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax +
-                   MATmin+ MAP + MATmaxanom +
-                   MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
-                   # annual growth interactions
-                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
-                   MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
-                   MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  
-                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
+  glm.30 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
+                 + MATmin+ MAP + MATmaxanom 
+                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   SPCD.BA + non_SPCD.BA + prop.focal.ba +
+                   # annual growth interactcovarions
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
+                 + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
+                   SPCD.BA*dia.diff + non_SPCD.BA*dia.diff + prop.focal.ba*dia.diff +
                    # all diameter interactions
-                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
-                   MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
-                   MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
-                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA + 
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  
+                 + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA +
+                   SPCD.BA*DIA + non_SPCD.BA*DIA + prop.focal.ba*DIA + 
                    # all aspect interactions
-                   slope*aspect  + MATmax*aspect  +
-                   MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
-                   MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
-                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect +
-                    # all slope interactions
-                   MATmax*slope +  
-                   MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
-                   MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
-                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
-                    # all MATmax interactions
+                   slope*aspect  + MATmax*aspect  
+                 + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
+                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect +
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect+
+                   SPCD.BA*aspect + non_SPCD.BA*aspect + prop.focal.ba*aspect +
+                   # all slope interactions
+                   MATmax*slope  
+                 + MATmin*slope  + MAP*slope  + MATmaxanom*slope  
+                 + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope + 
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope +
+                   SPCD.BA*slope + non_SPCD.BA*slope + prop.focal.ba*slope+ 
+                   # all MATmax interactions
                    
-                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
-                   MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
-                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax + 
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  
+                 + MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax +
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax +  Ndep*MATmax +
+                   SPCD.BA*MATmax + non_SPCD.BA*MATmax + prop.focal.ba*MATmax+ 
+                   # all MATmin interactions
                    
-                   # all MATmin  interactions
-                   MAP*MATmin+ MATminanom*MATmin +
-                   MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin +
-                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin + 
-                   
+                   MAP*MATmin + MATminanom*MATmin
+                 + MATminanom*MATmin + MAPanom*MATmin + BAL*MATmin + damage*MATmin + si*MATmin +
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin +
+                   SPCD.BA*MATmin + non_SPCD.BA*MATmin + prop.focal.ba*MATmin+ 
                    # all MAP interatction
                    MATminanom*MAP +
-                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP+
-                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP + 
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP +
+                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   SPCD.BA*MAP + non_SPCD.BA*MAP + prop.focal.ba*MAP + 
                    
                    
                    # all MATminanom interatction
                    
                    MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
-                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom + Ndep*MATminanom + 
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom + Ndep*MATminanom +
+                   SPCD.BA*MATminanom + non_SPCD.BA*MATminanom + prop.focal.ba*MATminanom+ 
                    # all MATmaxanom interatction
                    
                    MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
                    PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom +
+                   SPCD.BA*MATmaxanom + non_SPCD.BA*MATmaxanom + prop.focal.ba*MATmaxanom +
                    # all MAPanom interatction
                    
                    BAL*MAPanom + damage*MAPanom + si*MAPanom +
-                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom +elev*MAPanom + Ndep*MAPanom, data = covariate.data, family = "binomial")
+                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom +elev*MAPanom + Ndep*MAPanom+
+                   SPCD.BA*MAPanom + non_SPCD.BA*MAPanom + prop.focal.ba*MAPanom , data = covariate.data, family = "binomial")
   
-  glm.31 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax +
-                   MATmin+ MAP + MATmaxanom +
-                   MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
-                   # annual growth interactions
-                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
-                   MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
-                   MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
-                    PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
+  glm.31 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
+                 + MATmin+ MAP + MATmaxanom 
+                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   SPCD.BA + non_SPCD.BA + prop.focal.ba +
+                   # annual growth interactcovarions
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
+                 + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
+                   SPCD.BA*dia.diff + non_SPCD.BA*dia.diff + prop.focal.ba*dia.diff +
                    # all diameter interactions
-                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
-                   MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
-                   MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
-                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  
+                 + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA +
+                   SPCD.BA*DIA + non_SPCD.BA*DIA + prop.focal.ba*DIA + 
                    # all aspect interactions
-                   slope*aspect  + MATmax*aspect  +
-                   MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
-                   MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
-                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect + 
-                    # all slope interactions
-                   MATmax*slope +  
-                   MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
-                   MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
-                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
-                     # all MATmax interactions
-                   
-                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
-                   MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
-                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax +
-                   
-                   # all MATmaxinteractions
-                   MAP*MATmin+ MATminanom*MATmin +
-                   MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin + 
-                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin + 
-                   
-                   # all MAP interatction
-                   MATminanom*MAP +
-                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP+
-                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
-                   
-                   
-                   # all MATminanom interatction
-                   
-                   MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
-                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom  + Ndep*MATminanom +
-                    # all MATmaxanom interatction
-                   
-                   MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
-                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom + 
-                   # all MAPanom interatction
-                   
-                   BAL*MAPanom + damage*MAPanom + si*MAPanom +
-                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom + elev*MAPanom + Ndep*MAPanom + 
-                   # all BAL interatction
-                   
-                   damage*BAL + si*BAL + 
-                   PHYSIO*BAL + BA*BAL + RD*BAL +elev*BAL + Ndep*BAL, data = covariate.data, family = "binomial")
-  
-  glm.32 <-  glm(M ~  dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax +
-                   MATmin+ MAP + MATmaxanom +
-                   MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
-                   # annual growth interactions
-                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
-                   MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
-                   MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
-                   PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
-                   # all diameter interactions
-                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
-                   MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
-                   MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
-                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
-                   # all aspect interactions
-                   slope*aspect  + MATmax*aspect  +
-                   MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
-                   MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
-                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect + 
+                   slope*aspect  + MATmax*aspect  
+                 + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
+                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect +
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect+
+                   SPCD.BA*aspect + non_SPCD.BA*aspect + prop.focal.ba*aspect +
                    # all slope interactions
-                   MATmax*slope +  
-                   MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
-                   MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
-                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
+                   MATmax*slope  
+                 + MATmin*slope  + MAP*slope  + MATmaxanom*slope  
+                 + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope + 
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope +
+                   SPCD.BA*slope + non_SPCD.BA*slope + prop.focal.ba*slope+ 
                    # all MATmax interactions
                    
-                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
-                   MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
-                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax +
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  
+                 + MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax +
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax +  Ndep*MATmax +
+                   SPCD.BA*MATmax + non_SPCD.BA*MATmax + prop.focal.ba*MATmax+ 
+                   # all MATmin interactions
                    
-                   # all MATmaxinteractions
-                   MAP*MATmin+ MATminanom*MATmin +
-                   MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin + 
-                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin + 
-                   
+                   MAP*MATmin + MATminanom*MATmin
+                 + MATminanom*MATmin + MAPanom*MATmin + BAL*MATmin + damage*MATmin + si*MATmin +
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin +
+                   SPCD.BA*MATmin + non_SPCD.BA*MATmin + prop.focal.ba*MATmin+ 
                    # all MAP interatction
                    MATminanom*MAP +
-                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP+
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP +
                    PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   SPCD.BA*MAP + non_SPCD.BA*MAP + prop.focal.ba*MAP + 
                    
                    
                    # all MATminanom interatction
                    
                    MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
-                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom  + Ndep*MATminanom +
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom + Ndep*MATminanom +
+                   SPCD.BA*MATminanom + non_SPCD.BA*MATminanom + prop.focal.ba*MATminanom+ 
                    # all MATmaxanom interatction
                    
                    MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
-                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom + 
+                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom +
+                   SPCD.BA*MATmaxanom + non_SPCD.BA*MATmaxanom + prop.focal.ba*MATmaxanom +
                    # all MAPanom interatction
                    
                    BAL*MAPanom + damage*MAPanom + si*MAPanom +
-                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom + elev*MAPanom + Ndep*MAPanom + 
+                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom +elev*MAPanom + Ndep*MAPanom+
+                   SPCD.BA*MAPanom + non_SPCD.BA*MAPanom + prop.focal.ba*MAPanom  + 
                    # all BAL interatction
                    
                    damage*BAL + si*BAL + 
                    PHYSIO*BAL + BA*BAL + RD*BAL +elev*BAL + Ndep*BAL +
-                   # all remainingdamage interatction
-                   
-                   si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage, data = covariate.data, family = "binomial")
+                   SPCD.BA*BAL + non_SPCD.BA*BAL + prop.focal.ba*BAL, data = covariate.data, family = "binomial")
   
-  glm.33 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax +
-                   MATmin+ MAP + MATmaxanom +
-                   MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
-                   # annual growth interactions
-                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
-                   MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
-                   MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
-                   PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
+  glm.32 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
+                 + MATmin+ MAP + MATmaxanom 
+                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   SPCD.BA + non_SPCD.BA + prop.focal.ba +
+                   # annual growth interactcovarions
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
+                 + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
+                   SPCD.BA*dia.diff + non_SPCD.BA*dia.diff + prop.focal.ba*dia.diff +
                    # all diameter interactions
-                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
-                   MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
-                   MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
-                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  
+                 + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA +
+                   SPCD.BA*DIA + non_SPCD.BA*DIA + prop.focal.ba*DIA + 
                    # all aspect interactions
-                   slope*aspect  + MATmax*aspect  +
-                   MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
-                   MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
-                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect + 
+                   slope*aspect  + MATmax*aspect  
+                 + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
+                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect +
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect+
+                   SPCD.BA*aspect + non_SPCD.BA*aspect + prop.focal.ba*aspect +
                    # all slope interactions
-                   MATmax*slope +  
-                   MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
-                   MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
-                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
+                   MATmax*slope  
+                 + MATmin*slope  + MAP*slope  + MATmaxanom*slope  
+                 + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope + 
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope +
+                   SPCD.BA*slope + non_SPCD.BA*slope + prop.focal.ba*slope+ 
                    # all MATmax interactions
                    
-                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
-                   MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
-                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax +
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  
+                 + MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax +
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax +  Ndep*MATmax +
+                   SPCD.BA*MATmax + non_SPCD.BA*MATmax + prop.focal.ba*MATmax+ 
+                   # all MATmin interactions
                    
-                   # all MATmaxinteractions
-                   MAP*MATmin+ MATminanom*MATmin +
-                   MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin + 
-                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin + 
-                   
+                   MAP*MATmin + MATminanom*MATmin
+                 + MATminanom*MATmin + MAPanom*MATmin + BAL*MATmin + damage*MATmin + si*MATmin +
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin +
+                   SPCD.BA*MATmin + non_SPCD.BA*MATmin + prop.focal.ba*MATmin+ 
                    # all MAP interatction
                    MATminanom*MAP +
-                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP+
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP +
                    PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   SPCD.BA*MAP + non_SPCD.BA*MAP + prop.focal.ba*MAP + 
                    
                    
                    # all MATminanom interatction
                    
                    MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
-                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom  + Ndep*MATminanom +
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom + Ndep*MATminanom +
+                   SPCD.BA*MATminanom + non_SPCD.BA*MATminanom + prop.focal.ba*MATminanom+ 
                    # all MATmaxanom interatction
                    
                    MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
-                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom + 
+                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom +
+                   SPCD.BA*MATmaxanom + non_SPCD.BA*MATmaxanom + prop.focal.ba*MATmaxanom +
                    # all MAPanom interatction
                    
                    BAL*MAPanom + damage*MAPanom + si*MAPanom +
-                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom + elev*MAPanom + Ndep*MAPanom + 
+                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom +elev*MAPanom + Ndep*MAPanom+
+                   SPCD.BA*MAPanom + non_SPCD.BA*MAPanom + prop.focal.ba*MAPanom  + 
                    # all BAL interatction
                    
                    damage*BAL + si*BAL + 
                    PHYSIO*BAL + BA*BAL + RD*BAL +elev*BAL + Ndep*BAL +
+                   SPCD.BA*BAL + non_SPCD.BA*BAL + prop.focal.ba*BAL+
                    # all remainingdamage interatction
                    
-                   si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage+
-                   PHYSIO*si + BA*si + RD*si + elev*si + Ndep*si , data = covariate.data, family = "binomial")
+                   si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage +
+                   SPCD.BA*damage + non_SPCD.BA*damage + prop.focal.ba*damage, data = covariate.data, family = "binomial")
   
-  glm.34 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax +
-                   MATmin+ MAP + MATmaxanom +
-                   MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
-                   # annual growth interactions
-                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
-                   MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
-                   MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
-                   PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
+  glm.33 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
+                 + MATmin+ MAP + MATmaxanom 
+                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   SPCD.BA + non_SPCD.BA + prop.focal.ba +
+                   # annual growth interactcovarions
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
+                 + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
+                   SPCD.BA*dia.diff + non_SPCD.BA*dia.diff + prop.focal.ba*dia.diff +
                    # all diameter interactions
-                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
-                   MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
-                   MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
-                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  
+                 + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA +
+                   SPCD.BA*DIA + non_SPCD.BA*DIA + prop.focal.ba*DIA + 
                    # all aspect interactions
-                   slope*aspect  + MATmax*aspect  +
-                   MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
-                   MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
-                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect + 
+                   slope*aspect  + MATmax*aspect  
+                 + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
+                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect +
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect+
+                   SPCD.BA*aspect + non_SPCD.BA*aspect + prop.focal.ba*aspect +
                    # all slope interactions
-                   MATmax*slope +  
-                   MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
-                   MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
-                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
+                   MATmax*slope  
+                 + MATmin*slope  + MAP*slope  + MATmaxanom*slope  
+                 + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope + 
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope +
+                   SPCD.BA*slope + non_SPCD.BA*slope + prop.focal.ba*slope+ 
                    # all MATmax interactions
                    
-                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
-                   MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
-                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax +
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  
+                 + MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax +
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax +  Ndep*MATmax +
+                   SPCD.BA*MATmax + non_SPCD.BA*MATmax + prop.focal.ba*MATmax+ 
+                   # all MATmin interactions
                    
-                   # all MATmaxinteractions
-                   MAP*MATmin+ MATminanom*MATmin +
-                   MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin + 
-                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin + 
-                   
+                   MAP*MATmin + MATminanom*MATmin
+                 + MATminanom*MATmin + MAPanom*MATmin + BAL*MATmin + damage*MATmin + si*MATmin +
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin +
+                   SPCD.BA*MATmin + non_SPCD.BA*MATmin + prop.focal.ba*MATmin+ 
                    # all MAP interatction
                    MATminanom*MAP +
-                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP+
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP +
                    PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   SPCD.BA*MAP + non_SPCD.BA*MAP + prop.focal.ba*MAP + 
                    
                    
                    # all MATminanom interatction
                    
                    MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
-                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom  + Ndep*MATminanom +
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom + Ndep*MATminanom +
+                   SPCD.BA*MATminanom + non_SPCD.BA*MATminanom + prop.focal.ba*MATminanom+ 
                    # all MATmaxanom interatction
                    
                    MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
-                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom + 
+                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom +
+                   SPCD.BA*MATmaxanom + non_SPCD.BA*MATmaxanom + prop.focal.ba*MATmaxanom +
                    # all MAPanom interatction
                    
                    BAL*MAPanom + damage*MAPanom + si*MAPanom +
-                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom + elev*MAPanom + Ndep*MAPanom + 
+                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom +elev*MAPanom + Ndep*MAPanom+
+                   SPCD.BA*MAPanom + non_SPCD.BA*MAPanom + prop.focal.ba*MAPanom  + 
                    # all BAL interatction
                    
                    damage*BAL + si*BAL + 
                    PHYSIO*BAL + BA*BAL + RD*BAL +elev*BAL + Ndep*BAL +
+                   SPCD.BA*BAL + non_SPCD.BA*BAL + prop.focal.ba*BAL+
                    # all remainingdamage interatction
                    
-                   si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage+
-                   PHYSIO*si + BA*si + RD*si + elev*si + Ndep*si  +
-                    BA*PHYSIO + RD*PHYSIO + elev*PHYSIO + Ndep*PHYSIO, data = covariate.data, family = "binomial")
+                   si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage +
+                   SPCD.BA*damage + non_SPCD.BA*damage + prop.focal.ba*damage+
+                   
+                   PHYSIO*si + BA*si + RD*si + elev*si + Ndep*si +
+                   SPCD.BA*si + non_SPCD.BA*si + prop.focal.ba*si, data = covariate.data, family = "binomial")
   
-  
-  glm.35 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax +
-                   MATmin+ MAP + MATmaxanom +
-                   MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
-                   # annual growth interactions
-                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
-                   MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
-                   MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
-                   PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
+  glm.34 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
+                 + MATmin+ MAP + MATmaxanom 
+                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   SPCD.BA + non_SPCD.BA + prop.focal.ba +
+                   # annual growth interactcovarions
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
+                 + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
+                   SPCD.BA*dia.diff + non_SPCD.BA*dia.diff + prop.focal.ba*dia.diff +
                    # all diameter interactions
-                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
-                   MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
-                   MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
-                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  
+                 + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA +
+                   SPCD.BA*DIA + non_SPCD.BA*DIA + prop.focal.ba*DIA + 
                    # all aspect interactions
-                   slope*aspect  + MATmax*aspect  +
-                   MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
-                   MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
-                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect + 
+                   slope*aspect  + MATmax*aspect  
+                 + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
+                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect +
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect+
+                   SPCD.BA*aspect + non_SPCD.BA*aspect + prop.focal.ba*aspect +
                    # all slope interactions
-                   MATmax*slope +  
-                   MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
-                   MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
-                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
+                   MATmax*slope  
+                 + MATmin*slope  + MAP*slope  + MATmaxanom*slope  
+                 + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope + 
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope +
+                   SPCD.BA*slope + non_SPCD.BA*slope + prop.focal.ba*slope+ 
                    # all MATmax interactions
                    
-                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
-                   MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
-                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax +
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  
+                 + MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax +
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax +  Ndep*MATmax +
+                   SPCD.BA*MATmax + non_SPCD.BA*MATmax + prop.focal.ba*MATmax+ 
+                   # all MATmin interactions
                    
-                   # all MATmaxinteractions
-                   MAP*MATmin+ MATminanom*MATmin +
-                   MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin + 
-                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin + 
-                   
+                   MAP*MATmin + MATminanom*MATmin
+                 + MATminanom*MATmin + MAPanom*MATmin + BAL*MATmin + damage*MATmin + si*MATmin +
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin +
+                   SPCD.BA*MATmin + non_SPCD.BA*MATmin + prop.focal.ba*MATmin+ 
                    # all MAP interatction
                    MATminanom*MAP +
-                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP+
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP +
                    PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   SPCD.BA*MAP + non_SPCD.BA*MAP + prop.focal.ba*MAP + 
                    
                    
                    # all MATminanom interatction
                    
                    MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
-                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom  + Ndep*MATminanom +
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom + Ndep*MATminanom +
+                   SPCD.BA*MATminanom + non_SPCD.BA*MATminanom + prop.focal.ba*MATminanom+ 
                    # all MATmaxanom interatction
                    
                    MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
-                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom + 
+                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom +
+                   SPCD.BA*MATmaxanom + non_SPCD.BA*MATmaxanom + prop.focal.ba*MATmaxanom +
                    # all MAPanom interatction
                    
                    BAL*MAPanom + damage*MAPanom + si*MAPanom +
-                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom + elev*MAPanom + Ndep*MAPanom + 
+                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom +elev*MAPanom + Ndep*MAPanom+
+                   SPCD.BA*MAPanom + non_SPCD.BA*MAPanom + prop.focal.ba*MAPanom  + 
                    # all BAL interatction
                    
                    damage*BAL + si*BAL + 
                    PHYSIO*BAL + BA*BAL + RD*BAL +elev*BAL + Ndep*BAL +
+                   SPCD.BA*BAL + non_SPCD.BA*BAL + prop.focal.ba*BAL+
                    # all remainingdamage interatction
                    
-                   si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage+
-                   PHYSIO*si + BA*si + RD*si + elev*si + Ndep*si  +
-                   BA*PHYSIO + RD*PHYSIO + elev*PHYSIO + Ndep*PHYSIO + 
-                   BA*RD + elev*RD + Ndep*RD, data = covariate.data, family = "binomial")
+                   si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage +
+                   SPCD.BA*damage + non_SPCD.BA*damage + prop.focal.ba*damage+
+                   
+                   PHYSIO*si + BA*si + RD*si + elev*si + Ndep*si +
+                   SPCD.BA*si + non_SPCD.BA*si + prop.focal.ba*si+
+                    BA*PHYSIO + RD*PHYSIO + elev*PHYSIO + Ndep*PHYSIO+
+                   SPCD.BA*PHYSIO + non_SPCD.BA*PHYSIO + prop.focal.ba*PHYSIO, data = covariate.data, family = "binomial")
   
   
-  glm.36 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax +
-                   MATmin+ MAP + MATmaxanom +
-                   MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
-                   # annual growth interactions
-                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
-                   MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
-                   MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
-                   PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
+  glm.35 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
+                 + MATmin+ MAP + MATmaxanom 
+                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   SPCD.BA + non_SPCD.BA + prop.focal.ba +
+                   # annual growth interactcovarions
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
+                 + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
+                   SPCD.BA*dia.diff + non_SPCD.BA*dia.diff + prop.focal.ba*dia.diff +
                    # all diameter interactions
-                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
-                   MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
-                   MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
-                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  
+                 + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA +
+                   SPCD.BA*DIA + non_SPCD.BA*DIA + prop.focal.ba*DIA + 
                    # all aspect interactions
-                   slope*aspect  + MATmax*aspect  +
-                   MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
-                   MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
-                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect + 
+                   slope*aspect  + MATmax*aspect  
+                 + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
+                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect +
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect+
+                   SPCD.BA*aspect + non_SPCD.BA*aspect + prop.focal.ba*aspect +
                    # all slope interactions
-                   MATmax*slope +  
-                   MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
-                   MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
-                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
+                   MATmax*slope  
+                 + MATmin*slope  + MAP*slope  + MATmaxanom*slope  
+                 + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope + 
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope +
+                   SPCD.BA*slope + non_SPCD.BA*slope + prop.focal.ba*slope+ 
                    # all MATmax interactions
                    
-                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
-                   MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
-                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax +
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  
+                 + MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax +
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax +  Ndep*MATmax +
+                   SPCD.BA*MATmax + non_SPCD.BA*MATmax + prop.focal.ba*MATmax+ 
+                   # all MATmin interactions
                    
-                   # all MATmaxinteractions
-                   MAP*MATmin+ MATminanom*MATmin +
-                   MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin + 
-                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin + 
-                   
+                   MAP*MATmin + MATminanom*MATmin
+                 + MATminanom*MATmin + MAPanom*MATmin + BAL*MATmin + damage*MATmin + si*MATmin +
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin +
+                   SPCD.BA*MATmin + non_SPCD.BA*MATmin + prop.focal.ba*MATmin+ 
                    # all MAP interatction
                    MATminanom*MAP +
-                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP+
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP +
                    PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   SPCD.BA*MAP + non_SPCD.BA*MAP + prop.focal.ba*MAP + 
                    
                    
                    # all MATminanom interatction
                    
                    MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
-                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom  + Ndep*MATminanom +
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom + Ndep*MATminanom +
+                   SPCD.BA*MATminanom + non_SPCD.BA*MATminanom + prop.focal.ba*MATminanom+ 
                    # all MATmaxanom interatction
                    
                    MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
-                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom + 
+                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom +
+                   SPCD.BA*MATmaxanom + non_SPCD.BA*MATmaxanom + prop.focal.ba*MATmaxanom +
                    # all MAPanom interatction
                    
                    BAL*MAPanom + damage*MAPanom + si*MAPanom +
-                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom + elev*MAPanom + Ndep*MAPanom + 
+                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom +elev*MAPanom + Ndep*MAPanom+
+                   SPCD.BA*MAPanom + non_SPCD.BA*MAPanom + prop.focal.ba*MAPanom  + 
                    # all BAL interatction
                    
                    damage*BAL + si*BAL + 
                    PHYSIO*BAL + BA*BAL + RD*BAL +elev*BAL + Ndep*BAL +
+                   SPCD.BA*BAL + non_SPCD.BA*BAL + prop.focal.ba*BAL+
                    # all remainingdamage interatction
                    
-                   si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage+
-                   PHYSIO*si + BA*si + RD*si + elev*si + Ndep*si  +
-                   BA*PHYSIO + RD*PHYSIO + elev*PHYSIO + Ndep*PHYSIO + 
-                   BA*RD + elev*RD + Ndep*RD+
-                   elev*BA + Ndep*BA, data = covariate.data, family = "binomial")
+                   si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage +
+                   SPCD.BA*damage + non_SPCD.BA*damage + prop.focal.ba*damage+
+                   
+                   PHYSIO*si + BA*si + RD*si + elev*si + Ndep*si +
+                   SPCD.BA*si + non_SPCD.BA*si + prop.focal.ba*si+
+                   BA*PHYSIO + RD*PHYSIO + elev*PHYSIO + Ndep*PHYSIO+
+                   SPCD.BA*PHYSIO + non_SPCD.BA*PHYSIO + prop.focal.ba*PHYSIO+ 
+                   BA*RD + elev*RD + Ndep*RD +
+                   SPCD.BA*RD + non_SPCD.BA*RD + prop.focal.ba*RD, data = covariate.data, family = "binomial")
   
   
-  glm.37 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax +
-                   MATmin+ MAP + MATmaxanom +
-                   MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep +
-                   # annual growth interactions
-                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff +
-                   MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  +
-                   MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff  +
-                   PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff + 
+  glm.36 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
+                 + MATmin+ MAP + MATmaxanom 
+                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   SPCD.BA + non_SPCD.BA + prop.focal.ba +
+                   # annual growth interactcovarions
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
+                 + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
+                   SPCD.BA*dia.diff + non_SPCD.BA*dia.diff + prop.focal.ba*dia.diff +
                    # all diameter interactions
-                   aspect*DIA  + slope*DIA  + MATmax*DIA  +
-                   MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  +
-                   MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA +
-                   PHYSIO*DIA + BA*DIA + RD*DIA+ elev*DIA + Ndep*DIA + 
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  
+                 + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA +
+                   SPCD.BA*DIA + non_SPCD.BA*DIA + prop.focal.ba*DIA + 
                    # all aspect interactions
-                   slope*aspect  + MATmax*aspect  +
-                   MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  +
-                   MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect+ 
-                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect + 
+                   slope*aspect  + MATmax*aspect  
+                 + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
+                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect +
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect+
+                   SPCD.BA*aspect + non_SPCD.BA*aspect + prop.focal.ba*aspect +
                    # all slope interactions
-                   MATmax*slope +  
-                   MATmin*slope  + MAP*slope  + MATmaxanom*slope + 
-                   MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope +
-                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope + 
+                   MATmax*slope  
+                 + MATmin*slope  + MAP*slope  + MATmaxanom*slope  
+                 + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope + 
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope +
+                   SPCD.BA*slope + non_SPCD.BA*slope + prop.focal.ba*slope+ 
                    # all MATmax interactions
                    
-                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  +
-                   MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax + 
-                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax + Ndep*MATmax +
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  
+                 + MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax +
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax +  Ndep*MATmax +
+                   SPCD.BA*MATmax + non_SPCD.BA*MATmax + prop.focal.ba*MATmax+ 
+                   # all MATmin interactions
                    
-                   # all MATmaxinteractions
-                   MAP*MATmin+ MATminanom*MATmin +
-                   MATmaxanom*MATmin+ MAPanom*MATmin+ BAL*MATmin+ damage*MATmin + si*MATmin + 
-                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin + 
-                   
+                   MAP*MATmin + MATminanom*MATmin
+                 + MATminanom*MATmin + MAPanom*MATmin + BAL*MATmin + damage*MATmin + si*MATmin +
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin +
+                   SPCD.BA*MATmin + non_SPCD.BA*MATmin + prop.focal.ba*MATmin+ 
                    # all MAP interatction
                    MATminanom*MAP +
-                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP+
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP +
                    PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   SPCD.BA*MAP + non_SPCD.BA*MAP + prop.focal.ba*MAP + 
                    
                    
                    # all MATminanom interatction
                    
                    MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
-                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom  + Ndep*MATminanom +
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom + Ndep*MATminanom +
+                   SPCD.BA*MATminanom + non_SPCD.BA*MATminanom + prop.focal.ba*MATminanom+ 
                    # all MATmaxanom interatction
                    
                    MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
-                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom + 
+                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom +
+                   SPCD.BA*MATmaxanom + non_SPCD.BA*MATmaxanom + prop.focal.ba*MATmaxanom +
                    # all MAPanom interatction
                    
                    BAL*MAPanom + damage*MAPanom + si*MAPanom +
-                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom + elev*MAPanom + Ndep*MAPanom + 
+                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom +elev*MAPanom + Ndep*MAPanom+
+                   SPCD.BA*MAPanom + non_SPCD.BA*MAPanom + prop.focal.ba*MAPanom  + 
                    # all BAL interatction
                    
                    damage*BAL + si*BAL + 
                    PHYSIO*BAL + BA*BAL + RD*BAL +elev*BAL + Ndep*BAL +
+                   SPCD.BA*BAL + non_SPCD.BA*BAL + prop.focal.ba*BAL+
                    # all remainingdamage interatction
                    
-                   si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage+
-                   PHYSIO*si + BA*si + RD*si + elev*si + Ndep*si  +
-                   BA*PHYSIO + RD*PHYSIO + elev*PHYSIO + Ndep*PHYSIO + 
-                   BA*RD + elev*RD + Ndep*RD+
+                   si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage +
+                   SPCD.BA*damage + non_SPCD.BA*damage + prop.focal.ba*damage+
+                   
+                   PHYSIO*si + BA*si + RD*si + elev*si + Ndep*si +
+                   SPCD.BA*si + non_SPCD.BA*si + prop.focal.ba*si+
+                   BA*PHYSIO + RD*PHYSIO + elev*PHYSIO + Ndep*PHYSIO+
+                   SPCD.BA*PHYSIO + non_SPCD.BA*PHYSIO + prop.focal.ba*PHYSIO+ 
+                   BA*RD + elev*RD + Ndep*RD +
+                   SPCD.BA*RD + non_SPCD.BA*RD + prop.focal.ba*RD+
                    elev*BA + Ndep*BA + 
-                   elev*Ndep, data = covariate.data, family = "binomial")
+                   SPCD.BA*BA + non_SPCD.BA*BA + prop.focal.ba*BA, data = covariate.data, family = "binomial")
+  
+  
+  glm.37 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
+                 + MATmin+ MAP + MATmaxanom 
+                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   SPCD.BA + non_SPCD.BA + prop.focal.ba +
+                   # annual growth interactcovarions
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
+                 + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
+                   SPCD.BA*dia.diff + non_SPCD.BA*dia.diff + prop.focal.ba*dia.diff +
+                   # all diameter interactions
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  
+                 + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA +
+                   SPCD.BA*DIA + non_SPCD.BA*DIA + prop.focal.ba*DIA + 
+                   # all aspect interactions
+                   slope*aspect  + MATmax*aspect  
+                 + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
+                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect +
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect+
+                   SPCD.BA*aspect + non_SPCD.BA*aspect + prop.focal.ba*aspect +
+                   # all slope interactions
+                   MATmax*slope  
+                 + MATmin*slope  + MAP*slope  + MATmaxanom*slope  
+                 + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope + 
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope +
+                   SPCD.BA*slope + non_SPCD.BA*slope + prop.focal.ba*slope+ 
+                   # all MATmax interactions
+                   
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  
+                 + MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax +
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax +  Ndep*MATmax +
+                   SPCD.BA*MATmax + non_SPCD.BA*MATmax + prop.focal.ba*MATmax+ 
+                   # all MATmin interactions
+                   
+                   MAP*MATmin + MATminanom*MATmin
+                 + MATminanom*MATmin + MAPanom*MATmin + BAL*MATmin + damage*MATmin + si*MATmin +
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin +
+                   SPCD.BA*MATmin + non_SPCD.BA*MATmin + prop.focal.ba*MATmin+ 
+                   # all MAP interatction
+                   MATminanom*MAP +
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP +
+                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   SPCD.BA*MAP + non_SPCD.BA*MAP + prop.focal.ba*MAP + 
+                   
+                   
+                   # all MATminanom interatction
+                   
+                   MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom + Ndep*MATminanom +
+                   SPCD.BA*MATminanom + non_SPCD.BA*MATminanom + prop.focal.ba*MATminanom+ 
+                   # all MATmaxanom interatction
+                   
+                   MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
+                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom +
+                   SPCD.BA*MATmaxanom + non_SPCD.BA*MATmaxanom + prop.focal.ba*MATmaxanom +
+                   # all MAPanom interatction
+                   
+                   BAL*MAPanom + damage*MAPanom + si*MAPanom +
+                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom +elev*MAPanom + Ndep*MAPanom+
+                   SPCD.BA*MAPanom + non_SPCD.BA*MAPanom + prop.focal.ba*MAPanom  + 
+                   # all BAL interatction
+                   
+                   damage*BAL + si*BAL + 
+                   PHYSIO*BAL + BA*BAL + RD*BAL +elev*BAL + Ndep*BAL +
+                   SPCD.BA*BAL + non_SPCD.BA*BAL + prop.focal.ba*BAL+
+                   # all remainingdamage interatction
+                   
+                   si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage +
+                   SPCD.BA*damage + non_SPCD.BA*damage + prop.focal.ba*damage+
+                   
+                   PHYSIO*si + BA*si + RD*si + elev*si + Ndep*si +
+                   SPCD.BA*si + non_SPCD.BA*si + prop.focal.ba*si+
+                   BA*PHYSIO + RD*PHYSIO + elev*PHYSIO + Ndep*PHYSIO+
+                   SPCD.BA*PHYSIO + non_SPCD.BA*PHYSIO + prop.focal.ba*PHYSIO+ 
+                   BA*RD + elev*RD + Ndep*RD +
+                   SPCD.BA*RD + non_SPCD.BA*RD + prop.focal.ba*RD+
+                   elev*BA + Ndep*BA + 
+                   SPCD.BA*BA + non_SPCD.BA*BA + prop.focal.ba*BA+ 
+                   elev*Ndep + SPCD.BA*elev + non_SPCD.BA*elev + prop.focal.ba*elev, data = covariate.data, family = "binomial")
+  
+  glm.38 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
+                 + MATmin+ MAP + MATmaxanom 
+                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   SPCD.BA + non_SPCD.BA + prop.focal.ba +
+                   # annual growth interactcovarions
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
+                 + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
+                   SPCD.BA*dia.diff + non_SPCD.BA*dia.diff + prop.focal.ba*dia.diff +
+                   # all diameter interactions
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  
+                 + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA +
+                   SPCD.BA*DIA + non_SPCD.BA*DIA + prop.focal.ba*DIA + 
+                   # all aspect interactions
+                   slope*aspect  + MATmax*aspect  
+                 + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
+                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect +
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect+
+                   SPCD.BA*aspect + non_SPCD.BA*aspect + prop.focal.ba*aspect +
+                   # all slope interactions
+                   MATmax*slope  
+                 + MATmin*slope  + MAP*slope  + MATmaxanom*slope  
+                 + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope + 
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope +
+                   SPCD.BA*slope + non_SPCD.BA*slope + prop.focal.ba*slope+ 
+                   # all MATmax interactions
+                   
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  
+                 + MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax +
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax +  Ndep*MATmax +
+                   SPCD.BA*MATmax + non_SPCD.BA*MATmax + prop.focal.ba*MATmax+ 
+                   # all MATmin interactions
+                   
+                   MAP*MATmin + MATminanom*MATmin
+                 + MATminanom*MATmin + MAPanom*MATmin + BAL*MATmin + damage*MATmin + si*MATmin +
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin +
+                   SPCD.BA*MATmin + non_SPCD.BA*MATmin + prop.focal.ba*MATmin+ 
+                   # all MAP interatction
+                   MATminanom*MAP +
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP +
+                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   SPCD.BA*MAP + non_SPCD.BA*MAP + prop.focal.ba*MAP + 
+                   
+                   
+                   # all MATminanom interatction
+                   
+                   MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom + Ndep*MATminanom +
+                   SPCD.BA*MATminanom + non_SPCD.BA*MATminanom + prop.focal.ba*MATminanom+ 
+                   # all MATmaxanom interatction
+                   
+                   MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
+                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom +
+                   SPCD.BA*MATmaxanom + non_SPCD.BA*MATmaxanom + prop.focal.ba*MATmaxanom +
+                   # all MAPanom interatction
+                   
+                   BAL*MAPanom + damage*MAPanom + si*MAPanom +
+                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom +elev*MAPanom + Ndep*MAPanom+
+                   SPCD.BA*MAPanom + non_SPCD.BA*MAPanom + prop.focal.ba*MAPanom  + 
+                   # all BAL interatction
+                   
+                   damage*BAL + si*BAL + 
+                   PHYSIO*BAL + BA*BAL + RD*BAL +elev*BAL + Ndep*BAL +
+                   SPCD.BA*BAL + non_SPCD.BA*BAL + prop.focal.ba*BAL+
+                   # all remainingdamage interatction
+                   
+                   si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage +
+                   SPCD.BA*damage + non_SPCD.BA*damage + prop.focal.ba*damage+
+                   
+                   PHYSIO*si + BA*si + RD*si + elev*si + Ndep*si +
+                   SPCD.BA*si + non_SPCD.BA*si + prop.focal.ba*si+
+                   BA*PHYSIO + RD*PHYSIO + elev*PHYSIO + Ndep*PHYSIO+
+                   SPCD.BA*PHYSIO + non_SPCD.BA*PHYSIO + prop.focal.ba*PHYSIO+ 
+                   BA*RD + elev*RD + Ndep*RD +
+                   SPCD.BA*RD + non_SPCD.BA*RD + prop.focal.ba*RD+
+                   elev*BA + Ndep*BA + 
+                   SPCD.BA*BA + non_SPCD.BA*BA + prop.focal.ba*BA+ 
+                   elev*Ndep + SPCD.BA*elev + non_SPCD.BA*elev + prop.focal.ba*elev +
+                   # SPCD.BA interactions
+                   non_SPCD.BA*SPCD.BA + prop.focal.ba*SPCD.BA 
+                   , data = covariate.data, family = "binomial")
+  
+  
+  glm.39 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
+                 + MATmin+ MAP + MATmaxanom 
+                 + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                   SPCD.BA + non_SPCD.BA + prop.focal.ba +
+                   # annual growth interactcovarions
+                   DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
+                 + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
+                 + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
+                   +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
+                   SPCD.BA*dia.diff + non_SPCD.BA*dia.diff + prop.focal.ba*dia.diff +
+                   # all diameter interactions
+                   aspect*DIA  + slope*DIA  + MATmax*DIA  
+                 + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
+                 + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
+                   PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA +
+                   SPCD.BA*DIA + non_SPCD.BA*DIA + prop.focal.ba*DIA + 
+                   # all aspect interactions
+                   slope*aspect  + MATmax*aspect  
+                 + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
+                 + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect +
+                   PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect+
+                   SPCD.BA*aspect + non_SPCD.BA*aspect + prop.focal.ba*aspect +
+                   # all slope interactions
+                   MATmax*slope  
+                 + MATmin*slope  + MAP*slope  + MATmaxanom*slope  
+                 + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope + 
+                   PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope +
+                   SPCD.BA*slope + non_SPCD.BA*slope + prop.focal.ba*slope+ 
+                   # all MATmax interactions
+                   
+                   MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  
+                 + MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax +
+                   PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax +  Ndep*MATmax +
+                   SPCD.BA*MATmax + non_SPCD.BA*MATmax + prop.focal.ba*MATmax+ 
+                   # all MATmin interactions
+                   
+                   MAP*MATmin + MATminanom*MATmin
+                 + MATminanom*MATmin + MAPanom*MATmin + BAL*MATmin + damage*MATmin + si*MATmin +
+                   PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin +
+                   SPCD.BA*MATmin + non_SPCD.BA*MATmin + prop.focal.ba*MATmin+ 
+                   # all MAP interatction
+                   MATminanom*MAP +
+                   MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP +
+                   PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                   SPCD.BA*MAP + non_SPCD.BA*MAP + prop.focal.ba*MAP + 
+                   
+                   
+                   # all MATminanom interatction
+                   
+                   MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
+                   PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom + Ndep*MATminanom +
+                   SPCD.BA*MATminanom + non_SPCD.BA*MATminanom + prop.focal.ba*MATminanom+ 
+                   # all MATmaxanom interatction
+                   
+                   MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
+                   PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom +
+                   SPCD.BA*MATmaxanom + non_SPCD.BA*MATmaxanom + prop.focal.ba*MATmaxanom +
+                   # all MAPanom interatction
+                   
+                   BAL*MAPanom + damage*MAPanom + si*MAPanom +
+                   PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom +elev*MAPanom + Ndep*MAPanom+
+                   SPCD.BA*MAPanom + non_SPCD.BA*MAPanom + prop.focal.ba*MAPanom  + 
+                   # all BAL interatction
+                   
+                   damage*BAL + si*BAL + 
+                   PHYSIO*BAL + BA*BAL + RD*BAL +elev*BAL + Ndep*BAL +
+                   SPCD.BA*BAL + non_SPCD.BA*BAL + prop.focal.ba*BAL+
+                   # all remainingdamage interatction
+                   
+                   si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage +
+                   SPCD.BA*damage + non_SPCD.BA*damage + prop.focal.ba*damage+
+                   
+                   PHYSIO*si + BA*si + RD*si + elev*si + Ndep*si +
+                   SPCD.BA*si + non_SPCD.BA*si + prop.focal.ba*si+
+                   BA*PHYSIO + RD*PHYSIO + elev*PHYSIO + Ndep*PHYSIO+
+                   SPCD.BA*PHYSIO + non_SPCD.BA*PHYSIO + prop.focal.ba*PHYSIO+ 
+                   BA*RD + elev*RD + Ndep*RD +
+                   SPCD.BA*RD + non_SPCD.BA*RD + prop.focal.ba*RD+
+                   elev*BA + Ndep*BA + 
+                   SPCD.BA*BA + non_SPCD.BA*BA + prop.focal.ba*BA+ 
+                   elev*Ndep + SPCD.BA*elev + non_SPCD.BA*elev + prop.focal.ba*elev +
+                   # SPCD.BA interactions
+                    non_SPCD.BA*SPCD.BA + prop.focal.ba*SPCD.BA #+
+                   # # non_SPCD.BA interactions
+                   # non_SPCD.BA*prop.focal.ba
+                 , data = covariate.data, family = "binomial")
+  
   # mcfaddens rsquared
   list.mods <- list(glm.A, glm.B, glm.C, glm.D, glm.E, 
                     glm.F, glm.G, glm.H, glm.I, glm.J, 
-                    glm.K, glm.L,
+                    glm.K, glm.L,glm.M, glm.N, glm.O, 
                     glm.1, glm.2, glm.3, glm.4, glm.5, 
                     glm.6, glm.7, glm.8, glm.9, glm.10, 
                     glm.11, glm.12, glm.13, glm.14, glm.15, 
                     glm.16, glm.17, glm.18, glm.19, glm.20, 
+                    glm.20.a, glm.20.b, glm.20.c,
                     glm.21, glm.22, glm.23, glm.24, glm.25, 
                     glm.26, glm.27, glm.28, glm.29, glm.30, 
                     glm.31, glm.32, glm.33, glm.34, glm.35, 
-                    glm.36, glm.37)
+                    glm.36, glm.37, glm.38)
   
   # get convergence list
   Convergence.list <- lapply(list.mods, FUN = function(x){x$converged}) 
@@ -1126,8 +1492,8 @@ for(i in 1:length(SPCD.df$SPCD)){
   
   model.diag <- data.frame(SPCD =  SPCD.df[i,]$SPCD,
                            Species = nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON),
-                          model = paste0("model ", 1:49), 
-                          model.no = as.numeric(1:49),
+                          model = paste0("model ", 1:56), 
+                          model.no = as.numeric(1:56),
                           remper.correction = remper.cor.vector[j],
                           AUC = AUC.df[,1],
                           McFadden.Rsq = McFadden.rsq.df[,1], 
@@ -1324,6 +1690,6 @@ ggsave("SPCD_glm_output/GLM_all_species_AIC_AUC.png", height = 5, width = 8)
 ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, McFadden.Rsq,  label = as.character(model.no)))+geom_text(size = 2)+facet_wrap(~SPCD, scales = "free_y")
 ggsave("SPCD_glm_output/GLM_all_species_AUC_Rsq.png", height = 5, width = 8)
 
-#library(gt)
-#glm.model.table |> gt() |> gtsave("SPCD_glm_output/GLM_table.png")
 write.csv(glm.model.table, "GLM_table.csv", quote = TRUE)
+
+# get all of the correlated variables for all species--are there common ones that we should eliminate
