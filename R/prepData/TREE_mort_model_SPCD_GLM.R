@@ -1723,6 +1723,7 @@ inter.cov.corrs.df %>% filter(high.corr.F == "High")  %>% group_by(Variable2) %>
 # what does the correlation look like for all the data?
 # to do this we need to load in all the species dataframes
 covariate.all <- list()
+test.covariate.all <- list()
 for(i in 1:length(SPCD.df$SPCD)){
   SPCD.id <- SPCD.df[i,]$SPCD
   common.name <- nspp[1:17,] %>% filter(SPCD %in% SPCD.id) %>% dplyr::select(COMMON)
@@ -1787,9 +1788,11 @@ for(i in 1:length(SPCD.df$SPCD)){
                                       prop.focal.ba = mod.data$prop.focal.ba.scaled_test )
     
     covariate.all[[i]] <- covariate.data
+    test.covariate.all[[i]] <- test.covariate.data
     
 }
 covariate.all.df <- do.call(rbind, covariate.all)
+test.covariate.all.df <- do.call(rbind, test.covariate.all)
 
 
 # Creating a correlation matrix
@@ -2699,4 +2702,206 @@ ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, McFadden.Rsq,  label = 
 ggsave("SPCD_glm_output/GLM_reduced_all_species_AUC_Rsq.png", height = 5, width = 8)
 
 write.csv(glm.model.table, "GLM_reduced_table.csv", quote = TRUE)
-                                                                                                             
+
+
+#####################################################################################################################################################
+# Look at Random forest approach and see if we get similar answers for the covariates that are important
+#####################################################################################################################################################
+library(randomForest)
+covariate.data.RF <- covariate.all.df %>% select(-annual.growth)
+covariate.data.RF$PHYSIO <- as.factor(covariate.data.RF$PHYSIO)
+covariate.data.RF$M <- as.factor(covariate.data.RF$M)
+all.cov.model <- randomForest(
+  formula = M ~ .,
+  data = covariate.data.RF
+)
+
+plot(all.cov.model)
+varImpPlot(all.cov.model)
+
+
+
+
+covariate.data.RF.red <- covariate.all.df %>% 
+  select(-annual.growth, -MATmin, -MATminanom, -RD, -SPCD.BA, -non_SPCD.BA)
+covariate.data.RF.red$PHYSIO <- as.factor(covariate.data.RF.red$PHYSIO)
+covariate.data.RF.red$M <- as.factor(covariate.data.RF.red$M)
+red.cov.model <- randomForest(
+  formula = M ~ .,
+  data = covariate.data.RF.red
+)
+
+plot(red.cov.model)
+varImpPlot(red.cov.model)
+
+
+
+
+
+# predict held out observations --full model
+test.covariate.data.RF <- test.covariate.all.df %>% select(-annual.growth)
+test.covariate.data.RF$PHYSIO <- as.factor(test.covariate.data.RF$PHYSIO)
+test.covariate.data.RF$M <- as.factor(test.covariate.data.RF$M)
+
+oos.preds <- predict(all.cov.model, newdata=test.covariate.data.RF)
+roc.test <- pROC::roc(test.covariate.data.RF$M, as.numeric(as.vector(oos.preds)))
+oos.full.AUC <- pROC::auc(roc.test)
+
+
+# predict held out observations --reduced model
+test.covariate.data.RF.red <- test.covariate.all.df %>% select(-annual.growth, -MATmin, -MATminanom, -RD, -SPCD.BA, -non_SPCD.BA)
+test.covariate.data.RF.red$PHYSIO <- as.factor(test.covariate.data.RF.red$PHYSIO)
+test.covariate.data.RF.red$M <- as.factor(test.covariate.data.RF.red$M)
+
+oos.preds.red <- predict(red.cov.model, newdata=test.covariate.data.RF.red)
+roc.test.red <- pROC::roc(test.covariate.data.RF.red$M, as.numeric(as.vector(oos.preds.red)))
+oos.red.AUC <- pROC::auc(roc.test.red)
+
+# reducing the covariates improves prediction
+
+# now do RF models for each species
+covariate.import <- covariate.import.red <- covariate.import.red.all <- AUC.list<- list()
+for(i in 1:17){
+  covariate.data.RF <- covariate.all.df %>% 
+    filter (SPCD %in% nspp[i,]$SPCD)%>% 
+    select(-annual.growth, -SPCD)
+  
+  
+  covariate.data.RF$PHYSIO <- as.factor(covariate.data.RF$PHYSIO)
+  levels(covariate.data.RF$PHYSIO) <- as.character(c(1:7))#levels(covariate.data.RF$PHYSIO) # some instances the training set has less levels than the testing
+  
+  covariate.data.RF$M <- as.factor(covariate.data.RF$M)
+  all.cov.model <- randomForest(
+    formula = M ~ .,
+    data = covariate.data.RF
+   
+  )
+  
+  plot(all.cov.model)
+  varImpPlot(all.cov.model)
+  all.cov.model$importance
+  
+  
+  # predict held out observations --full model
+  test.covariate.data.RF <- test.covariate.all.df %>%  
+    filter (SPCD %in% nspp[i,]$SPCD)%>% 
+    select(-annual.growth, -SPCD)#%>% filter(PHYSIO < 7 & PHYSIO > 3)
+  test.covariate.data.RF$PHYSIO <- as.factor(test.covariate.data.RF$PHYSIO)
+  test.covariate.data.RF$M <- as.factor(test.covariate.data.RF$M)
+  #PHYS.keeps <- levels(test.covariate.data.RF$PHYSIO)[levels(test.covariate.data.RF$PHYSIO) %in% levels(covariate.data.RF$PHYSIO)]
+  
+  levels(test.covariate.data.RF$PHYSIO) <- levels(covariate.data.RF$PHYSIO) # some instances the training set has less levels than the testing
+  levels(test.covariate.data.RF$PHYSIO) <- as.character(c(1:7))#levels(covariate.data.RF$PHYSIO) # some instances the training set has less levels than the testing
+  
+  
+  
+  oos.preds <- predict(all.cov.model, newdata=test.covariate.data.RF)
+  oos.full.AUC <- mltools::auc_roc( preds = as.numeric(as.vector(oos.preds)), 
+                                actuals = as.numeric(as.character(test.covariate.data.RF$M)))
+  #oos.full.AUC <- pROC::auc(roc.test)
+  
+  
+  
+  covariate.import[[i]] <- data.frame(SPCD = nspp[i,]$SPCD, 
+             covariate = rownames(all.cov.model$importance), 
+             MeanDecreaseGini = all.cov.model$importance[,1])
+  
+  
+  # drop the correlated covariates
+   covariate.data.RF.drop <- covariate.data.RF %>% 
+     select( -MATmin, -MATminanom, -RD, -SPCD.BA, -non_SPCD.BA)
+  
+  
+  dropped.cov.model <- randomForest(
+    formula = M ~ .,
+    data = covariate.data.RF.drop
+    
+  )
+  
+  plot(dropped.cov.model)
+  varImpPlot(dropped.cov.model)
+  
+  
+  # save the reduced covariate importances into a list:
+  covariate.import.red[[i]] <- data.frame(SPCD = nspp[i,]$SPCD, 
+                                      covariate = rownames(dropped.cov.model$importance), 
+                                      MeanDecreaseGini = dropped.cov.model$importance[,1])
+  
+  # predict held out observations --dropped covariates model
+  test.covariate.data.RF.red <- test.covariate.all.df %>%  
+    filter (SPCD %in% nspp[i,]$SPCD)%>% 
+    select(-annual.growth, -SPCD, -MATmin, -MATminanom, -RD, -SPCD.BA, -non_SPCD.BA)
+  test.covariate.data.RF.red$PHYSIO <- as.factor(test.covariate.data.RF$PHYSIO)
+  test.covariate.data.RF.red$M <- as.factor(test.covariate.data.RF$M)
+  levels(test.covariate.data.RF.red$PHYSIO) <- levels(covariate.data.RF.drop$PHYSIO) # some instances the training set has less levels than the testing
+  
+  oos.preds.red <- predict(dropped.cov.model, newdata=test.covariate.data.RF.red)
+  oos.red.AUC <- mltools::auc_roc( preds = as.numeric(as.vector(oos.preds.red)), 
+                                    actuals = as.numeric(as.character(test.covariate.data.RF.red$M)))
+  
+
+  # drop the additional correlated covariates:
+  problem.variables.corr.species <- c("MATmin", "MATminanom", "RD", "SPCD.BA", # the same as above
+                                      "non_SPCD.BA", "prop.focal.ba", "si", "elev") # but also more competition variables
+  
+  covariate.data.RF.drop.all <- covariate.data.RF %>% 
+    select( -MATmin, -MATminanom, -RD, -SPCD.BA, -non_SPCD.BA, 
+            -prop.focal.ba, -si, -elev)
+  
+  
+  all.dropped.cov.model <- randomForest(
+    formula = M ~ .,
+    data = covariate.data.RF.drop.all
+    
+  )
+  
+  plot(all.dropped.cov.model)
+  varImpPlot(all.dropped.cov.model)
+  
+  
+  # save the reduced covariate importances into a list:
+  covariate.import.red.all[[i]] <- data.frame(SPCD = nspp[i,]$SPCD, 
+                                          covariate = rownames(all.dropped.cov.model$importance), 
+                                          MeanDecreaseGini = all.dropped.cov.model$importance[,1])
+  
+  # predict held out observations --dropped covariates model
+  test.covariate.data.RF.red.all <- test.covariate.all.df %>%  
+    filter (SPCD %in% nspp[i,]$SPCD)%>% 
+    select(-annual.growth, -SPCD, -MATmin, -MATminanom, -RD, -SPCD.BA, -non_SPCD.BA,
+           -prop.focal.ba, -si, -elev)
+  
+  test.covariate.data.RF.red.all$PHYSIO <- as.factor(test.covariate.data.RF.red.all$PHYSIO)
+  test.covariate.data.RF.red.all$M <- as.factor(test.covariate.data.RF.red.all$M)
+  levels(test.covariate.data.RF.red.all$PHYSIO) <- levels(covariate.data.RF.drop$PHYSIO) # some instances the training set has less levels than the testing
+  
+  oos.preds.red.all <- predict(all.dropped.cov.model, newdata=test.covariate.data.RF.red.all)
+  oos.red.AUC.all <- mltools::auc_roc( preds = as.numeric(as.vector(oos.preds.red.all)), 
+                                   actuals = as.numeric(as.character(test.covariate.data.RF.red.all$M)))
+  
+  
+  
+  
+  
+ # further reduce by removing the extra species correlated variables--
+  AUC.list[[i]] <- data.frame(SPCD = nspp[i,]$SPCD, 
+                              AUC.full = oos.full.AUC, 
+                              AUC.reduced = oos.red.AUC, 
+                              AUC.reduced.all = oos.red.AUC.all)
+  
+}
+# gather full importances and plot
+importances.spcd <- do.call(rbind, covariate.import)
+ggplot(importances.spcd, aes(x = MeanDecreaseGini, y = covariate, color = SPCD))+geom_point()
+
+# gather reduced importances and plot
+reduced.mods.importances.spcd <- do.call(rbind, covariate.import.red)
+ggplot(reduced.mods.importances.spcd, aes(x = MeanDecreaseGini, y = covariate, color = SPCD))+geom_point()
+
+# gather reduced importances and plot
+AUC.df <- do.call(rbind, AUC.list)
+AUC.df %>% mutate(improved = ifelse(AUC.reduced > AUC.full, "Yes", "No"), 
+                  improved.full = ifelse(AUC.reduced.all > AUC.full, "Yes", "No"))
+
+AUC.df %>% mutate(gain = AUC.reduced - AUC.full, 
+                  gain.full = AUC.reduced.all - AUC.full) 
+# for most species, removing variables doesnt necessarily improve AUC scores, but it also doesnt drastically hurt them
