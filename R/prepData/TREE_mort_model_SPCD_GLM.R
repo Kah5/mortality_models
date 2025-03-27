@@ -2708,7 +2708,7 @@ write.csv(glm.model.table, "GLM_reduced_table.csv", quote = TRUE)
 # Look at Random forest approach and see if we get similar answers for the covariates that are important
 #####################################################################################################################################################
 library(randomForest)
-covariate.data.RF <- covariate.all.df %>% select(-annual.growth)
+covariate.data.RF <- covariate.all.df %>% select(-annual.growth, -SPCD)
 covariate.data.RF$PHYSIO <- as.factor(covariate.data.RF$PHYSIO)
 covariate.data.RF$M <- as.factor(covariate.data.RF$M)
 all.cov.model <- randomForest(
@@ -2723,7 +2723,7 @@ varImpPlot(all.cov.model)
 
 
 covariate.data.RF.red <- covariate.all.df %>% 
-  select(-annual.growth, -MATmin, -MATminanom, -RD, -SPCD.BA, -non_SPCD.BA)
+  select(-annual.growth, -SPCD, -MATmin, -MATminanom, -RD, -SPCD.BA, -non_SPCD.BA)
 covariate.data.RF.red$PHYSIO <- as.factor(covariate.data.RF.red$PHYSIO)
 covariate.data.RF.red$M <- as.factor(covariate.data.RF.red$M)
 red.cov.model <- randomForest(
@@ -2739,7 +2739,7 @@ varImpPlot(red.cov.model)
 
 
 # predict held out observations --full model
-test.covariate.data.RF <- test.covariate.all.df %>% select(-annual.growth)
+test.covariate.data.RF <- test.covariate.all.df %>% select(-annual.growth, -SPCD)
 test.covariate.data.RF$PHYSIO <- as.factor(test.covariate.data.RF$PHYSIO)
 test.covariate.data.RF$M <- as.factor(test.covariate.data.RF$M)
 
@@ -2749,7 +2749,9 @@ oos.full.AUC <- pROC::auc(roc.test)
 
 
 # predict held out observations --reduced model
-test.covariate.data.RF.red <- test.covariate.all.df %>% select(-annual.growth, -MATmin, -MATminanom, -RD, -SPCD.BA, -non_SPCD.BA)
+test.covariate.data.RF.red <- test.covariate.all.df %>% 
+  select(-annual.growth, -SPCD, -MATmin, -MATminanom, -RD, -SPCD.BA, -non_SPCD.BA, 
+         -prop.focal.ba, -elev, -si, -PHYSIO)
 test.covariate.data.RF.red$PHYSIO <- as.factor(test.covariate.data.RF.red$PHYSIO)
 test.covariate.data.RF.red$M <- as.factor(test.covariate.data.RF.red$M)
 
