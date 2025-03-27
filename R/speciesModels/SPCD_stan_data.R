@@ -1,6 +1,6 @@
 SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   cleaned.data <- cleaned.data.full %>% filter(SPCD %in% SPCD.id) %>% 
-                                        filter(dbhold > 1 & ! dbhcur-dbhold == 0)
+                                        filter(dbhold > 5 & ! dbhcur-dbhold == 0)
   
   cleaned.data_old <- cleaned.data.full %>% filter(SPCD %in% SPCD.id)
   
@@ -20,6 +20,8 @@ if(remper.correction == "random"){
     mutate(rempercur = ifelse(M ==1, remper*remper.sample, remper), 
            annual.growth = DIA_DIFF/rempercur) %>% mutate(DIA.median = median(dbhcur, na.rm =TRUE), 
                                                           DIA.sd = sd(dbhcur, na.rm = TRUE),  
+                                                          DIA.DIFF.median = median(DIA_DIFF, na.rm =TRUE), 
+                                                          DIA.DIFF.sd = sd(DIA_DIFF, na.rm =TRUE),
                                                           BAL.median = median(BAL, na.rm=TRUE),
                                                           BAL.sd = sd(BAL, na.rm = TRUE),
                                                           RD.median = median(RD, na.rm=TRUE), 
@@ -37,6 +39,7 @@ if(remper.correction == "random"){
                                                           annual.growth.median = median(annual.growth, na.rm = TRUE), 
                                                           annual.growth.sd = sd(annual.growth, na.rm = TRUE)) %>% 
     ungroup() %>% mutate(DIA_scaled = (dbhcur - DIA.median)/DIA.sd,
+                         DIA_DIFF_scaled = (DIA_DIFF - DIA.DIFF.median)/DIA.DIFF.sd,
                          annual.growth.scaled = (annual.growth - annual.growth.median)/annual.growth.sd,
                          RD.scaled = (RD-RD.median)/RD.sd,
                          BAL.scaled = (BAL-BAL.median)/BAL.sd,
@@ -59,6 +62,8 @@ if(remper.correction == "random"){
       mutate(rempercur = ifelse(M ==1, remper*remper.correction, remper), 
              annual.growth = DIA_DIFF/rempercur) %>% mutate(DIA.median = median(dbhcur, na.rm =TRUE), 
                                                             DIA.sd = sd(dbhcur, na.rm = TRUE),  
+                                                            DIA.DIFF.median = median(DIA_DIFF, na.rm =TRUE), 
+                                                            DIA.DIFF.sd = sd(DIA_DIFF, na.rm =TRUE),
                                                             BAL.median = median(BAL, na.rm=TRUE),
                                                             BAL.sd = sd(BAL, na.rm = TRUE),
                                                             RD.median = median(RD, na.rm=TRUE), 
@@ -77,7 +82,9 @@ if(remper.correction == "random"){
                                                             annual.growth.sd = sd(annual.growth, na.rm = TRUE)) %>% 
       # rescale to 
       ungroup() %>% mutate(DIA_scaled = (dbhcur - DIA.median)/DIA.sd,
+                           DIA_DIFF_scaled = (DIA_DIFF - DIA.DIFF.median)/DIA.DIFF.sd,
                            annual.growth.scaled = (annual.growth - annual.growth.median)/annual.growth.sd,
+                           
                            RD.scaled = (RD-RD.median)/RD.sd,
                            BAL.scaled = (BAL-BAL.median)/BAL.sd,
                            SPCD.BA.scaled = (SPCD_BA - SPCD_BA.median)/SPCD_BA.sd,
@@ -160,13 +167,13 @@ if(remper.correction == "random"){
   mod.data.1 <- list(N = nrow(train.data), 
                      y = train.data$S,                       
                      Remper = train.data$remper, 
-                     xM = as.matrix(train.data %>% dplyr::select(annual.growth.scaled)))
+                     xM = as.matrix(train.data %>% dplyr::select(DIA_DIFF_scaled)))
   # model.2 data
   # 2. Diameter + Annual growth
   mod.data.2 <- list(N = nrow(train.data), 
                      y = train.data$S,                       
                      Remper = train.data$remper, 
-                     xM = as.matrix(train.data %>% dplyr::select(annual.growth.scaled, 
+                     xM = as.matrix(train.data %>% dplyr::select(DIA_DIFF_scaled, 
                                                                  DIA_scaled)))
   
   # model.3 data
@@ -174,12 +181,12 @@ if(remper.correction == "random"){
   mod.data.3 <- list(N = nrow(train.data), 
                      y = train.data$S,                       
                      Remper = train.data$remper, 
-                     xM = as.matrix(train.data %>% dplyr::select(annual.growth.scaled, 
+                     xM = as.matrix(train.data %>% dplyr::select(DIA_DIFF_scaled, 
                                                                  DIA_scaled, 
-                                                                 RD.scaled, 
+                                                                 #RD.scaled, 
                                                                  ba.scaled, 
                                                                  BAL.scaled,
-                                                                 non_SPCD.BA.scaled,
+                                                                 #non_SPCD.BA.scaled,
                                                                  damage.scaled 
                                                                  
                                                                  )))
@@ -189,19 +196,19 @@ if(remper.correction == "random"){
   mod.data.4 <- list(N = nrow(train.data), 
                      y = train.data$S,                       
                      Remper = train.data$remper, 
-                     xM = as.matrix(train.data %>% dplyr::select(annual.growth.scaled, 
+                     xM = as.matrix(train.data %>% dplyr::select(DIA_DIFF_scaled, 
                                                                  DIA_scaled, 
-                                                                 RD.scaled, 
+                                                                 #RD.scaled, 
                                                                  ba.scaled, 
                                                                  BAL.scaled, 
-                                                                 non_SPCD.BA.scaled,
+                                                                 #non_SPCD.BA.scaled,
                                                                  damage.scaled,
                                                                  
                                                                  MATmax.scaled, 
-                                                                 MATmin.scaled, 
+                                                                 #MATmin.scaled, 
                                                                  MAP.scaled,
                                                                  ppt.anom, 
-                                                                 tmin.anom, 
+                                                                 #tmin.anom, 
                                                                  tmax.anom)))
   # model.5 data
   # 5. Diameter + Annual growth + competition variables (RD.scaled, BAL, damage) + 
@@ -209,54 +216,54 @@ if(remper.correction == "random"){
   mod.data.5 <- list(N = nrow(train.data), 
                      y = train.data$S,                       
                      Remper = train.data$remper, 
-                     xM = as.matrix(train.data %>% dplyr::select(annual.growth.scaled, 
+                     xM = as.matrix(train.data %>% dplyr::select(DIA_DIFF_scaled, 
                                                                  DIA_scaled, 
-                                                                 RD.scaled, 
+                                                                 #RD.scaled, 
                                                                  ba.scaled, 
                                                                  BAL.scaled,
-                                                                 non_SPCD.BA.scaled,
+                                                                 #non_SPCD.BA.scaled,
                                                                  damage.scaled,
                                                                 
                                                                  MATmax.scaled, 
-                                                                 MATmin.scaled, 
+                                                                 #MATmin.scaled, 
                                                                  MAP.scaled,
                                                                  ppt.anom, 
-                                                                 tmin.anom, 
+                                                                 #tmin.anom, 
                                                                  tmax.anom, 
                                                                  slope.scaled, 
                                                                  aspect.scaled,
-                                                                 elev.scaled, 
-                                                                 Ndep.scaled,
-                                                                 physio.scaled)))
+                                                                 #elev.scaled, 
+                                                                 Ndep.scaled))) #,
+                                                                 #physio.scaled)))
   # model.6 data
   # 6. All Fixed effects and all growth + Diameter interactions
   mod.data.6 <- list(N = nrow(train.data), 
                      y = train.data$S,                       
                      Remper = train.data$remper, 
-                     xM = as.matrix(train.data %>% dplyr::select(annual.growth.scaled, 
+                     xM = as.matrix(train.data %>% dplyr::select(DIA_DIFF_scaled, 
                                                                  DIA_scaled, 
-                                                                 RD.scaled, 
+                                                                 #RD.scaled, 
                                                                  ba.scaled, 
                                                                  BAL.scaled, 
-                                                                 non_SPCD.BA.scaled,
+                                                                 #non_SPCD.BA.scaled,
                                                                  damage.scaled,
                                                                 
                                                                  MATmax.scaled, 
-                                                                 MATmin.scaled, 
+                                                                 #MATmin.scaled, 
                                                                  MAP.scaled,
                                                                  ppt.anom, 
-                                                                 tmin.anom, 
+                                                                 #tmin.anom, 
                                                                  tmax.anom, 
                                                                  slope.scaled, 
                                                                  aspect.scaled,
-                                                                 elev.scaled, 
-                                                                 Ndep.scaled,
-                                                                 physio.scaled) %>%
+                                                                 #elev.scaled, 
+                                                                 Ndep.scaled)%>% #,
+                                                                 #physio.scaled) %>%
                                       # generate growth interactions
-                                      mutate_at(.funs = list(growth.int = ~.*annual.growth.scaled), 
-                                                .vars = vars(DIA_scaled:physio.scaled)) %>% 
+                                      mutate_at(.funs = list(growth.int = ~.*DIA_DIFF_scaled), 
+                                                .vars = vars(DIA_scaled:Ndep.scaled)) %>% 
                                       mutate_at(.funs = list(DIA.int = ~.*DIA_scaled), 
-                                                .vars = vars(RD.scaled:physio.scaled)) )) #%>% 
+                                                .vars = vars(ba.scaled:Ndep.scaled)) )) #%>% 
                                      # mutate_at(scale, .vars = vars(DIA_scaled_growth.int:physio.scaled_DIA.int))))
   
   
@@ -270,47 +277,48 @@ if(remper.correction == "random"){
   mod.data.7 <- list(N = nrow(train.data), 
                      y = train.data$S,                       
                      Remper = train.data$remper, 
-                     xM = as.matrix(train.data %>% dplyr::select(annual.growth.scaled, 
+                     xM = as.matrix(train.data %>% dplyr::select(DIA_DIFF_scaled, 
                                                                  DIA_scaled, 
-                                                                 RD.scaled, 
+                                                                 #RD.scaled, 
                                                                  ba.scaled, 
                                                                  BAL.scaled, 
-                                                                 non_SPCD.BA.scaled,
+                                                                 #non_SPCD.BA.scaled,
                                                                  damage.scaled,
                                                                 
                                                                  MATmax.scaled, 
-                                                                 MATmin.scaled, 
+                                                                 #MATmin.scaled, 
                                                                  MAP.scaled,
                                                                  ppt.anom, 
-                                                                 tmin.anom, 
+                                                                 #tmin.anom, 
                                                                  tmax.anom, 
                                                                  slope.scaled, 
                                                                  aspect.scaled,
-                                                                 elev.scaled, 
-                                                                 Ndep.scaled,
-                                                                 physio.scaled) %>%
+                                                                 #elev.scaled, 
+                                                                 Ndep.scaled) %>% #,
+                                                                   #physio.scaled) %>%,
+                                                                 #physio.scaled) %>%
                                       # generate growth interactions
-                                      mutate_at(.funs = list(growth.int = ~.*annual.growth.scaled), 
-                                                .vars = vars(DIA_scaled:physio.scaled)) %>% 
+                                      mutate_at(.funs = list(growth.int = ~.*DIA_DIFF_scaled), 
+                                                .vars = vars(DIA_scaled:Ndep.scaled)) %>% 
                                       # generate diameter interactions
                                       mutate_at(.funs = list(DIA.int = ~.*DIA_scaled), 
-                                                .vars = vars(RD.scaled:physio.scaled)) %>%
+                                                .vars = vars(ba.scaled:Ndep.scaled)) %>%
                                       
                                       
-                                      # generate RD.scaled interactions
-                                      mutate_at(.funs = list(RD.scaled.int = ~.*RD.scaled), 
-                                                .vars = vars(ba.scaled:physio.scaled))%>%
+                                      # # generate RD.scaled interactions
+                                      # mutate_at(.funs = list(RD.scaled.int = ~.*RD.scaled), 
+                                      #           .vars = vars(ba.scaled:physio.scaled))%>%
                                       
                                       # generate ba interactions
                                       mutate_at(.funs = list(ba.int = ~.*ba.scaled), 
-                                                .vars = vars(BAL.scaled:physio.scaled))%>%
+                                                .vars = vars(BAL.scaled:Ndep.scaled))%>%
                                       # generate BAL interactions
                                       mutate_at(.funs = list(BAL.int = ~.*BAL.scaled), 
-                                                .vars = vars(damage.scaled:physio.scaled))%>%
+                                                .vars = vars(damage.scaled:Ndep.scaled))%>%
                                       
                                       # generate damage interactions
                                       mutate_at(.funs = list(damage.int = ~.*damage.scaled), 
-                                                .vars = vars(MATmax.scaled:physio.scaled))#%>%
+                                                .vars = vars(MATmax.scaled:Ndep.scaled))#%>%
                                       # make sure interactions terms are scaled to be closer to values
                                       #mutate_at(.funs = function(x)(x/10), .vars = vars(physio.scaled_damage.int))
                                     # mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:physio.scaled_damage.int))
@@ -323,69 +331,70 @@ if(remper.correction == "random"){
   mod.data.8 <- list(N = nrow(train.data), 
                      y = train.data$S,                       
                      Remper = train.data$remper, 
-                     xM = as.matrix(train.data %>% dplyr::select(annual.growth.scaled, 
+                     xM = as.matrix(train.data %>% dplyr::select(DIA_DIFF_scaled, 
                                                                  DIA_scaled, 
-                                                                 RD.scaled, 
+                                                                 #RD.scaled, 
                                                                  ba.scaled, 
                                                                  BAL.scaled,
-                                                                 non_SPCD.BA.scaled,
+                                                                 #non_SPCD.BA.scaled,
                                                                  damage.scaled,
                                                                  
                                                                  MATmax.scaled, 
-                                                                 MATmin.scaled, 
+                                                                 #MATmin.scaled, 
                                                                  MAP.scaled,
                                                                  ppt.anom, 
-                                                                 tmin.anom, 
+                                                                 #tmin.anom, 
                                                                  tmax.anom, 
                                                                  slope.scaled, 
                                                                  aspect.scaled,
-                                                                 elev.scaled, 
-                                                                 Ndep.scaled,
-                                                                 physio.scaled) %>%
+                                                                 #elev.scaled, 
+                                                                Ndep.scaled) %>% #,
+                                      #physio.scaled) %>%,
+                                      #physio.scaled) %>%
                                       # generate growth interactions
-                                      mutate_at(.funs = list(growth.int = ~.*annual.growth.scaled), 
-                                                .vars = vars(DIA_scaled:physio.scaled)) %>% 
+                                      mutate_at(.funs = list(growth.int = ~.*DIA_DIFF_scaled), 
+                                                .vars = vars(DIA_scaled:Ndep.scaled)) %>% 
                                       # generate diameter interactions
                                       mutate_at(.funs = list(DIA.int = ~.*DIA_scaled), 
-                                                .vars = vars(RD.scaled:physio.scaled)) %>%
+                                                .vars = vars(ba.scaled:Ndep.scaled)) %>%
                                       
                                       
-                                      # generate RD.scaled interactions
-                                      mutate_at(.funs = list(RD.scaled.int = ~.*RD.scaled), 
-                                                .vars = vars(ba.scaled:physio.scaled))%>%
+                                      # # generate RD.scaled interactions
+                                      # mutate_at(.funs = list(RD.scaled.int = ~.*RD.scaled), 
+                                      #           .vars = vars(ba.scaled:physio.scaled))%>%
                                       
                                       # generate ba interactions
                                       mutate_at(.funs = list(ba.int = ~.*ba.scaled), 
-                                                .vars = vars(BAL.scaled:physio.scaled))%>%
+                                                .vars = vars(BAL.scaled:Ndep.scaled))%>%
                                       # generate BAL interactions
                                       mutate_at(.funs = list(BAL.int = ~.*BAL.scaled), 
-                                                .vars = vars(damage.scaled:physio.scaled))%>%
+                                                .vars = vars(damage.scaled:Ndep.scaled))%>%
                                       
                                       # generate damage interactions
                                       mutate_at(.funs = list(damage.int = ~.*damage.scaled), 
-                                                .vars = vars(MATmax.scaled:physio.scaled)) %>%
+                                                .vars = vars(MATmax.scaled:Ndep.scaled)) %>%
                                       
                                       # generate MATmax interactions
                                       mutate_at(.funs = list(MATmax.scaled.int = ~.*MATmax.scaled), 
-                                                .vars = vars(MATmin.scaled:physio.scaled))%>%
-                                      # generate MATmin.scaled interactions
-                                      mutate_at(.funs = list(MATmin.scaled.int = ~.*MATmin.scaled), 
-                                                .vars = vars(MAP.scaled:physio.scaled))%>%
+                                                .vars = vars(MAP.scaled:Ndep.scaled))%>%
+                                      # # generate MATmin.scaled interactions
+                                      # mutate_at(.funs = list(MATmin.scaled.int = ~.*MATmin.scaled), 
+                                      #           .vars = vars(MAP.scaled:physio.scaled))%>%
                                       
                                       # generate MAP.scaled interactions
                                       mutate_at(.funs = list(MAP.scaled.int = ~.*MAP.scaled), 
-                                                .vars = vars(ppt.anom:physio.scaled))%>%
+                                                .vars = vars(ppt.anom:Ndep.scaled))%>%
                                       
                                       # generate ppt.anom interactions
                                       mutate_at(.funs = list(ppt.anom.int = ~.*ppt.anom), 
-                                                .vars = vars(tmin.anom:physio.scaled))%>%
-                                      # generate tmin.anom interactions
-                                      mutate_at(.funs = list(tmin.anom.int = ~.*tmin.anom), 
-                                                .vars = vars(tmax.anom:physio.scaled))%>%
+                                                .vars = vars(tmax.anom:Ndep.scaled))%>%
+                                      # # generate tmin.anom interactions
+                                      # mutate_at(.funs = list(tmin.anom.int = ~.*tmin.anom), 
+                                      #           .vars = vars(tmax.anom:Ndep.scaled))%>%
                                       
                                       # generate tmax.anom interactions
                                       mutate_at(.funs = list(tmax.anom.int = ~.*tmax.anom), 
-                                                .vars = vars(slope.scaled:physio.scaled))#%>%
+                                                .vars = vars(slope.scaled:Ndep.scaled))#%>%
                                       # make sure interactions terms are scaled to be closer to values
                                       #mutate_at(.funs = function(x)(x/10), .vars = vars(ba.scaled_RD.scaled.int:physio.scaled_damage.int))
                                       #mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:physio.scaled_tmax.anom.int))
@@ -397,81 +406,80 @@ if(remper.correction == "random"){
   mod.data.9 <- list(N = nrow(train.data), 
                      y = train.data$S,                       
                      Remper = train.data$remper, 
-                     xM = as.matrix(train.data %>% dplyr::select(annual.growth.scaled, 
+                     xM = as.matrix(train.data %>% dplyr::select(DIA_DIFF_scaled, 
                                                                  DIA_scaled, 
-                                                                 RD.scaled, 
+                                                                 #RD.scaled, 
                                                                  ba.scaled, 
                                                                  BAL.scaled, 
-                                                                 non_SPCD.BA.scaled,
+                                                                 #non_SPCD.BA.scaled,
                                                                  damage.scaled,
                                                                  MATmax.scaled, 
-                                                                 MATmin.scaled, 
+                                                                 #MATmin.scaled, 
                                                                  MAP.scaled,
                                                                  ppt.anom, 
-                                                                 tmin.anom, 
+                                                                 #tmin.anom, 
                                                                  tmax.anom, 
                                                                  slope.scaled, 
                                                                  aspect.scaled,
-                                                                 elev.scaled, 
-                                                                 Ndep.scaled,
-                                                                 physio.scaled) %>%
+                                                                 #elev.scaled, 
+                                                                 Ndep.scaled) %>% #,
+                                      #physio.scaled) %>%,
+                                      #physio.scaled) %>%
                                       # generate growth interactions
-                                      mutate_at(.funs = list(growth.int = ~.*annual.growth.scaled), 
-                                                .vars = vars(DIA_scaled:physio.scaled)) %>% 
+                                      mutate_at(.funs = list(growth.int = ~.*DIA_DIFF_scaled), 
+                                                .vars = vars(DIA_scaled:Ndep.scaled)) %>% 
                                       # generate diameter interactions
                                       mutate_at(.funs = list(DIA.int = ~.*DIA_scaled), 
-                                                .vars = vars(RD.scaled:physio.scaled)) %>%
+                                                .vars = vars(ba.scaled:Ndep.scaled)) %>%
                                       
                                       
-                                      # generate RD.scaled interactions
-                                      mutate_at(.funs = list(RD.scaled.int = ~.*RD.scaled), 
-                                                .vars = vars(ba.scaled:physio.scaled))%>%
+                                      # # generate RD.scaled interactions
+                                      # mutate_at(.funs = list(RD.scaled.int = ~.*RD.scaled), 
+                                      #           .vars = vars(ba.scaled:physio.scaled))%>%
                                       
                                       # generate ba interactions
                                       mutate_at(.funs = list(ba.int = ~.*ba.scaled), 
-                                                .vars = vars(BAL.scaled:physio.scaled))%>%
+                                                .vars = vars(BAL.scaled:Ndep.scaled))%>%
                                       # generate BAL interactions
                                       mutate_at(.funs = list(BAL.int = ~.*BAL.scaled), 
-                                                .vars = vars(damage.scaled:physio.scaled))%>%
+                                                .vars = vars(damage.scaled:Ndep.scaled))%>%
                                       
                                       # generate damage interactions
                                       mutate_at(.funs = list(damage.int = ~.*damage.scaled), 
-                                                .vars = vars(MATmax.scaled:physio.scaled)) %>%
+                                                .vars = vars(MATmax.scaled:Ndep.scaled)) %>%
                                       
                                       # generate MATmax interactions
                                       mutate_at(.funs = list(MATmax.scaled.int = ~.*MATmax.scaled), 
-                                                .vars = vars(MATmin.scaled:physio.scaled))%>%
-                                      # generate MATmin.scaled interactions
-                                      mutate_at(.funs = list(MATmin.scaled.int = ~.*MATmin.scaled), 
-                                                .vars = vars(MAP.scaled:physio.scaled))%>%
+                                                .vars = vars(MAP.scaled:Ndep.scaled))%>%
+                                      # # generate MATmin.scaled interactions
+                                      # mutate_at(.funs = list(MATmin.scaled.int = ~.*MATmin.scaled), 
+                                      #           .vars = vars(MAP.scaled:physio.scaled))%>%
                                       
                                       # generate MAP.scaled interactions
                                       mutate_at(.funs = list(MAP.scaled.int = ~.*MAP.scaled), 
-                                                .vars = vars(ppt.anom:physio.scaled))%>%
+                                                .vars = vars(ppt.anom:Ndep.scaled))%>%
                                       
-                                      # generate ppt.anom interactions
                                       mutate_at(.funs = list(ppt.anom.int = ~.*ppt.anom), 
-                                                .vars = vars(tmin.anom:physio.scaled))%>%
-                                      # generate tmin.anom interactions
-                                      mutate_at(.funs = list(tmin.anom.int = ~.*tmin.anom), 
-                                                .vars = vars(tmax.anom:physio.scaled))%>%
+                                                .vars = vars(tmax.anom:Ndep.scaled))%>%
+                                      # # generate tmin.anom interactions
+                                      # mutate_at(.funs = list(tmin.anom.int = ~.*tmin.anom), 
+                                      #           .vars = vars(tmax.anom:Ndep.scaled))%>%
                                       
                                       # generate tmax.anom interactions
                                       mutate_at(.funs = list(tmax.anom.int = ~.*tmax.anom), 
-                                                .vars = vars(slope.scaled:physio.scaled))%>%
-                                      
+                                                .vars = vars(slope.scaled:Ndep.scaled)) %>%
                                       # generate slope.scaled interactions
                                       mutate_at(.funs = list(slope.int = ~.*slope.scaled), 
-                                                .vars = vars(aspect.scaled:physio.scaled))%>%
+                                                .vars = vars(aspect.scaled:Ndep.scaled))%>%
                                       # generate aspect.scaled interactions
                                       mutate_at(.funs = list(aspect.int = ~.*aspect.scaled), 
-                                                .vars = vars(elev.scaled:physio.scaled))%>%
+                                                .vars = vars(Ndep.scaled))#%>%
                                       
-                                      # generate elev interactions
-                                      mutate_at(.funs = list(elev.int = ~.*elev.scaled), 
-                                                .vars = vars(Ndep.scaled:physio.scaled)) %>%
+                                      # # generate elev interactions
+                                      # mutate_at(.funs = list(elev.int = ~.*elev.scaled), 
+                                      #           .vars = vars(Ndep.scaled:physio.scaled)) %>%
                                       # generate Ndep interactions
-                                      mutate(Ndep.physio.int = physio.scaled*Ndep.scaled) #%>%
+                                      #mutate(Ndep.physio.int = physio.scaled*Ndep.scaled) #%>%
                                       #mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:Ndep.physio.int))
                                     
                      ))
@@ -484,13 +492,13 @@ if(remper.correction == "random"){
   mod.data.1.test <- list(N = nrow(test.data), 
                           y = test.data$S,                       
                           Remper = test.data$remper, 
-                          xM = as.matrix(test.data %>% dplyr::select(annual.growth.scaled)))
+                          xM = as.matrix(test.data %>% dplyr::select(DIA_DIFF_scaled)))
   # model.2 data
   # 2. Diameter + Annual growth
   mod.data.2.test <- list(N = nrow(test.data), 
                           y = test.data$S,                       
                           Remper = test.data$remper, 
-                          xM = as.matrix(test.data %>% dplyr::select(annual.growth.scaled, 
+                          xM = as.matrix(test.data %>% dplyr::select(DIA_DIFF_scaled, 
                                                                      DIA_scaled)))
   
   # model.3 data
@@ -498,12 +506,12 @@ if(remper.correction == "random"){
   mod.data.3.test <- list(N = nrow(test.data), 
                           y = test.data$S,                       
                           Remper = test.data$remper, 
-                          xM = as.matrix(test.data %>% dplyr::select(annual.growth.scaled, 
+                          xM = as.matrix(test.data %>% dplyr::select(DIA_DIFF_scaled, 
                                                                      DIA_scaled, 
-                                                                     RD.scaled, 
+                                                                     #RD.scaled, 
                                                                      ba.scaled, 
                                                                      BAL.scaled, 
-                                                                     non_SPCD.BA.scaled,
+                                                                     #non_SPCD.BA.scaled,
                                                                      damage.scaled)))
   # model.4 data
   # 4. Diameter + Annual growth + competition variables (RD.scaled, BAL, damage) + Climate variables
@@ -511,18 +519,18 @@ if(remper.correction == "random"){
   mod.data.4.test <- list(N = nrow(test.data), 
                           y = test.data$S,                       
                           Remper = test.data$remper, 
-                          xM = as.matrix(test.data %>% dplyr::select(annual.growth.scaled, 
+                          xM = as.matrix(test.data %>% dplyr::select(DIA_DIFF_scaled, 
                                                                      DIA_scaled, 
-                                                                     RD.scaled, 
+                                                                     #RD.scaled, 
                                                                      ba.scaled, 
                                                                      BAL.scaled, 
-                                                                     non_SPCD.BA.scaled,
+                                                                     #non_SPCD.BA.scaled,
                                                                      damage.scaled,
                                                                      MATmax.scaled, 
-                                                                     MATmin.scaled, 
+                                                                     #MATmin.scaled, 
                                                                      MAP.scaled,
                                                                      ppt.anom, 
-                                                                     tmin.anom, 
+                                                                     #tmin.anom, 
                                                                      tmax.anom)))
   # model.5 data
   # 5. Diameter + Annual growth + competition variables (RD.scaled, BAL, damage) + 
@@ -530,52 +538,53 @@ if(remper.correction == "random"){
   mod.data.5.test <- list(N = nrow(test.data), 
                           y = test.data$S,                       
                           Remper = test.data$remper, 
-                          xM = as.matrix(test.data %>% dplyr::select(annual.growth.scaled, 
+                          xM = as.matrix(test.data %>% dplyr::select(DIA_DIFF_scaled, 
                                                                      DIA_scaled, 
-                                                                     RD.scaled, 
+                                                                     #RD.scaled, 
                                                                      ba.scaled, 
                                                                      BAL.scaled, 
-                                                                     non_SPCD.BA.scaled,
+                                                                     #non_SPCD.BA.scaled,
                                                                      damage.scaled,
                                                                      MATmax.scaled, 
-                                                                     MATmin.scaled, 
+                                                                     #MATmin.scaled, 
                                                                      MAP.scaled,
                                                                      ppt.anom, 
-                                                                     tmin.anom, 
+                                                                     #tmin.anom, 
                                                                      tmax.anom, 
                                                                      slope.scaled, 
                                                                      aspect.scaled,
-                                                                     elev.scaled, 
-                                                                     Ndep.scaled,
-                                                                     physio.scaled)))
+                                                                     #elev.scaled, 
+                                                                     Ndep.scaled )))#,
+                                                                     #physio.scaled)))
   # model.6 data
   # 6. All Fixed effects and all growth + Diameter interactions
   mod.data.6.test <- list(N = nrow(test.data), 
                           y = test.data$S,                       
                           Remper = test.data$remper, 
-                          xM = as.matrix(test.data %>% dplyr::select(annual.growth.scaled, 
+                          xM = as.matrix(test.data %>% dplyr::select(DIA_DIFF_scaled, 
                                                                      DIA_scaled, 
-                                                                     RD.scaled, 
+                                                                     #RD.scaled, 
                                                                      ba.scaled, 
                                                                      BAL.scaled, 
-                                                                     non_SPCD.BA.scaled,
+                                                                     #non_SPCD.BA.scaled,
                                                                      damage.scaled,
+                                                                     
                                                                      MATmax.scaled, 
-                                                                     MATmin.scaled, 
+                                                                     #MATmin.scaled, 
                                                                      MAP.scaled,
                                                                      ppt.anom, 
-                                                                     tmin.anom, 
+                                                                     #tmin.anom, 
                                                                      tmax.anom, 
                                                                      slope.scaled, 
                                                                      aspect.scaled,
-                                                                     elev.scaled, 
-                                                                     Ndep.scaled,
-                                                                     physio.scaled) %>%
+                                                                     #elev.scaled, 
+                                                                     Ndep.scaled)%>% #,
+                                           #physio.scaled) %>%
                                            # generate growth interactions
-                                           mutate_at(.funs = list(growth.int = ~.*annual.growth.scaled), 
-                                                     .vars = vars(DIA_scaled:physio.scaled)) %>% 
+                                           mutate_at(.funs = list(growth.int = ~.*DIA_DIFF_scaled), 
+                                                     .vars = vars(DIA_scaled:Ndep.scaled)) %>% 
                                            mutate_at(.funs = list(DIA.int = ~.*DIA_scaled), 
-                                                     .vars = vars(RD.scaled:physio.scaled)) ))
+                                                     .vars = vars(ba.scaled:Ndep.scaled)) )) 
   
   
   
@@ -587,50 +596,53 @@ if(remper.correction == "random"){
   mod.data.7.test <- list(N = nrow(test.data), 
                           y = test.data$S,                       
                           Remper = test.data$remper, 
-                          xM = as.matrix(test.data %>% dplyr::select(annual.growth.scaled, 
+                          xM = as.matrix(test.data %>% dplyr::select(DIA_DIFF_scaled, 
                                                                      DIA_scaled, 
-                                                                     RD.scaled, 
+                                                                     #RD.scaled, 
                                                                      ba.scaled, 
                                                                      BAL.scaled, 
-                                                                     non_SPCD.BA.scaled,
+                                                                     #non_SPCD.BA.scaled,
                                                                      damage.scaled,
+                                                                     
                                                                      MATmax.scaled, 
-                                                                     MATmin.scaled, 
+                                                                     #MATmin.scaled, 
                                                                      MAP.scaled,
                                                                      ppt.anom, 
-                                                                     tmin.anom, 
+                                                                     #tmin.anom, 
                                                                      tmax.anom, 
                                                                      slope.scaled, 
                                                                      aspect.scaled,
-                                                                     elev.scaled, 
-                                                                     Ndep.scaled,
-                                                                     physio.scaled) %>%
+                                                                     #elev.scaled, 
+                                                                     Ndep.scaled) %>% #,
+                                           #physio.scaled) %>%,
+                                           #physio.scaled) %>%
                                            # generate growth interactions
-                                           mutate_at(.funs = list(growth.int = ~.*annual.growth.scaled), 
-                                                     .vars = vars(DIA_scaled:physio.scaled)) %>% 
+                                           mutate_at(.funs = list(growth.int = ~.*DIA_DIFF_scaled), 
+                                                     .vars = vars(DIA_scaled:Ndep.scaled)) %>% 
                                            # generate diameter interactions
                                            mutate_at(.funs = list(DIA.int = ~.*DIA_scaled), 
-                                                     .vars = vars(RD.scaled:physio.scaled)) %>%
+                                                     .vars = vars(ba.scaled:Ndep.scaled)) %>%
                                            
                                            
-                                           # generate RD.scaled interactions
-                                           mutate_at(.funs = list(RD.scaled.int = ~.*RD.scaled), 
-                                                     .vars = vars(ba.scaled:physio.scaled))%>%
+                                           # # generate RD.scaled interactions
+                                           # mutate_at(.funs = list(RD.scaled.int = ~.*RD.scaled), 
+                                           #           .vars = vars(ba.scaled:physio.scaled))%>%
                                            
                                            # generate ba interactions
                                            mutate_at(.funs = list(ba.int = ~.*ba.scaled), 
-                                                     .vars = vars(BAL.scaled:physio.scaled))%>%
+                                                     .vars = vars(BAL.scaled:Ndep.scaled))%>%
                                            # generate BAL interactions
                                            mutate_at(.funs = list(BAL.int = ~.*BAL.scaled), 
-                                                     .vars = vars(damage.scaled:physio.scaled))%>%
+                                                     .vars = vars(damage.scaled:Ndep.scaled))%>%
                                            
                                            # generate damage interactions
                                            mutate_at(.funs = list(damage.int = ~.*damage.scaled), 
-                                                     .vars = vars(MATmax.scaled:physio.scaled))#%>%
-                                           # make sure interactions terms are scaled to be closer to values
-                                           #mutate_at(.funs = function(x)(x/10), .vars = vars(physio.scaled_damage.int))
-                                         #  mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:physio.scaled_damage.int))
+                                                     .vars = vars(MATmax.scaled:Ndep.scaled))#%>%
+                                         # make sure interactions terms are scaled to be closer to values
+                                         #mutate_at(.funs = function(x)(x/10), .vars = vars(physio.scaled_damage.int))
+                                         # mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:physio.scaled_damage.int))
                           ))
+  
   
   
   
@@ -639,72 +651,75 @@ if(remper.correction == "random"){
   mod.data.8.test <- list(N = nrow(test.data), 
                           y = test.data$S,                       
                           Remper = test.data$remper, 
-                          xM = as.matrix(test.data %>% dplyr::select(annual.growth.scaled, 
+                          xM = as.matrix(test.data %>% dplyr::select(DIA_DIFF_scaled, 
                                                                      DIA_scaled, 
-                                                                     RD.scaled, 
+                                                                     #RD.scaled, 
                                                                      ba.scaled, 
-                                                                     BAL.scaled, 
-                                                                     non_SPCD.BA.scaled,
+                                                                     BAL.scaled,
+                                                                     #non_SPCD.BA.scaled,
                                                                      damage.scaled,
+                                                                     
                                                                      MATmax.scaled, 
-                                                                     MATmin.scaled, 
+                                                                     #MATmin.scaled, 
                                                                      MAP.scaled,
                                                                      ppt.anom, 
-                                                                     tmin.anom, 
+                                                                     #tmin.anom, 
                                                                      tmax.anom, 
                                                                      slope.scaled, 
                                                                      aspect.scaled,
-                                                                     elev.scaled, 
-                                                                     Ndep.scaled,
-                                                                     physio.scaled) %>%
+                                                                     #elev.scaled, 
+                                                                     Ndep.scaled) %>% #,
+                                           #physio.scaled) %>%,
+                                           #physio.scaled) %>%
                                            # generate growth interactions
-                                           mutate_at(.funs = list(growth.int = ~.*annual.growth.scaled), 
-                                                     .vars = vars(DIA_scaled:physio.scaled)) %>% 
+                                           mutate_at(.funs = list(growth.int = ~.*DIA_DIFF_scaled), 
+                                                     .vars = vars(DIA_scaled:Ndep.scaled)) %>% 
                                            # generate diameter interactions
                                            mutate_at(.funs = list(DIA.int = ~.*DIA_scaled), 
-                                                     .vars = vars(RD.scaled:physio.scaled)) %>%
+                                                     .vars = vars(ba.scaled:Ndep.scaled)) %>%
                                            
                                            
-                                           # generate RD.scaled interactions
-                                           mutate_at(.funs = list(RD.scaled.int = ~.*RD.scaled), 
-                                                     .vars = vars(ba.scaled:physio.scaled))%>%
+                                           # # generate RD.scaled interactions
+                                           # mutate_at(.funs = list(RD.scaled.int = ~.*RD.scaled), 
+                                           #           .vars = vars(ba.scaled:physio.scaled))%>%
                                            
                                            # generate ba interactions
                                            mutate_at(.funs = list(ba.int = ~.*ba.scaled), 
-                                                     .vars = vars(BAL.scaled:physio.scaled))%>%
+                                                     .vars = vars(BAL.scaled:Ndep.scaled))%>%
                                            # generate BAL interactions
                                            mutate_at(.funs = list(BAL.int = ~.*BAL.scaled), 
-                                                     .vars = vars(damage.scaled:physio.scaled))%>%
+                                                     .vars = vars(damage.scaled:Ndep.scaled))%>%
                                            
                                            # generate damage interactions
                                            mutate_at(.funs = list(damage.int = ~.*damage.scaled), 
-                                                     .vars = vars(MATmax.scaled:physio.scaled)) %>%
+                                                     .vars = vars(MATmax.scaled:Ndep.scaled)) %>%
                                            
                                            # generate MATmax interactions
                                            mutate_at(.funs = list(MATmax.scaled.int = ~.*MATmax.scaled), 
-                                                     .vars = vars(MATmin.scaled:physio.scaled))%>%
-                                           # generate MATmin.scaled interactions
-                                           mutate_at(.funs = list(MATmin.scaled.int = ~.*MATmin.scaled), 
-                                                     .vars = vars(MAP.scaled:physio.scaled))%>%
+                                                     .vars = vars(MAP.scaled:Ndep.scaled))%>%
+                                           # # generate MATmin.scaled interactions
+                                           # mutate_at(.funs = list(MATmin.scaled.int = ~.*MATmin.scaled), 
+                                           #           .vars = vars(MAP.scaled:physio.scaled))%>%
                                            
                                            # generate MAP.scaled interactions
                                            mutate_at(.funs = list(MAP.scaled.int = ~.*MAP.scaled), 
-                                                     .vars = vars(ppt.anom:physio.scaled))%>%
+                                                     .vars = vars(ppt.anom:Ndep.scaled))%>%
                                            
                                            # generate ppt.anom interactions
                                            mutate_at(.funs = list(ppt.anom.int = ~.*ppt.anom), 
-                                                     .vars = vars(tmin.anom:physio.scaled))%>%
-                                           # generate tmin.anom interactions
-                                           mutate_at(.funs = list(tmin.anom.int = ~.*tmin.anom), 
-                                                     .vars = vars(tmax.anom:physio.scaled))%>%
+                                                     .vars = vars(tmax.anom:Ndep.scaled))%>%
+                                           # # generate tmin.anom interactions
+                                           # mutate_at(.funs = list(tmin.anom.int = ~.*tmin.anom), 
+                                           #           .vars = vars(tmax.anom:Ndep.scaled))%>%
                                            
                                            # generate tmax.anom interactions
                                            mutate_at(.funs = list(tmax.anom.int = ~.*tmax.anom), 
-                                                     .vars = vars(slope.scaled:physio.scaled))#%>%
-                                           # make sure interactions terms are scaled to be closer to values
-                                           #mutate_at(.funs = function(x)(x/10), .vars = vars(ba.scaled_RD.scaled.int:physio.scaled_damage.int))
-                                           #mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:physio.scaled_tmax.anom.int))
+                                                     .vars = vars(slope.scaled:Ndep.scaled))#%>%
+                                         # make sure interactions terms are scaled to be closer to values
+                                         #mutate_at(.funs = function(x)(x/10), .vars = vars(ba.scaled_RD.scaled.int:physio.scaled_damage.int))
+                                         #mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:physio.scaled_tmax.anom.int))
                           ))
+  
   
   # model.9 data
   
@@ -712,85 +727,83 @@ if(remper.correction == "random"){
   mod.data.9.test <- list(N = nrow(test.data), 
                           y = test.data$S,                       
                           Remper = test.data$remper, 
-                          xM = as.matrix(test.data %>% dplyr::select(annual.growth.scaled, 
+                          xM = as.matrix(test.data %>% dplyr::select(DIA_DIFF_scaled, 
                                                                      DIA_scaled, 
-                                                                     RD.scaled, 
+                                                                     #RD.scaled, 
                                                                      ba.scaled, 
                                                                      BAL.scaled, 
-                                                                     non_SPCD.BA.scaled,
+                                                                     #non_SPCD.BA.scaled,
                                                                      damage.scaled,
                                                                      MATmax.scaled, 
-                                                                     MATmin.scaled, 
+                                                                     #MATmin.scaled, 
                                                                      MAP.scaled,
                                                                      ppt.anom, 
-                                                                     tmin.anom, 
+                                                                     #tmin.anom, 
                                                                      tmax.anom, 
                                                                      slope.scaled, 
                                                                      aspect.scaled,
-                                                                     elev.scaled, 
-                                                                     Ndep.scaled,
-                                                                     physio.scaled) %>%
+                                                                     #elev.scaled, 
+                                                                     Ndep.scaled) %>% #,
+                                           #physio.scaled) %>%,
+                                           #physio.scaled) %>%
                                            # generate growth interactions
-                                           mutate_at(.funs = list(growth.int = ~.*annual.growth.scaled), 
-                                                     .vars = vars(DIA_scaled:physio.scaled)) %>% 
+                                           mutate_at(.funs = list(growth.int = ~.*DIA_DIFF_scaled), 
+                                                     .vars = vars(DIA_scaled:Ndep.scaled)) %>% 
                                            # generate diameter interactions
                                            mutate_at(.funs = list(DIA.int = ~.*DIA_scaled), 
-                                                     .vars = vars(RD.scaled:physio.scaled)) %>%
+                                                     .vars = vars(ba.scaled:Ndep.scaled)) %>%
                                            
                                            
-                                           # generate RD.scaled interactions
-                                           mutate_at(.funs = list(RD.scaled.int = ~.*RD.scaled), 
-                                                     .vars = vars(ba.scaled:physio.scaled))%>%
+                                           # # generate RD.scaled interactions
+                                           # mutate_at(.funs = list(RD.scaled.int = ~.*RD.scaled), 
+                                           #           .vars = vars(ba.scaled:physio.scaled))%>%
                                            
                                            # generate ba interactions
                                            mutate_at(.funs = list(ba.int = ~.*ba.scaled), 
-                                                     .vars = vars(BAL.scaled:physio.scaled))%>%
+                                                     .vars = vars(BAL.scaled:Ndep.scaled))%>%
                                            # generate BAL interactions
                                            mutate_at(.funs = list(BAL.int = ~.*BAL.scaled), 
-                                                     .vars = vars(damage.scaled:physio.scaled))%>%
+                                                     .vars = vars(damage.scaled:Ndep.scaled))%>%
                                            
                                            # generate damage interactions
                                            mutate_at(.funs = list(damage.int = ~.*damage.scaled), 
-                                                     .vars = vars(MATmax.scaled:physio.scaled)) %>%
+                                                     .vars = vars(MATmax.scaled:Ndep.scaled)) %>%
                                            
                                            # generate MATmax interactions
                                            mutate_at(.funs = list(MATmax.scaled.int = ~.*MATmax.scaled), 
-                                                     .vars = vars(MATmin.scaled:physio.scaled))%>%
-                                           # generate MATmin.scaled interactions
-                                           mutate_at(.funs = list(MATmin.scaled.int = ~.*MATmin.scaled), 
-                                                     .vars = vars(MAP.scaled:physio.scaled))%>%
+                                                     .vars = vars(MAP.scaled:Ndep.scaled))%>%
+                                           # # generate MATmin.scaled interactions
+                                           # mutate_at(.funs = list(MATmin.scaled.int = ~.*MATmin.scaled), 
+                                           #           .vars = vars(MAP.scaled:physio.scaled))%>%
                                            
                                            # generate MAP.scaled interactions
                                            mutate_at(.funs = list(MAP.scaled.int = ~.*MAP.scaled), 
-                                                     .vars = vars(ppt.anom:physio.scaled))%>%
+                                                     .vars = vars(ppt.anom:Ndep.scaled))%>%
                                            
-                                           # generate ppt.anom interactions
                                            mutate_at(.funs = list(ppt.anom.int = ~.*ppt.anom), 
-                                                     .vars = vars(tmin.anom:physio.scaled))%>%
-                                           # generate tmin.anom interactions
-                                           mutate_at(.funs = list(tmin.anom.int = ~.*tmin.anom), 
-                                                     .vars = vars(tmax.anom:physio.scaled))%>%
+                                                     .vars = vars(tmax.anom:Ndep.scaled))%>%
+                                           # # generate tmin.anom interactions
+                                           # mutate_at(.funs = list(tmin.anom.int = ~.*tmin.anom), 
+                                           #           .vars = vars(tmax.anom:Ndep.scaled))%>%
                                            
                                            # generate tmax.anom interactions
                                            mutate_at(.funs = list(tmax.anom.int = ~.*tmax.anom), 
-                                                     .vars = vars(slope.scaled:physio.scaled))%>%
-                                           
+                                                     .vars = vars(slope.scaled:Ndep.scaled)) %>%
                                            # generate slope.scaled interactions
                                            mutate_at(.funs = list(slope.int = ~.*slope.scaled), 
-                                                     .vars = vars(aspect.scaled:physio.scaled))%>%
+                                                     .vars = vars(aspect.scaled:Ndep.scaled))%>%
                                            # generate aspect.scaled interactions
                                            mutate_at(.funs = list(aspect.int = ~.*aspect.scaled), 
-                                                     .vars = vars(elev.scaled:physio.scaled))%>%
-                                           
-                                           # generate elev interactions
-                                           mutate_at(.funs = list(elev.int = ~.*elev.scaled), 
-                                                     .vars = vars(Ndep.scaled:physio.scaled)) %>%
-                                           # generate Ndep interactions
-                                           mutate(Ndep.physio.int = physio.scaled*Ndep.scaled)#%>%
-                                          # mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:Ndep.physio.int))
+                                                     .vars = vars(Ndep.scaled))#%>%
+                                         
+                                         # # generate elev interactions
+                                         # mutate_at(.funs = list(elev.int = ~.*elev.scaled), 
+                                         #           .vars = vars(Ndep.scaled:physio.scaled)) %>%
+                                         # generate Ndep interactions
+                                         #mutate(Ndep.physio.int = physio.scaled*Ndep.scaled) #%>%
+                                         #mutate_at(.funs = function(x)(x/10), .vars = vars( RD.scaled_growth.int:Ndep.physio.int))
                                          
                           ))
-  
   
   
   
