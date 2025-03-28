@@ -1,52 +1,52 @@
 library(rstan)
 library(MASS)
-library(here)
+#library(here)
 library(tidyverse)
-library(gt)
+#library(gt)
 library(FIESTA)
 library(dplyr)
 library(mltools)
 library(scales)
+library(posterior)
 
 options(mc.cores = parallel::detectCores())
-cleaned.data <- readRDS( "data/cleaned.data.mortality.TRplots.RDS")
-cleaned.data.no.ll <- cleaned.data %>% select(-LAT_FIADB, -LONG_FIADB)
-saveRDS(cleaned.data.no.ll, "data/cleaned.data.mortality.TRplots_no_LL.RDS")
-
-cleaned.data <- cleaned.data %>% filter(!is.na(ba) & !is.na(slope) & ! is.na(physio) & !is.na(aspect))%>% 
-  dplyr::select(state, county, pltnum, cndtn, point, tree, PLOT.ID, cycle, spp, dbhcur, dbhold, damage, Species, SPCD,
-                                               remper, LAT_FIADB, LONG_FIADB, elev, DIA_DIFF, annual.growth, M, relative.growth, si, physio:RD) %>% distinct()
-
-
-nspp <- cleaned.data %>% group_by(SPCD) %>% summarise(n = n(), 
-                                                      pct = n/nrow(cleaned.data)) %>% arrange (desc(`pct`))
-
-nspp$cumulative.pct <- cumsum(nspp$pct)
-
-
-
-# link up to the species table:
-nspp$COMMON <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$COMMON
-nspp$Species <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$GENUS, FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$SPECIES)
-
-#View(nspp)
-
-nspp[1:17,]$COMMON
-
-library(gt)
-nspp[1:17,] %>% mutate(pct = round(pct, 3), 
-                       cumulative.pct = round(cumulative.pct, 3)) %>% rename(`# of trees` = "n", 
-                       `% of trees` = "pct",
-                       `cumulative %` = "cumulative.pct", 
-                       `Common name` = "COMMON") %>%
-  dplyr::select(Species, `Common name`, SPCD, `# of trees`, `% of trees`, `cumulative %`)|> gt()
-
-
-
-cleaned.data$SPGRPCD <- FIESTA::ref_species[match(cleaned.data$SPCD, FIESTA::ref_species$SPCD),]$E_SPGRPCD
-
-SPGRP.df <- FIESTA::ref_codes %>% filter(VARIABLE %in% "SPGRPCD") %>% filter(VALUE %in% unique(cleaned.data$SPGRPCD))
-cleaned.data$SPGRPNAME <- SPGRP.df[match(cleaned.data$SPGRPCD, SPGRP.df$VALUE),]$MEANING
+# cleaned.data <- readRDS( "data-store/data/iplant/home/kellyheilman/mort_data/cleaned.data.mortality.TRplots.RDS")
+# cleaned.data.no.ll <- cleaned.data %>% select(-LAT_FIADB, -LONG_FIADB)
+# 
+# cleaned.data <- cleaned.data %>% filter(!is.na(ba) & !is.na(slope) & ! is.na(physio) & !is.na(aspect))%>% 
+#   dplyr::select(state, county, pltnum, cndtn, point, tree, PLOT.ID, cycle, spp, dbhcur, dbhold, damage, Species, SPCD,
+#                                                remper, LAT_FIADB, LONG_FIADB, elev, DIA_DIFF, annual.growth, M, relative.growth, si, physio:RD) %>% distinct()
+# 
+# 
+# nspp <- cleaned.data %>% group_by(SPCD) %>% summarise(n = n(), 
+#                                                       pct = n/nrow(cleaned.data)) %>% arrange (desc(`pct`))
+# 
+# nspp$cumulative.pct <- cumsum(nspp$pct)
+# 
+# 
+# 
+# # link up to the species table:
+# nspp$COMMON <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$COMMON
+# nspp$Species <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$GENUS, FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$SPECIES)
+# 
+# #View(nspp)
+# 
+# nspp[1:17,]$COMMON
+# 
+# 
+# nspp[1:17,] %>% mutate(pct = round(pct, 3), 
+#                        cumulative.pct = round(cumulative.pct, 3)) %>% rename(`# of trees` = "n", 
+#                        `% of trees` = "pct",
+#                        `cumulative %` = "cumulative.pct", 
+#                        `Common name` = "COMMON") %>%
+#   dplyr::select(Species, `Common name`, SPCD, `# of trees`, `% of trees`, `cumulative %`)
+# 
+# 
+# 
+# cleaned.data$SPGRPCD <- FIESTA::ref_species[match(cleaned.data$SPCD, FIESTA::ref_species$SPCD),]$E_SPGRPCD
+# 
+# SPGRP.df <- FIESTA::ref_codes %>% filter(VARIABLE %in% "SPGRPCD") %>% filter(VALUE %in% unique(cleaned.data$SPGRPCD))
+# cleaned.data$SPGRPNAME <- SPGRP.df[match(cleaned.data$SPGRPCD, SPGRP.df$VALUE),]$MEANING
 
 
 #----------------------------------------------------------------------------------
@@ -59,40 +59,42 @@ cleaned.data$SPGRPNAME <- SPGRP.df[match(cleaned.data$SPGRPCD, SPGRP.df$VALUE),]
 source("R/speciesModels/SPCD_run_stan.R")
 
 # this runs a stan model and saves the outputs
-cleaned.data.full %>% group_by(SPCD) %>% summarise(n())
+#cleaned.data %>% group_by(SPCD) %>% summarise(n())
 SPCD.df <- data.frame(SPCD = nspp[1:17, ]$SPCD, 
                       spcd.id = 1:17)
 remper.cor.vector <- c(0.5)
 #model.number <- 6
 model.list <- 1:9
+m <- 1
+
 
 for(m in 1:9){ 
-
-  model.number <- model.list[m]
-for(i in 1:17){# run for each of the 17 species
-  common.name <- nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON)
   
-  #for(m in 1:length(model.list)){  # run each of the 9 models
-
- 
+  model.number <- model.list[m]
+  for(i in 17:1){# run for each of the 17 species
+    common.name <- nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON)
+    
+    #for(m in 1:length(model.list)){  # run each of the 9 models
+    
+    
     for (j in 1:length(remper.cor.vector)){ # for the growth only model explore the consequences of other assumptions about remeasurement period
       cat(paste("running stan mortality model ", model.number, " for SPCD", SPCD.df[i,]$SPCD, common.name$COMMON, " remper correction", remper.cor.vector[j]))
       
       fit.1 <- SPCD_run_stan(SPCD.id = SPCD.df[i,]$SPCD,
                              model.no = model.number,
-                             niter = 100,
-                             nchains = 1,
+                             niter = 2000,
+                             nchains = 3,
                              remper.correction = remper.cor.vector[j],
                              model.file = 'modelcode/mort_model_general.stan', 
-                             output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/SPCD_stanoutput_full_standardized_v3")
+                             output.folder = "SPCD_stanoutput_full_standardized_v3")
       SPCD.id <-  SPCD.df[i,]$SPCD
-     
+      
       # set up to make plots of the stan outputs 
       model.name <- paste0("mort_model_",model.number,"_SPCD_", SPCD.id, "_remper_correction_", remper.cor.vector[j])
       remp.cor <- remper.cor.vector[j]
       remper.correction <- remper.cor.vector[j]
       
-      output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/SPCD_stanoutput_full_standardized_v3/"
+      output.folder = "SPCD_stanoutput_full_standardized_v3/"
       
       source("R/speciesModels/SPCD_plot_stan.R")
       rm(fit.1)
@@ -106,24 +108,24 @@ for(i in 1:17){# run for each of the 17 species
   common.name <- nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON)
   
   for(m in c(1)){  # run each of the 9 models
-   #for(m in 8:9){ 
-
-  model.number <- model.list[m]
-  for (j in 1:length(remper.cor.vector)){ # for the growth only model explore the consequences of other assumptions about remeasurement period
-    cat(paste("running AUC stats for model ",model.number, " for SPCD", SPCD.df[i,]$SPCD, common.name$COMMON, " remper correction", remper.cor.vector[j]))
+    #for(m in 8:9){ 
     
-        SPCD.id <-  SPCD.df[i,]$SPCD
-    
-    # set up to make plots of the stan outputs 
-    model.name <- paste0("mort_model_",model.number,"_SPCD_", SPCD.id, "_remper_correction_", remper.cor.vector[j])
-    remp.cor <- remper.cor.vector[j]
-    remper.correction <- remper.cor.vector[j]
-    
-    output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
-    
-    source("R/speciesModels/SPCD_AUC_stan.R")
-    rm(fit.1)
-  }
+    model.number <- model.list[m]
+    for (j in 1:length(remper.cor.vector)){ # for the growth only model explore the consequences of other assumptions about remeasurement period
+      cat(paste("running AUC stats for model ",model.number, " for SPCD", SPCD.df[i,]$SPCD, common.name$COMMON, " remper correction", remper.cor.vector[j]))
+      
+      SPCD.id <-  SPCD.df[i,]$SPCD
+      
+      # set up to make plots of the stan outputs 
+      model.name <- paste0("mort_model_",model.number,"_SPCD_", SPCD.id, "_remper_correction_", remper.cor.vector[j])
+      remp.cor <- remper.cor.vector[j]
+      remper.correction <- remper.cor.vector[j]
+      
+      output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
+      
+      source("R/speciesModels/SPCD_AUC_stan.R")
+      rm(fit.1)
+    }
   }
 }
 
@@ -230,7 +232,7 @@ remper.correction <- 0.5
 load(paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.number, ".Rdata")) # load the species code data5
 param.names <- data.frame(Parameter = colnames(mod.data$xM), 
                           variable = paste0("u_beta[", 1:51,"]"))
-                          
+
 betas.all.df <- left_join(betas.all.df, param.names)
 betas.all.df
 spp.traits <- read.csv(paste0(output.folder, "NinemetsSpeciesTraits.csv"))
@@ -307,7 +309,7 @@ ggplot(data = na.omit(betas.quant) , aes(x = Species, y = median))+geom_point()+
   geom_errorbar(data = na.omit(betas.quant) , aes(x = Species, ymin = ci.lo, ymax = ci.hi), width = 0.1)+
   geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
   theme_bw(base_size = 12)+
- 
+  
   theme( axis.text.x = element_text(angle = 45, hjust = 1))+facet_wrap(~Parameter, scales = "free_y")
 ggsave(height = 5, width = 10, "summaryfigures/species_fixed_response_model_6_by_shade_tolerance.png")
 
@@ -344,10 +346,10 @@ betas.quant %>% #filter(Parameter %in% "BAL.scaled") %>%
   select(Species, Parameter, test) %>% 
   #filter(Parameter %in% c("BAL.scaled", "damage.scaled", "MAP.scaled")) %>% 
   spread( Species, test) %>% left_join(.,parameter.group) %>% 
-   ungroup() %>% group_by(parameter.group) |> gt() |> fmt_markdown() |>
-tab_spanner(
-     label = "shade intolerant",
-     columns = 2:9) |>
+  ungroup() %>% group_by(parameter.group) |> gt() |> fmt_markdown() |>
+  tab_spanner(
+    label = "shade intolerant",
+    columns = 2:9) |>
   tab_spanner(
     label = "shade tolerant",
     columns = 10:13)|>
@@ -404,7 +406,7 @@ betas.quant %>% group_by(Parameter, Species) %>% summarise(predicted.values = li
   ungroup() %>% left_join(.,parameter.group) %>% 
   ungroup()%>% 
   
- group_by(parameter.group) |> 
+  group_by(parameter.group) |> 
   gt() |>  
   gtExtras::gt_plt_sparkline(`yellow-poplar`,  fig_dim = c(5, 10),  label = FALSE, palette = spkl_palette_decidious) |>
   gtExtras::gt_plt_sparkline(`white ash`, label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
@@ -413,16 +415,16 @@ betas.quant %>% group_by(Parameter, Species) %>% summarise(predicted.values = li
   gtExtras::gt_plt_sparkline(`hickory spp.`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
   gtExtras::gt_plt_sparkline(`northern red oak`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious)|>
   gtExtras::gt_plt_sparkline(`white oak`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
-    gtExtras::gt_plt_sparkline(`chestnut oak`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
-    gtExtras::gt_plt_sparkline(`yellow birch`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`chestnut oak`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`yellow birch`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
   gtExtras::gt_plt_sparkline(`eastern white pine`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer) |>
-    gtExtras::gt_plt_sparkline(`red maple`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
-    gtExtras::gt_plt_sparkline(`northern white-cedar`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer)|>
-    gtExtras::gt_plt_sparkline(`red spruce`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer) |>
-    gtExtras::gt_plt_sparkline(`American beech`, label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
-    gtExtras::gt_plt_sparkline(`sugar maple`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious)|>
+  gtExtras::gt_plt_sparkline(`red maple`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`northern white-cedar`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer)|>
+  gtExtras::gt_plt_sparkline(`red spruce`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer) |>
+  gtExtras::gt_plt_sparkline(`American beech`, label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`sugar maple`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious)|>
   gtExtras::gt_plt_sparkline(`eastern hemlock`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer) |>
-    gtExtras::gt_plt_sparkline(`balsam fir`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_conifer)|>
+  gtExtras::gt_plt_sparkline(`balsam fir`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_conifer)|>
   tab_spanner(
     label = "shade intolerant",
     columns = 2:9) |>
@@ -495,198 +497,198 @@ ggsave(height = 5, width = 10, "summaryfigures/species_fixed_response_model_6_by
 # variables linked to Drought tolerence 
 # Growth?, BAL, damage, DIA_growth interaction (more negative w/ drought tolerance), MAP, Slope?
 
- betas.quant$`significance` <- ifelse(betas.quant$ci.lo < 0 & betas.quant$ci.hi < 0, "significant", 
-                                                     ifelse(betas.quant$ci.lo > 0 & betas.quant$ci.hi > 0, "significant", "not overlapping zero"))
+betas.quant$`significance` <- ifelse(betas.quant$ci.lo < 0 & betas.quant$ci.hi < 0, "significant", 
+                                     ifelse(betas.quant$ci.lo > 0 & betas.quant$ci.hi > 0, "significant", "not overlapping zero"))
 
- betas.quant %>% #filter(Parameter %in% "BAL.scaled") %>% 
-   group_by(Species)  %>% 
+betas.quant %>% #filter(Parameter %in% "BAL.scaled") %>% 
+  group_by(Species)  %>% 
   mutate(test = ifelse( median > 0 & significance %in% "significant", fontawesome::fa('plus-circle', fill = "forestgreen") |> html(), 
                         ifelse(median < 0 & significance %in% "significant", fontawesome::fa('minus-circle', fill = "brown") |> html(),
                                ifelse( median > 0 & !significance %in% "significant", fontawesome::fa('plus-circle', fill = "lightgrey") |> html(),
-                
-                               fontawesome::fa('minus-circle', fill = "lightgrey") |> html()))) ) %>% 
-   select(Species, Parameter, test) %>% 
-   spread( Species, test) %>% ungroup() |> gt() |> fmt_markdown()|>
-   gtsave(filename = "summaryfigures/species_model_6_summary_by_drought_tolerance_circle.html")
+                                       
+                                       fontawesome::fa('minus-circle', fill = "lightgrey") |> html()))) ) %>% 
+  select(Species, Parameter, test) %>% 
+  spread( Species, test) %>% ungroup() |> gt() |> fmt_markdown()|>
+  gtsave(filename = "summaryfigures/species_model_6_summary_by_drought_tolerance_circle.html")
 
- # color by the magnitude of the effect
- 
- # create a table with the hexcolors
- hex.table <- data.frame(bin = c("(-7,-5]", 
-                                 "(-5,-3]", 
-                                 "(-3,-1]", 
-                                 "(-1,0]", 
-                                 "(0,1]",
-                                 "(1,3]",
-                                 "(3,5]",
-                                 "(5,6]"), 
-                         hexcolor = c("#8c510a",
-                           "#bf812d",
-                           "#dfc27d",
-                           "#f6e8c3",
-                           "#c7eae5",
-                           "#80cdc1",
-                           "#35978f",
-                           "#01665e"))
- 
- 
- betas.spread <- data.frame(betas.quant %>% select(Parameter, median, Species) %>% spread(Parameter, median))
- rownames(betas.spread) <- betas.spread$Species
- res.hc <- hclust(dist( betas.spread[, 2:ncol(betas.spread)]),  method = "ward.D2")
- fviz_dend(res.hc, cex = 0.5, k = 4, palette = "jco") 
- fviz_dend(res.hc, cex = 0.5, k = 5, palette = "jco")
- 
- library(pheatmap)
- pheatmap(t(betas.spread[, 2:ncol(betas.spread)]), cutree_cols = 4)
- 
- kmeans(mydata, 3, nstart = 25)
- betas.quant  %>% mutate(bin = cut(median, breaks = c(-7,-5,-3,-1,0,1,3,5,6))) %>%
+# color by the magnitude of the effect
+
+# create a table with the hexcolors
+hex.table <- data.frame(bin = c("(-7,-5]", 
+                                "(-5,-3]", 
+                                "(-3,-1]", 
+                                "(-1,0]", 
+                                "(0,1]",
+                                "(1,3]",
+                                "(3,5]",
+                                "(5,6]"), 
+                        hexcolor = c("#8c510a",
+                                     "#bf812d",
+                                     "#dfc27d",
+                                     "#f6e8c3",
+                                     "#c7eae5",
+                                     "#80cdc1",
+                                     "#35978f",
+                                     "#01665e"))
+
+
+betas.spread <- data.frame(betas.quant %>% select(Parameter, median, Species) %>% spread(Parameter, median))
+rownames(betas.spread) <- betas.spread$Species
+res.hc <- hclust(dist( betas.spread[, 2:ncol(betas.spread)]),  method = "ward.D2")
+fviz_dend(res.hc, cex = 0.5, k = 4, palette = "jco") 
+fviz_dend(res.hc, cex = 0.5, k = 5, palette = "jco")
+
+library(pheatmap)
+pheatmap(t(betas.spread[, 2:ncol(betas.spread)]), cutree_cols = 4)
+
+kmeans(mydata, 3, nstart = 25)
+betas.quant  %>% mutate(bin = cut(median, breaks = c(-7,-5,-3,-1,0,1,3,5,6))) %>%
   left_join(., hex.table) %>%  group_by(Species, Parameter) %>%
-   mutate(test = ifelse( median > 0 & significance %in% "significant", fontawesome::fa('plus-circle', fill = hexcolor) |> html(), 
-                         ifelse(median < 0 & significance %in% "significant", fontawesome::fa('minus-circle', fill = hexcolor) |> html(),
-                                ifelse( median > 0 & !significance %in% "significant", fontawesome::fa('plus-circle', fill = "lightgrey") |> html(),
-                                        
-                                        fontawesome::fa('minus-circle', fill = "lightgrey") |> html()))) ) %>% 
-   select(Species, Parameter, test) %>% ungroup() %>%  
-   # reorder factors
-   mutate(Parameter = factor(Parameter, levels = c(# mostly positive
-     "annual.growth.scaled", 
-     
-     # mostly negative
-     "DIA_scaled", 
-     "damage.scaled", 
-     "ppt.anom", 
-     "ba.scaled",
-     
-     # increasingly positive with DT
-     "MAP.scaled", 
-     "physio.scaled",
-     "elev.scaled",
-     "RD.scaled", 
-     "non_SPCD.BA.scaled",
-     "slope.scaled",
-     "MATmax.scaled",
-     
-     # increasingly negative with DT
-     "Ndep.scaled",
-     "DIA_scaled_growth.int",
-     "BAL.scaled",
-     "tmin.anom", 
-     "tmax.anom", 
-     "MATmin.scaled",
-     "aspect.scaled"))) %>% 
-   group_by(Parameter) %>% 
-   
-   
-   spread( Species, test) %>% ungroup() |> 
-   gt() |> 
-   opt_css(
-     css = "
+  mutate(test = ifelse( median > 0 & significance %in% "significant", fontawesome::fa('plus-circle', fill = hexcolor) |> html(), 
+                        ifelse(median < 0 & significance %in% "significant", fontawesome::fa('minus-circle', fill = hexcolor) |> html(),
+                               ifelse( median > 0 & !significance %in% "significant", fontawesome::fa('plus-circle', fill = "lightgrey") |> html(),
+                                       
+                                       fontawesome::fa('minus-circle', fill = "lightgrey") |> html()))) ) %>% 
+  select(Species, Parameter, test) %>% ungroup() %>%  
+  # reorder factors
+  mutate(Parameter = factor(Parameter, levels = c(# mostly positive
+    "annual.growth.scaled", 
+    
+    # mostly negative
+    "DIA_scaled", 
+    "damage.scaled", 
+    "ppt.anom", 
+    "ba.scaled",
+    
+    # increasingly positive with DT
+    "MAP.scaled", 
+    "physio.scaled",
+    "elev.scaled",
+    "RD.scaled", 
+    "non_SPCD.BA.scaled",
+    "slope.scaled",
+    "MATmax.scaled",
+    
+    # increasingly negative with DT
+    "Ndep.scaled",
+    "DIA_scaled_growth.int",
+    "BAL.scaled",
+    "tmin.anom", 
+    "tmax.anom", 
+    "MATmin.scaled",
+    "aspect.scaled"))) %>% 
+  group_by(Parameter) %>% 
+  
+  
+  spread( Species, test) %>% ungroup() |> 
+  gt() |> 
+  opt_css(
+    css = "
     #mygt .gt_col_heading {
       text-align: center;
       transform: rotate(-90deg);
       font-weight: bold;
     }
     "
-   )|>
-   fmt_markdown(columns = 2:18) |>
-   gtsave(filename = "summaryfigures/species_model_6_summary_by_drought_tolerance_circle_scaled_color.html")
- 
- # MAP.scaled, Physio.scaled, tmax.anom
- betas.quant %>% filter(Parameter %in% c("annual.growth.scaled", "damage.scaled", "elev.scaled", "MAP.scaled", 
-                                         "MATmin.scaled", "Ndep.scaled", "Physio.scaled", "slope.scaled")) %>% 
-   group_by(Species)  %>% 
-   mutate(test = ifelse( median > 0 & significance %in% "significant", fontawesome::fa('plus-circle', fill = "forestgreen") |> html(), 
-                         ifelse(median < 0 & significance %in% "significant", fontawesome::fa('minus-circle', fill = "brown") |> html(),
-                                ifelse( median > 0 & !significance %in% "significant", fontawesome::fa('plus-circle', fill = "lightgrey") |> html(),
-                                        
-                                        fontawesome::fa('minus-circle', fill = "lightgrey") |> html()))) ) %>% 
-   select(Species, Parameter, test) %>% 
-   spread( Species, test) %>% ungroup() |> gt() |> fmt_markdown()|>
-   gtsave(filename = "summaryfigures/species_model_6_summary_by_drought_tolerance_circle_limited.html")
- 
- unique(betas.quant[,c("Species","DroughtTol")])
- 
- betas.quant %>% group_by(Parameter, Species) %>% summarise(predicted.values = list(exp(median*rep.scale)/(1+exp(median*rep.scale))), .groups = "drop") %>%
-   group_by(Parameter) %>% spread(Species, predicted.values) %>% 
-   #select( S, annual.growth.scaled, BAL.scaled, MAP.scaled) %>%
-   ungroup() %>% left_join(.,parameter.group) %>% 
-   ungroup()%>% 
-   
-   group_by(parameter.group) |> 
-   gt() |>  
-   gtExtras::gt_plt_sparkline(`yellow-poplar`,  fig_dim = c(5, 10),  label = FALSE, palette = spkl_palette_decidious) |>
-   gtExtras::gt_plt_sparkline(`white ash`, label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
-   gtExtras::gt_plt_sparkline(`black cherry`,  label = FALSE,fig_dim = c(5, 10), palette = spkl_palette_decidious)|>
-   gtExtras::gt_plt_sparkline(`black oak`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
-   gtExtras::gt_plt_sparkline(`hickory spp.`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
-   gtExtras::gt_plt_sparkline(`northern red oak`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious)|>
-   gtExtras::gt_plt_sparkline(`white oak`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
-   gtExtras::gt_plt_sparkline(`chestnut oak`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
-   gtExtras::gt_plt_sparkline(`yellow birch`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
-   gtExtras::gt_plt_sparkline(`eastern white pine`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer) |>
-   gtExtras::gt_plt_sparkline(`red maple`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
-   gtExtras::gt_plt_sparkline(`northern white-cedar`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer)|>
-   gtExtras::gt_plt_sparkline(`red spruce`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer) |>
-   gtExtras::gt_plt_sparkline(`American beech`, label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
-   gtExtras::gt_plt_sparkline(`sugar maple`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious)|>
-   gtExtras::gt_plt_sparkline(`eastern hemlock`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer) |>
-   gtExtras::gt_plt_sparkline(`balsam fir`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_conifer)|>
-   tab_spanner(
-     label = "drought intolerant",
-     columns = 2:5) |>
-   tab_spanner(
-     label = "moderate drought tolerance",
-     columns = 6:12)|>
-   tab_spanner(
-     label = "drought tolerant",
-     columns = 13:16)|>
-   tab_spanner(
-     label = "very drought tolerant",
-     columns = 17:18)|>gtsave(filename = "summaryfigures/species_model_6_summary_by_drought_tolerance.html")
- 
+  )|>
+  fmt_markdown(columns = 2:18) |>
+  gtsave(filename = "summaryfigures/species_model_6_summary_by_drought_tolerance_circle_scaled_color.html")
 
- betas.quant %>% group_by(Parameter, Species) %>% summarise(predicted.values = list(exp(median*rep.scale)/(1+exp(median*rep.scale))), .groups = "drop") %>%
-   group_by(Parameter) %>% spread(Species, predicted.values) %>% 
-   filter( Parameter %in% c("annual.growth.scaled", "BAL.scaled", "MAP.scaled", 
-           "MATmax.scaled", "MATmin.scaled",
-           "Physio.scaled", "tmax.anom")) %>%
-   ungroup() %>% left_join(.,parameter.group) %>% 
-   ungroup()%>% 
-   
-   group_by(parameter.group) |> 
-   gt() |>  
-   gtExtras::gt_plt_sparkline(`yellow-poplar`,  fig_dim = c(5, 10),  label = FALSE, palette = spkl_palette_decidious) |>
-   gtExtras::gt_plt_sparkline(`white ash`, label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
-   gtExtras::gt_plt_sparkline(`black cherry`,  label = FALSE,fig_dim = c(5, 10), palette = spkl_palette_decidious)|>
-   gtExtras::gt_plt_sparkline(`black oak`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
-   gtExtras::gt_plt_sparkline(`hickory spp.`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
-   gtExtras::gt_plt_sparkline(`northern red oak`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious)|>
-   gtExtras::gt_plt_sparkline(`white oak`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
-   gtExtras::gt_plt_sparkline(`chestnut oak`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
-   gtExtras::gt_plt_sparkline(`yellow birch`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
-   gtExtras::gt_plt_sparkline(`eastern white pine`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer) |>
-   gtExtras::gt_plt_sparkline(`red maple`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
-   gtExtras::gt_plt_sparkline(`northern white-cedar`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer)|>
-   gtExtras::gt_plt_sparkline(`red spruce`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer) |>
-   gtExtras::gt_plt_sparkline(`American beech`, label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
-   gtExtras::gt_plt_sparkline(`sugar maple`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious)|>
-   gtExtras::gt_plt_sparkline(`eastern hemlock`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer) |>
-   gtExtras::gt_plt_sparkline(`balsam fir`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_conifer)|>
-   tab_spanner(
-     label = "drought intolerant",
-     columns = 2:5) |>
-   tab_spanner(
-     label = "moderate drought tolerance",
-     columns = 6:12)|>
-   tab_spanner(
-     label = "drought tolerant",
-     columns = 13:16)|>
-   tab_spanner(
-     label = "very drought tolerant",
-     columns = 17:18)|>gtsave(filename = "summaryfigures/species_model_6_summary_by_drought_tolerance_limited.html")
- 
- 
+# MAP.scaled, Physio.scaled, tmax.anom
+betas.quant %>% filter(Parameter %in% c("annual.growth.scaled", "damage.scaled", "elev.scaled", "MAP.scaled", 
+                                        "MATmin.scaled", "Ndep.scaled", "Physio.scaled", "slope.scaled")) %>% 
+  group_by(Species)  %>% 
+  mutate(test = ifelse( median > 0 & significance %in% "significant", fontawesome::fa('plus-circle', fill = "forestgreen") |> html(), 
+                        ifelse(median < 0 & significance %in% "significant", fontawesome::fa('minus-circle', fill = "brown") |> html(),
+                               ifelse( median > 0 & !significance %in% "significant", fontawesome::fa('plus-circle', fill = "lightgrey") |> html(),
+                                       
+                                       fontawesome::fa('minus-circle', fill = "lightgrey") |> html()))) ) %>% 
+  select(Species, Parameter, test) %>% 
+  spread( Species, test) %>% ungroup() |> gt() |> fmt_markdown()|>
+  gtsave(filename = "summaryfigures/species_model_6_summary_by_drought_tolerance_circle_limited.html")
+
+unique(betas.quant[,c("Species","DroughtTol")])
+
+betas.quant %>% group_by(Parameter, Species) %>% summarise(predicted.values = list(exp(median*rep.scale)/(1+exp(median*rep.scale))), .groups = "drop") %>%
+  group_by(Parameter) %>% spread(Species, predicted.values) %>% 
+  #select( S, annual.growth.scaled, BAL.scaled, MAP.scaled) %>%
+  ungroup() %>% left_join(.,parameter.group) %>% 
+  ungroup()%>% 
+  
+  group_by(parameter.group) |> 
+  gt() |>  
+  gtExtras::gt_plt_sparkline(`yellow-poplar`,  fig_dim = c(5, 10),  label = FALSE, palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`white ash`, label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`black cherry`,  label = FALSE,fig_dim = c(5, 10), palette = spkl_palette_decidious)|>
+  gtExtras::gt_plt_sparkline(`black oak`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`hickory spp.`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`northern red oak`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious)|>
+  gtExtras::gt_plt_sparkline(`white oak`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`chestnut oak`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`yellow birch`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`eastern white pine`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer) |>
+  gtExtras::gt_plt_sparkline(`red maple`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`northern white-cedar`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer)|>
+  gtExtras::gt_plt_sparkline(`red spruce`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer) |>
+  gtExtras::gt_plt_sparkline(`American beech`, label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`sugar maple`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious)|>
+  gtExtras::gt_plt_sparkline(`eastern hemlock`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer) |>
+  gtExtras::gt_plt_sparkline(`balsam fir`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_conifer)|>
+  tab_spanner(
+    label = "drought intolerant",
+    columns = 2:5) |>
+  tab_spanner(
+    label = "moderate drought tolerance",
+    columns = 6:12)|>
+  tab_spanner(
+    label = "drought tolerant",
+    columns = 13:16)|>
+  tab_spanner(
+    label = "very drought tolerant",
+    columns = 17:18)|>gtsave(filename = "summaryfigures/species_model_6_summary_by_drought_tolerance.html")
+
+
+betas.quant %>% group_by(Parameter, Species) %>% summarise(predicted.values = list(exp(median*rep.scale)/(1+exp(median*rep.scale))), .groups = "drop") %>%
+  group_by(Parameter) %>% spread(Species, predicted.values) %>% 
+  filter( Parameter %in% c("annual.growth.scaled", "BAL.scaled", "MAP.scaled", 
+                           "MATmax.scaled", "MATmin.scaled",
+                           "Physio.scaled", "tmax.anom")) %>%
+  ungroup() %>% left_join(.,parameter.group) %>% 
+  ungroup()%>% 
+  
+  group_by(parameter.group) |> 
+  gt() |>  
+  gtExtras::gt_plt_sparkline(`yellow-poplar`,  fig_dim = c(5, 10),  label = FALSE, palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`white ash`, label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`black cherry`,  label = FALSE,fig_dim = c(5, 10), palette = spkl_palette_decidious)|>
+  gtExtras::gt_plt_sparkline(`black oak`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`hickory spp.`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`northern red oak`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious)|>
+  gtExtras::gt_plt_sparkline(`white oak`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`chestnut oak`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`yellow birch`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`eastern white pine`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer) |>
+  gtExtras::gt_plt_sparkline(`red maple`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`northern white-cedar`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer)|>
+  gtExtras::gt_plt_sparkline(`red spruce`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer) |>
+  gtExtras::gt_plt_sparkline(`American beech`, label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious) |>
+  gtExtras::gt_plt_sparkline(`sugar maple`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_decidious)|>
+  gtExtras::gt_plt_sparkline(`eastern hemlock`,  label = FALSE, fig_dim = c(5, 10),palette = spkl_palette_conifer) |>
+  gtExtras::gt_plt_sparkline(`balsam fir`,  label = FALSE, fig_dim = c(5, 10), palette = spkl_palette_conifer)|>
+  tab_spanner(
+    label = "drought intolerant",
+    columns = 2:5) |>
+  tab_spanner(
+    label = "moderate drought tolerance",
+    columns = 6:12)|>
+  tab_spanner(
+    label = "drought tolerant",
+    columns = 13:16)|>
+  tab_spanner(
+    label = "very drought tolerant",
+    columns = 17:18)|>gtsave(filename = "summaryfigures/species_model_6_summary_by_drought_tolerance_limited.html")
+
+
 # ordered by flood tolerance
 betas.quant <- betas.all.df %>% arrange(by = FloodTol) %>% filter(Parameter %in% param.names$Parameter[1:18])
 betas.quant$Species <- factor(betas.quant$Species, levels = unique(betas.quant$Species))
@@ -725,7 +727,7 @@ ggplot(data = na.omit(betas.all.df) %>% filter(variable %in% "u_beta[1]"), aes(x
   theme_bw(base_size = 12)+
   theme( axis.text.x = element_text(angle = 45, hjust = 1))+ylab("Effect of average annual growth on probability of survival")+xlab("Mortality year assumption (proportion of remper)")
 ggsave("SPCD_stanoutput_full/images/sensitivity_avg_growth_to_remper.png")
-  
+
 ggplot(data = na.omit(betas.all.df) %>% filter(!SPCD %in% 621), aes(x = variable, y = median, color = remper.cor, group = variable))+geom_point(position=position_dodge(width = 2))+
   geom_errorbar(data = na.omit(betas.all.df) %>% filter(!SPCD %in% 621), aes(x = variable, ymin = ci.lo, ymax = ci.hi, color = remper.cor, group = variable), width = 0.1, position=position_dodge(width = 2))+
   geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+facet_wrap(~SPCD)+
