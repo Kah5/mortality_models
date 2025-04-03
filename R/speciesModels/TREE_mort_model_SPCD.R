@@ -68,10 +68,10 @@ model.list <- 1:9
 m <- 1
 
 
-for(m in 1:9){ 
+for(m in 3:9){ 
   
   model.number <- model.list[m]
-  for(i in 17:1){# run for each of the 17 species
+  for(i in 9:1){# run for each of the 17 species
     common.name <- nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON)
     
     #for(m in 1:length(model.list)){  # run each of the 9 models
@@ -104,10 +104,10 @@ for(m in 1:9){
 
 
 # get the predicted AUC for each model 1-6:
-for(i in 1:17){# run for each of the 17 species
+for(i in 9:1){# run for each of the 17 species
   common.name <- nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON)
   
-  for(m in c(1)){  # run each of the 9 models
+  for(m in 3:9){  # run each of the 9 models
     #for(m in 8:9){ 
     
     model.number <- model.list[m]
@@ -121,13 +121,19 @@ for(i in 1:17){# run for each of the 17 species
       remp.cor <- remper.cor.vector[j]
       remper.correction <- remper.cor.vector[j]
       
-      output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
+      output.folder = "/home/rstudio/"
       
       source("R/speciesModels/SPCD_AUC_stan.R")
       rm(fit.1)
     }
   }
 }
+
+# now transfer all the files to the outputs directory:
+
+# copy the data-store files
+system(paste("cp -r",  "SPCD_stanoutput_full_standardized_v3/",
+             "data-store/data/output/"))
 
 
 

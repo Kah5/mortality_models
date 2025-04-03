@@ -1,15 +1,15 @@
-load(paste0("SPCD_standata_general_full_standardized/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.number, ".Rdata")) # load the species code data
+load(paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.number, ".Rdata")) # load the species code data
 # read in the model fit
 #if(model.number < 4){
 
-#fit.1 <- readRDS(url( paste0("https://data.cyverse.org/dav-anon/iplant/home/kellyheilman/analyses/Species_level_mortality-2024-10-09-21-52-40.1/SPCD_stanoutput_full_standardized/samples/model_",model.number,"_SPCD_",SPCD.id,"_remper_correction_",remper.cor.vector[j],".RDS")))
+#fit.1 <- readRDS(url( paste0("https://data.cyverse.org/dav-anon/iplant/home/kellyheilman/analyses/Species_level_mortality-2024-10-09-21-52-40.1/SPCD_stanoutput_full_standardized_v3/samples/model_",model.number,"_SPCD_",SPCD.id,"_remper_correction_",remper.cor.vector[j],".RDS")))
 
 #}else{
 # if(model.number %in% c(1,2,3,4,5)){
-#   fit.1 <- readRDS( paste0(output.folder, "SPCD_stanoutput_full_cyverse_4_5/SPCD_stanoutput_full_standardized/samples/model_",model.number,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
+#   fit.1 <- readRDS( paste0(output.folder, "SPCD_stanoutput_full_cyverse_4_5/SPCD_stanoutput_full_standardized_v3/samples/model_",model.number,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
 #   
 # }else{
-fit.1 <- readRDS( paste0(output.folder, "SPCD_stanoutput_full_standardized/samples/model_",model.number,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
+fit.1 <- readRDS( paste0(output.folder, "SPCD_stanoutput_full_standardized_v3/samples/model_",model.number,"_SPCD_",SPCD.id, "_remper_correction_", remper.cor.vector[j], ".RDS"))
 #}
 # }
 species.table <- unique(train.data[,c("SPCD","SPP")])
@@ -146,7 +146,7 @@ psurv.quant$COMMON <- unique(species.table$COMMON)
 
 ggplot(psurv.quant, aes(as.character(Mobs), y = median, fill =Mobs ))+geom_violin()+ylab("Median annual predicted probability of survival")+
   xlab("In-sample Observed Survival Status")+scale_fill_manual(values = c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
-ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_standardized/images/psurv_vs_obs_in_sample_violin_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
+ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_standardized_v3/images/psurv_vs_obs_in_sample_violin_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
 
 # # compare the observed status to the predicted status
 yrep.estimates <- fit_ssm_df %>% dplyr::select( paste0("yrep[",1:mod.data$N, "]"))
@@ -163,15 +163,15 @@ yrep.quant$COMMON <- unique(species.table$COMMON)
 
 ggplot(yrep.quant, aes(as.character(Mobs), y = median, fill =Mobs ))+geom_violin()+ylab("Median predicted survival status")+
   xlab("Observed in-sample tree survival status")+scale_fill_manual(values =  c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
-ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_standardized/images/Yrepsurv_insample_median_vs_obs_violin_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
+ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_standardized_v3/images/Yrepsurv_insample_median_vs_obs_violin_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
 
 ggplot(yrep.quant, aes(as.character(Mobs), y = ci.hi, fill =Mobs ))+geom_violin()+ylab("97.5% quantile of predicted survival status")+
   xlab("Observed in-sample tree survival status")+scale_fill_manual(values =  c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
-ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_standardized/images/Yrepsurv_insample_95pct_vs_obs_violin_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
+ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_standardized_v3/images/Yrepsurv_insample_95pct_vs_obs_violin_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
 
 ggplot(yrep.quant, aes(as.character(Mobs), y = ci.lo, fill =Mobs ))+geom_violin()+ylab("2.5% quantile of predicted survival status")+
   xlab("Observed in-sample tree survival status")+scale_fill_manual(values =  c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
-ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_standardized/images/Yrepsurv_insample_2.5pct_vs_obs_violin_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
+ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_standardized_v3/images/Yrepsurv_insample_2.5pct_vs_obs_violin_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
 
 # ##################################
 # # out of sample plots
@@ -227,7 +227,7 @@ psurv.hat.quant$COMMON <- unique(species.table$COMMON)
 
 ggplot(psurv.hat.quant, aes(as.character(Mobs), y = median, fill = Mobs ))+geom_violin()+ylab("Median predicted probability of survival")+
   xlab("Out-of-sample Observed Tree Status")+scale_fill_manual(values = c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
-ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_standardized/images/psurv.hat_vs_obs_out_of_sample_violin_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
+ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_standardized_v3/images/psurv.hat_vs_obs_out_of_sample_violin_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
 #
 yhat.estimates <- fit_ssm_df %>% dplyr::select( paste0("yhat[",1:mod.data$Nrep, "]"))
 yhat.m <- reshape2::melt(yhat.estimates)
@@ -242,16 +242,16 @@ yhat.quant$COMMON <- unique(species.table$COMMON)
 
 ggplot(yhat.quant, aes(as.character(Mobs), y = median, fill =Mobs ))+geom_violin()+ylab("Median predicted survival status")+
   xlab("Observed in-sample tree status")+scale_fill_manual(values =  c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
-ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_standardized/images/YhatMort_out_of_sample_median_vs_obs_violin_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
+ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_standardized_v3/images/YhatMort_out_of_sample_median_vs_obs_violin_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
 
 ggplot(yhat.quant, aes(as.character(Mobs), y = ci.hi, fill =Mobs ))+geom_violin()+ylab("97.5% quantile of predicted survival status")+
   xlab("Observed in-sample tree status")+scale_fill_manual(values =  c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
-ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_standardized/images/YhatMort_out_of_sample_95pct_vs_obs_violin_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
+ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_standardized_v3/images/YhatMort_out_of_sample_95pct_vs_obs_violin_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
 
 
 ggplot(yhat.quant, aes(as.character(Mobs), y = ci.hi, fill =Mobs ))+geom_violin()+ylab("2.5% quantile of predicted survival status")+
   xlab("Observed in-sample tree status")+scale_fill_manual(values =  c("0" = "#a6611a", "1"= "forestgreen"))+theme_bw()+theme(legend.position = "none")+facet_wrap(~COMMON)
-ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_standardized/images/YhatMort_out_of_sample_2.5pct_vs_obs_violin_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
+ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutput_full_standardized_v3/images/YhatMort_out_of_sample_2.5pct_vs_obs_violin_model_",model.number, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".png"))
 
 # ###########
 # # Use the Loo package to compute PSIS-LOO and check diagnositcs
@@ -268,7 +268,7 @@ ggsave(height = 4, width = 4, units = "in",paste0(output.folder, "SPCD_stanoutpu
 # print(loo_1)
 # # save the loo_1 object
 #
-# save(log_lik_1, r_eff, loo_1, file = paste0(output.folder, "SPCD_stanoutput_full_standardized/LOO_model_",model.number,"remper.corr_",remper.correction, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".Rdata"))
+# save(log_lik_1, r_eff, loo_1, file = paste0(output.folder, "SPCD_stanoutput_full_standardized_v3/LOO_model_",model.number,"remper.corr_",remper.correction, "_species_", SPCD.id ,"_remper_corr_", remper.cor.vector[j], ".Rdata"))
 #
 # ###------------------------------------
 # psis <- loo_1$psis_object
@@ -348,8 +348,8 @@ model.assessment.df <- data.frame(SPCD = SPCD.id,
                                   auc.oosample.hi = full.oos.auc.quants[3]
                                   #accuracy.oos = accuracy.oos
 )
-write.csv(model.assessment.df , paste0(output.folder, "SPCD_stanoutput_full_standardized/Accuracy_df_model_",model.number, "_remper_0.5_species_", SPCD.id,"_remper_corr_", remper.cor.vector[j], ".csv" ), row.names = FALSE)
+write.csv(model.assessment.df , paste0(output.folder, "SPCD_stanoutput_full_standardized_v3/Accuracy_df_model_",model.number, "_remper_0.5_species_", SPCD.id,"_remper_corr_", remper.cor.vector[j], ".csv" ), row.names = FALSE)
 
 # save the predicted values in sample and out of sampel
-saveRDS(psurv.quant, paste0(output.folder, "SPCD_stanoutput_full_standardized/predicted_mort/psurv_quant_", model.number, "remper_", remper.cor.vector[j], "_SPCD_", SPCD.id, ".rds"))
-saveRDS(psurv.hat.quant, paste0(output.folder, "SPCD_stanoutput_full_standardized/predicted_mort/psurv_hat_quant_", model.number, "remper_", remper.cor.vector[j], "_SPCD_", SPCD.id, ".rds"))
+saveRDS(psurv.quant, paste0(output.folder, "SPCD_stanoutput_full_standardized_v3/predicted_mort/psurv_quant_", model.number, "remper_", remper.cor.vector[j], "_SPCD_", SPCD.id, ".rds"))
+saveRDS(psurv.hat.quant, paste0(output.folder, "SPCD_stanoutput_full_standardized_v3/predicted_mort/psurv_hat_quant_", model.number, "remper_", remper.cor.vector[j], "_SPCD_", SPCD.id, ".rds"))
