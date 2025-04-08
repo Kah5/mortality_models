@@ -245,6 +245,11 @@ for(i in 1:length(SPCD.df$SPCD)){
     
     
     
+    glm.A1 <-  glm(M ~ DIA, data = covariate.data, family = "binomial")
+    glm.A2 <-  glm(M ~ DIA + exp(DIA), data = covariate.data, family = "binomial")
+    glm.A3 <-  glm(M ~ slope, data = covariate.data, family = "binomial")
+    glm.A4<-  glm(M ~ aspect, data = covariate.data, family = "binomial")
+    
     glm.A <-  glm(M ~ MAP , data = covariate.data, family = "binomial")
     glm.B <-  glm(M ~ MATmaxanom, data = covariate.data, family = "binomial")
     glm.C <-  glm(M ~ MATminanom, data = covariate.data, family = "binomial")
@@ -1346,8 +1351,8 @@ for(i in 1:length(SPCD.df$SPCD)){
                      elev*BA + Ndep*BA + 
                      SPCD.BA*BA + non_SPCD.BA*BA + prop.focal.ba*BA+ 
                      elev*Ndep + SPCD.BA*elev + non_SPCD.BA*elev + prop.focal.ba*elev +
-                     # SPCD.BA interactions
-                     non_SPCD.BA*SPCD.BA + prop.focal.ba*SPCD.BA 
+                     # Ndep
+                     SPCD.BA*Ndep + non_SPCD.BA*Ndep + prop.focal.ba*Ndep 
                    , data = covariate.data, family = "binomial")
     
     
@@ -1432,14 +1437,106 @@ for(i in 1:length(SPCD.df$SPCD)){
                      elev*BA + Ndep*BA + 
                      SPCD.BA*BA + non_SPCD.BA*BA + prop.focal.ba*BA+ 
                      elev*Ndep + SPCD.BA*elev + non_SPCD.BA*elev + prop.focal.ba*elev +
+                     # Ndep
+                     SPCD.BA*Ndep + non_SPCD.BA*Ndep + prop.focal.ba*Ndep +
                      # SPCD.BA interactions
                      non_SPCD.BA*SPCD.BA + prop.focal.ba*SPCD.BA #+
                    # # non_SPCD.BA interactions
                    # non_SPCD.BA*prop.focal.ba
                    , data = covariate.data, family = "binomial")
     
+    glm.40 <-  glm(M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
+                   + MATmin+ MAP + MATmaxanom 
+                   + MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD + elev + Ndep + 
+                     SPCD.BA + non_SPCD.BA + prop.focal.ba +
+                     # annual growth interactcovarions
+                     DIA*dia.diff + aspect*dia.diff  + slope*dia.diff  + MATmax*dia.diff  
+                   + MATmin*dia.diff  + MAP*dia.diff  + MATmaxanom*dia.diff  
+                   + MATminanom*dia.diff  + MAPanom*dia.diff  + BAL*dia.diff  + damage*dia.diff  + si*dia.diff +
+                     +  PHYSIO*dia.diff + BA*dia.diff + RD*dia.diff + elev*dia.diff + Ndep*dia.diff +
+                     SPCD.BA*dia.diff + non_SPCD.BA*dia.diff + prop.focal.ba*dia.diff +
+                     # all diameter interactions
+                     aspect*DIA  + slope*DIA  + MATmax*DIA  
+                   + MATmin*DIA  + MAP*DIA  + MATmaxanom*DIA  
+                   + MATminanom*DIA  + MAPanom*DIA  + BAL*DIA  + damage*DIA  + si*DIA + 
+                     PHYSIO*DIA + BA*DIA + RD*DIA + elev*DIA + Ndep*DIA +
+                     SPCD.BA*DIA + non_SPCD.BA*DIA + prop.focal.ba*DIA + 
+                     # all aspect interactions
+                     slope*aspect  + MATmax*aspect  
+                   + MATmin*aspect  + MAP*aspect  + MATmaxanom*aspect  
+                   + MATminanom*aspect  + MAPanom*aspect  + BAL*aspect  + damage*aspect  + si*aspect +
+                     PHYSIO*aspect + BA*aspect + RD*aspect + elev*aspect + Ndep*aspect+
+                     SPCD.BA*aspect + non_SPCD.BA*aspect + prop.focal.ba*aspect +
+                     # all slope interactions
+                     MATmax*slope  
+                   + MATmin*slope  + MAP*slope  + MATmaxanom*slope  
+                   + MATminanom*slope  + MAPanom*slope  + BAL*slope  + damage*slope  + si*slope + 
+                     PHYSIO*slope + BA*slope + RD*slope + elev*slope + Ndep*slope +
+                     SPCD.BA*slope + non_SPCD.BA*slope + prop.focal.ba*slope+ 
+                     # all MATmax interactions
+                     
+                     MATmin*MATmax  + MAP*MATmax  + MATmaxanom*MATmax  
+                   + MATminanom*MATmax  + MAPanom*MATmax  + BAL*MATmax  + damage*MATmax  + si*MATmax +
+                     PHYSIO*MATmax + BA*MATmax + RD*MATmax + elev*MATmax +  Ndep*MATmax +
+                     SPCD.BA*MATmax + non_SPCD.BA*MATmax + prop.focal.ba*MATmax+ 
+                     # all MATmin interactions
+                     
+                     MAP*MATmin + MATminanom*MATmin
+                   + MATminanom*MATmin + MAPanom*MATmin + BAL*MATmin + damage*MATmin + si*MATmin +
+                     PHYSIO*MATmin + BA*MATmin + RD*MATmin + elev*MATmin + Ndep*MATmin +
+                     SPCD.BA*MATmin + non_SPCD.BA*MATmin + prop.focal.ba*MATmin+ 
+                     # all MAP interatction
+                     MATminanom*MAP +
+                     MATmaxanom*MAP + MAPanom*MAP + BAL*MAP + damage*MAP + si*MAP +
+                     PHYSIO*MAP + BA*MAP + RD*MAP + elev*MAP + Ndep*MAP +
+                     SPCD.BA*MAP + non_SPCD.BA*MAP + prop.focal.ba*MAP + 
+                     
+                     
+                     # all MATminanom interatction
+                     
+                     MATmaxanom*MATminanom + MAPanom*MATminanom + BAL*MATminanom + damage*MATminanom + si*MATminanom +
+                     PHYSIO*MATminanom + BA*MATminanom + RD*MATminanom + elev*MATminanom + Ndep*MATminanom +
+                     SPCD.BA*MATminanom + non_SPCD.BA*MATminanom + prop.focal.ba*MATminanom+ 
+                     # all MATmaxanom interatction
+                     
+                     MAPanom*MATmaxanom + BAL*MATmaxanom + damage*MATmaxanom + si*MATmaxanom +
+                     PHYSIO*MATmaxanom + BA*MATmaxanom + RD*MATmaxanom + elev*MATmaxanom + Ndep*MATmaxanom +
+                     SPCD.BA*MATmaxanom + non_SPCD.BA*MATmaxanom + prop.focal.ba*MATmaxanom +
+                     # all MAPanom interatction
+                     
+                     BAL*MAPanom + damage*MAPanom + si*MAPanom +
+                     PHYSIO*MAPanom + BA*MAPanom + RD*MAPanom +elev*MAPanom + Ndep*MAPanom+
+                     SPCD.BA*MAPanom + non_SPCD.BA*MAPanom + prop.focal.ba*MAPanom  + 
+                     # all BAL interatction
+                     
+                     damage*BAL + si*BAL + 
+                     PHYSIO*BAL + BA*BAL + RD*BAL +elev*BAL + Ndep*BAL +
+                     SPCD.BA*BAL + non_SPCD.BA*BAL + prop.focal.ba*BAL+
+                     # all remainingdamage interatction
+                     
+                     si*damage + PHYSIO*damage + BA*damage + RD*damage + elev*damage + Ndep*damage +
+                     SPCD.BA*damage + non_SPCD.BA*damage + prop.focal.ba*damage+
+                     
+                     PHYSIO*si + BA*si + RD*si + elev*si + Ndep*si +
+                     SPCD.BA*si + non_SPCD.BA*si + prop.focal.ba*si+
+                     BA*PHYSIO + RD*PHYSIO + elev*PHYSIO + Ndep*PHYSIO+
+                     SPCD.BA*PHYSIO + non_SPCD.BA*PHYSIO + prop.focal.ba*PHYSIO+ 
+                     BA*RD + elev*RD + Ndep*RD +
+                     SPCD.BA*RD + non_SPCD.BA*RD + prop.focal.ba*RD+
+                     elev*BA + Ndep*BA + 
+                     SPCD.BA*BA + non_SPCD.BA*BA + prop.focal.ba*BA+ 
+                     elev*Ndep + SPCD.BA*elev + non_SPCD.BA*elev + prop.focal.ba*elev +
+                     # Ndep
+                     SPCD.BA*Ndep + non_SPCD.BA*Ndep + prop.focal.ba*Ndep +
+                     # SPCD.BA interactions
+                     non_SPCD.BA*SPCD.BA + prop.focal.ba*SPCD.BA +
+                   # non_SPCD.BA interactions
+                     non_SPCD.BA*prop.focal.ba
+                   , data = covariate.data, family = "binomial")
+    
     # mcfaddens rsquared
-    list.mods <- list(glm.A, glm.B, glm.C, glm.D, glm.E, 
+    list.mods <- list(glm.A1, glm.A2, glm.A3, glm.A4,
+                      glm.A, glm.B, glm.C, glm.D, glm.E, 
                       glm.F, glm.G, glm.H, glm.I, glm.J, 
                       glm.K, glm.L,glm.M, glm.N, glm.O, 
                       glm.1, glm.2, glm.3, glm.4, glm.5, 
@@ -1450,7 +1547,7 @@ for(i in 1:length(SPCD.df$SPCD)){
                       glm.21, glm.22, glm.23, glm.24, glm.25, 
                       glm.26, glm.27, glm.28, glm.29, glm.30, 
                       glm.31, glm.32, glm.33, glm.34, glm.35, 
-                      glm.36, glm.37, glm.38)
+                      glm.36, glm.37, glm.38, glm.39)
     
     # get convergence list
     Convergence.list <- lapply(list.mods, FUN = function(x){x$converged}) 
@@ -1492,8 +1589,8 @@ for(i in 1:length(SPCD.df$SPCD)){
     
     model.diag <- data.frame(SPCD =  SPCD.df[i,]$SPCD,
                              Species = nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON),
-                             model = paste0("model ", 1:56), 
-                             model.no = as.numeric(1:56),
+                             model = paste0("model ", 1:length(list.mods)), 
+                             model.no = as.numeric(1:length(list.mods)),
                              remper.correction = remper.cor.vector[j],
                              AUC = AUC.df[,1],
                              McFadden.Rsq = McFadden.rsq.df[,1], 
@@ -1610,13 +1707,21 @@ ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, McFadden.Rsq,  label = 
 ggsave("SPCD_glm_output/GLM_all_species_AUC_Rsq.png", height = 5, width = 8)
 
 # make a table explaining the models:
+M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
++ MATmin+ MAP + MATmaxanom 
++ MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD +
+  elev + Ndep + SPCD.BA + non_SPCD.BA + prop.focal.ba
 
-
-glm.model.table <- data.frame(model.no = 1:49, 
-                              description = c("MAP", 
+glm.model.table <- data.frame(model.no = 1:length(list.mods), 
+                              description = c("Diameter",
+                                              "aspect", 
+                                              "slope", 
+                                              "MAP",
+                                              "MATmax", 
+                                              "MATmin", 
+                                              "MAPanom", 
                                               "MATmaxanom", 
                                               "MATminanom", 
-                                              "MAPanom", 
                                               "BAL", 
                                               "percent damage", 
                                               "site index", 
@@ -1625,50 +1730,71 @@ glm.model.table <- data.frame(model.no = 1:49,
                                               "Relative Density",
                                               "elevation", 
                                               "N depostion (wet + dry)", 
+                                              "Species Basal Area", 
+                                              "Non-focal Species BA", 
+                                              "proportion of focal BA",
                                               "diameter difference", 
+                                              
+                                              
+                                              
+                                             
+                                              
                                               
                                               ## sequentially adding in each variable
                                               "diameter difference + Diameter", 
-                                              "exp(Diameter)", 
-                                              "aspect", 
-                                              "slope", 
-                                              "MATmax", 
-                                              "MATmin", 
-                                              "MAP", 
-                                              "MATmax anomaly", 
-                                              "MATmin anomaly", 
-                                              "MAP anomaly", 
-                                              "BAL", 
-                                              "percent damage", 
-                                              "site index", 
-                                              "physiographic class", 
-                                              "BA", 
-                                              "Relative Density", 
-                                              "Elevation", 
-                                              "N deposition", 
+                                              "diameter difference + Diameter + exp(DIA)", 
+                                              "+ aspect", 
+                                              "+ slope", 
+                                             
+                                              "+ MATmax", 
+                                              "+ MATmin", 
+                                              "+ MAP", 
+                                              "+ MATmax anomaly", 
+                                              "+ MATmin anomaly", 
+                                              "+ MAP anomaly", 
+                                              "+ BAL", 
+                                              "+ percent damage", 
+                                              "+ site index", 
+                                              "+ physiographic class", 
+                                              "+ BA", 
+                                              "+ Relative Density", 
+                                              "+ Elevation", 
+                                              "+ N deposition",
+                                              "+ Species Basal Area", 
+                                              "+ Non-focal Species BA", 
+                                              "+ proportion of focal BA",
+                                        
                                               ## adding in interactions
                                               "growth interactions", 
                                               "diameter interactions", 
                                               "aspect interactions", 
-                                              " slope interactions", 
+                                              "slope interactions", 
                                               "MATmax interactions", 
                                               "MATmin interactions", 
                                               "MAP interactions", 
-                                              "MATmax anomaly interactions", 
                                               "MATmin anomaly interactions", 
+                                              "MATmax anomaly interactions", 
+                                              
                                               "MAP anomaly interactions", 
                                               "BAL interactions", 
                                               "percent damage interactions", 
                                               "site index interactions", 
                                               "Physiographic interactions", 
                                               "Relative Density interactions", 
-                                              "elevation interactions",
+                                             
                                               "Basal Area interactions", 
-                                              "N dep interactions"
+                                              "elevation interactions",
+                                              
+                                              "N dep interactions", 
+                                              "Species BA interactions"#, 
+                                              
+                                              # this one has NA values 
+                                              #"Non-focal Species BA interactions" 
+                                              
                               ), 
-                              model.type = c(rep("single variable", 13), 
-                                             rep("adding on to growth effect", 18), 
-                                             rep("adding interaction terms", 18
+                              model.type = c(rep("single variable", 20), 
+                                             rep("adding on to growth effect", 22), 
+                                             rep("adding interaction terms", 19
                                              )))
 model.diag <- left_join(model.diag, glm.model.table)
 
