@@ -31,7 +31,7 @@ nspp$cumulative.pct <- cumsum(nspp$pct)
 
 # link up to the species table:
 nspp$COMMON <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$COMMON
-
+nspp$Species <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$COMMON
 View(nspp)
 
 nspp[1:17,]$COMMON
@@ -1707,10 +1707,6 @@ ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, McFadden.Rsq,  label = 
 ggsave("SPCD_glm_output/GLM_all_species_AUC_Rsq.png", height = 5, width = 8)
 
 # make a table explaining the models:
-M ~ dia.diff + DIA + exp(DIA)+ aspect + slope + MATmax 
-+ MATmin+ MAP + MATmaxanom 
-+ MATminanom + MAPanom + BAL + damage + si +  PHYSIO + BA + RD +
-  elev + Ndep + SPCD.BA + non_SPCD.BA + prop.focal.ba
 
 glm.model.table <- data.frame(model.no = 1:length(list.mods), 
                               description = c("Diameter",
@@ -1819,7 +1815,7 @@ ggsave("SPCD_glm_output/GLM_all_species_AUC_Rsq.png", height = 5, width = 8)
 write.csv(glm.model.table, "GLM_table.csv", quote = TRUE)
 
 # get all of the correlated variables for all species--are there common ones that we should eliminate
-inter.cov.cors <- list()
+inter.cov.corrs <- list()
 for (i in 1:17){
   #read in correlation matrix
   spcd.correlations <- readRDS(paste0("SPCD_glm_output/GLM_Correlation_matrix_SPCD_",nspp[i,]$SPCD,"_predictors.rds"))
@@ -1833,7 +1829,7 @@ for (i in 1:17){
   
   # save in a list with the rest of the species
   inter.cov.corrs[[i]] <- cor_df %>% mutate(SPCD = nspp[i,]$SPCD, 
-                    Species = nspp[i,]$Species) %>% select(SPCD, Species, Variable1, Variable2, Correlation) %>% 
+                    Species = nspp[i,]$Species) %>% dplyr::select(SPCD, Species, Variable1, Variable2, Correlation) %>% 
                                      mutate(high.corr.F = ifelse(abs(Correlation) >= 0.5, "High", "Low"))
   
 }
@@ -1985,8 +1981,8 @@ red.cor_df %>% filter(abs(Correlation) >= 0.5)
 problem.variables.corr <- c("MATmin", "MATminanom", "RD", "SPCD.BA")
 # candidate variables for removal in the models
 inter.cov.corrs.df %>% 
-  filter(!Variable1 %in% problem.variables) %>% 
-  filter(!Variable2 %in% problem.variables) %>%
+  filter(!Variable1 %in% problem.variables.corr) %>% 
+  filter(!Variable2 %in% problem.variables.corr) %>%
   filter(abs(Correlation) >= 0.6)
 
 problem.variables.corr.species <- c("MATmin", "MATminanom", "RD", "SPCD.BA", # the same as above
@@ -2067,18 +2063,24 @@ for(i in 1:length(SPCD.df$SPCD)){
       select(!problem.variables.corr.species)
     
     
+    glm.A1 <-  glm(M ~ DIA, data = covariate.data, family = "binomial")
+    glm.A2 <-  glm(M ~ DIA + exp(DIA), data = covariate.data, family = "binomial")
+    glm.A3 <-  glm(M ~ slope, data = covariate.data, family = "binomial")
+    glm.A4 <-  glm(M ~ aspect, data = covariate.data, family = "binomial")
     
-    glm.A <-  glm(M ~ MAP , data = covariate.data, family = "binomial")
-    glm.B <-  glm(M ~ MATmaxanom, data = covariate.data, family = "binomial")
+    glm.A <- glm(M ~ MATmax, data = covariate.data, family = "binomial")
+    glm.B <-  glm(M ~ MAP , data = covariate.data, family = "binomial")
     
-    glm.C <-  glm(M ~ MAPanom, data = covariate.data, family = "binomial")
-    glm.D <-  glm(M ~ BAL, data = covariate.data, family = "binomial")
-    glm.E <-  glm(M ~ damage , data = covariate.data, family = "binomial")
+    glm.C <-  glm(M ~ MATmaxanom, data = covariate.data, family = "binomial")
     
-    glm.F <-  glm(M ~ PHYSIO, data = covariate.data, family = "binomial")
-    glm.G <-  glm(M ~ BA, data = covariate.data, family = "binomial")
+    glm.D <-  glm(M ~ MAPanom, data = covariate.data, family = "binomial")
+    glm.E <-  glm(M ~ BAL, data = covariate.data, family = "binomial")
+    glm.F <-  glm(M ~ damage , data = covariate.data, family = "binomial")
     
-    glm.H <-  glm(M ~ Ndep, data = covariate.data, family = "binomial")
+    glm.G <-  glm(M ~ PHYSIO, data = covariate.data, family = "binomial")
+    glm.H <-  glm(M ~ BA, data = covariate.data, family = "binomial")
+    
+    glm.I <-  glm(M ~ Ndep, data = covariate.data, family = "binomial")
     
     
     
@@ -2578,11 +2580,14 @@ for(i in 1:length(SPCD.df$SPCD)){
     
     
     # mcfaddens rsquared
-    list.mods <- list(glm.A, glm.B, glm.C, glm.D, glm.E, 
-                      glm.F, glm.G, glm.H,  
+    list.mods <- list( glm.A1, glm.A2, glm.A3, glm.A4,
+                      glm.A, glm.B, glm.C, glm.D, glm.E, 
+                      glm.F, glm.G, glm.H, glm.I, 
                       glm.1, glm.2, glm.3, glm.4, glm.5, 
-                      glm.6, glm.7, glm.8, glm.9, glm.10, 
-                      glm.11, glm.12, glm.13, glm.14, glm.15, 
+                      #glm.6, 
+                      glm.7, glm.8, glm.9, #glm.10, 
+                      glm.11, glm.12, glm.13, glm.14, 
+                      #glm.15, 
                       glm.16, glm.17, glm.18, glm.19, glm.20, 
                       #glm.20.a, glm.20.b, glm.20.c,
                       glm.21, glm.22, glm.23, glm.24, glm.25, 
@@ -2628,8 +2633,8 @@ for(i in 1:length(SPCD.df$SPCD)){
     
     model.diag <- data.frame(SPCD =  SPCD.df[i,]$SPCD,
                              Species = nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON),
-                             model = paste0("model ", 1:37), 
-                             model.no = as.numeric(1:37),
+                             model = paste0("model ", 1:length(list.mods)), 
+                             model.no = as.numeric(1:length(list.mods)),
                              remper.correction = remper.cor.vector[j],
                              AUC = AUC.df[,1],
                              McFadden.Rsq = McFadden.rsq.df[,1], 
@@ -2749,8 +2754,15 @@ ggsave("SPCD_glm_output/GLM_reduced_all_species_AUC_Rsq.png", height = 5, width 
 # make a table explaining the models:
 
 
-glm.model.table <- data.frame(model.no = 1:35, 
-                              description = c("MAP", 
+glm.model.table <- data.frame(model.no = 1:length(list.mods), 
+                              description = c("Diameter",
+                                              "Diameter + exp(DIA)",
+                                             
+                                              "slope", 
+                                              "aspect", 
+                                              "MATmax",
+                                              "MAP", 
+                                              
                                               "MATmaxanom", 
                                               #"MATminanom", 
                                               "MAPanom", 
@@ -2766,25 +2778,28 @@ glm.model.table <- data.frame(model.no = 1:35,
                                               
                                               ## sequentially adding in each variable
                                               "diameter difference + Diameter", 
-                                              "exp(Diameter)", 
-                                              "aspect", 
-                                              "slope", 
-                                              "MATmax", 
+                                              
+                                              "diameter difference + Diameter + exp(DIA)",  
+                                              "+ aspect", 
+                                              "+ slope", 
+                                              
+                                              "+ MATmax", 
                                               #"MATmin", 
-                                              "MAP", 
-                                              "MATmax anomaly", 
+                                              "+ MAP", 
+                                              "+ MATmax anomaly",  
                                               #"MATmin anomaly", 
-                                              "MAP anomaly", 
-                                              "BAL", 
-                                              "percent damage", 
+                                              "+ MAP anomaly", 
+                                              "+ BAL", 
+                                              "+ percent damage", 
                                               #"site index", 
-                                              "physiographic class", 
-                                              "BA", 
+                                              "+ physiographic class", 
+                                              "+ BA", 
                                               #"Relative Density", 
                                               #"Elevation", 
-                                              "N deposition", 
+                                              "+ N deposition",
+                                              
                                               ## adding in interactions
-                                              "growth interactions", 
+                                              "diameter difference interactions", 
                                               "diameter interactions", 
                                               "aspect interactions", 
                                               "slope interactions", 
@@ -2800,12 +2815,12 @@ glm.model.table <- data.frame(model.no = 1:35,
                                               "Physiographic interactions", 
                                               #"Relative Density interactions", 
                                               #"elevation interactions",
-                                              "Basal Area interactions", 
-                                              "N dep interactions"
+                                              "Basal Area interactions"#, 
+                                              # "N dep interactions"
                               ), 
-                              model.type = c(rep("single variable", 9), 
-                                             rep("adding on to growth effect",13), 
-                                             rep("adding interaction terms", 13
+                              model.type = c(rep("single variable", 14), 
+                                             rep("adding on to diameter difference effect",16), 
+                                             rep("adding interaction terms", 9
                                              )))
 model.diag <- left_join(model.diag, glm.model.table)
 
