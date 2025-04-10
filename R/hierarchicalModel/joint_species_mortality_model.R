@@ -39,7 +39,7 @@ options(mc.cores = parallel::detectCores())
 spp.table <- data.frame(SPCD.id = nspp[1:17,]$SPCD, 
                         spp = 1:17, 
                         COMMON = nspp[1:17,]$COMMON)
-model.no <- 1
+model.no <- 6
 SPCD.id <- spp.table[1,]$SPCD.id
 
 xM.list <- xMrep.list <-y.list <- y.test.list <- nSPP.list <- nSPP.rep.list <- remper.list <-remper.rep.list<- list()
@@ -103,6 +103,41 @@ mortrep.spp %>% group_by(ytest, SPPrep) %>% slice_sample(n = 1000)
 
 
 
+# null model:
+# function form 2 with an argument named `chain_id`
+initf2 <- function(chain_id = 1) {
+  # cat("chain_id =", chain_id, "\n")
+  list(mubeta = 1, sigma = 4, z = array(rnorm(6), dim = c(3,2)), alpha = chain_id)
+}
+
+# Function to generate initial values for the Stan model
+generate_initial_values <- function(K, S) {
+  # Set random seed for reproducibility
+  set.seed(123)
+  
+  # Initialize shared mean vector mu_beta
+  mu_beta_init <- rnorm(K, mean = 0, sd = 0.1)  # Small random values around 0
+  
+  # Initialize shared standard deviation vector sigma_beta
+  sigma_beta_init <- abs(rnorm(K, mean = 0.5, sd = 0.1))  # Positive values around 0.5
+  
+  # Initialize beta coefficients matrix for each species
+  beta_init <- matrix(0, nrow = K, ncol = S)
+  for (s in 1:S) {
+    beta_init[, s] <- rnorm(K, mean = mu_beta_init, sd = sigma_beta_init)  # Centered around mu_beta_init
+  }
+  
+  # Return list of initial values
+  list(mu_beta = mu_beta_init,
+       sigma_s = sigma_beta_init,
+       u_beta = beta_init)
+}
+
+# Example usage
+K <- 48  # Number of predictors
+S <- 17  # Number of species
+
+init_list <- generate_initial_values(K, S)
 
 # Display the generated initial values
 
@@ -136,7 +171,7 @@ fit.1 <- stan(file = "modelcode/reparam_hierarchical_model.stan" ,
               data = mod.data.full,
               seed = 22,
               init = 0, 
-              iter = 2000, 
+              iter = 1000, 
               chains = 2, 
               verbose=FALSE, 
               control =  list(max_treedepth = 15, adapt_delta = 0.99),#list(adapt_delta = 0.99, stepsize = 0.5, max_treedepth = 15),#, stepsize = 0.01, max_treedepth = 15),
@@ -177,6 +212,9 @@ time.diag <- data.frame(SPP = mod.data.full$SPP,
 
 write.csv(time.diag, paste0(output.folder, "SPCD_stanoutput_joint_v3/joint_model_time_diag_SPCD_joint_model_", model.no, "_remper_", remper.correction,".csv"))
 
+# csvfiles <- dir(getwd(),
+#                 pattern = 'hierarchical_model_6_1.csv', full.names = TRUE)
+# fit.1.1 <- read_stan_csv(csvfiles)
 # get the sampler diagnostics and save:
 # Time difference of 22.91259 mins for all 17 species but only 30% of the data
 
@@ -184,28 +222,28 @@ saveRDS(fit.1, paste0(output.folder, "SPCD_stanoutput_joint_v3/samples/model_",m
 
 joint.samples <- as_draws_df(fit.1)
 
-alpha.p <- subset_draws(joint.samples, variable = "alpha")
+alpha.p <- subset_draws(joint.samples, variable = "mu_alpha")
 alpha.spp <- subset_draws(joint.samples, variable = "alpha_SPP")
 
 saveRDS(alpha.p, paste0(output.folder, "SPCD_stanoutput_joint_v3/alpha.p_model_",model.no,"_1000samples.rds"))
 saveRDS(alpha.spp, paste0(output.folder, "SPCD_stanoutput_joint_v3/alpha.spp_model_",model.no,"_1000samples.rds"))
 
-beta.p <- subset_draws(joint.samples, variable = "mu_beta", chain = 1:2, iteration = 500:1500)
-bet0a.spp <- subset_draws(joint.samples, variable = "u_beta", chain = 1:2, iteration = 500:1500)
+beta.p <- subset_draws(joint.samples, variable = "mu_beta")#, chain = 1:2, iteration = 500:1500)
+bet0a.spp <- subset_draws(joint.samples, variable = "u_beta")#, chain = 1:2, iteration = 500:1500)
 saveRDS(beta.p, paste0(output.folder, "SPCD_stanoutput_joint_v3/beta_model_",model.no,"_1000samples.rds"))
 saveRDS(bet0a.spp, paste0(output.folder, "SPCD_stanoutput_joint_v3/u_betas_model_",model.no,"_1000samples.rds"))
 
-sigmas <- subset_draws(joint.samples, variable = c("sigma_s", "sigma_aS"), chain = 1:2, iteration = 500:1500)
+sigmas <- subset_draws(joint.samples, variable = c("sigma_s", "sigma_aS"))#, chain = 1:2, iteration = 500:1500)
 saveRDS(sigmas, paste0(output.folder, "SPCD_stanoutput_joint_v3/sigmas_model_",model.no,"_1000samples.rds"))
 
-yrep <- subset_draws(joint.samples, variable = "y_rep", chain = 1:2, iteration = 500:1500)
-yhat <- subset_draws(joint.samples, variable = "y_hat", chain = 1:2, iteration = 500:1500)
+yrep <- subset_draws(joint.samples, variable = "y_rep")#, chain = 1:2, iteration = 500:1500)
+yhat <- subset_draws(joint.samples, variable = "y_hat")#, chain = 1:2, iteration = 500:1500)
 saveRDS(yrep, paste0(output.folder, "SPCD_stanoutput_joint_v3/yrep_model_",model.no,"_1000samples.rds"))
 saveRDS(yhat, paste0(output.folder, "SPCD_stanoutput_joint_v3/yhat_model_",model.no,"_1000samples.rds"))
 
 
-mMrep <- subset_draws(joint.samples, variable = "mMrep", chain = 1:2, iteration = 500:1500)
-mMhat <- subset_draws(joint.samples, variable = "mMhat", chain = 1:2, iteration = 500:1500)
+mMrep <- subset_draws(joint.samples, variable = "mMrep")#, chain = 1:2, iteration = 500:1500)
+mMhat <- subset_draws(joint.samples, variable = "mMhat")#, chain = 1:2, iteration = 500:1500)
 saveRDS(mMrep, paste0(output.folder, "SPCD_stanoutput_joint_v3/mMrep_model_",model.no,"_1000samples.rds"))
 saveRDS(mMhat, paste0(output.folder, "SPCD_stanoutput_joint_v3/mMhat_model_",model.no,"_1000samples.rds"))
 
@@ -216,19 +254,28 @@ mMhat <- readRDS(mMhat, paste0(output.folder, "SPCD_stanoutput_joint_v3/mMhat_mo
 yhat <- readRDS(paste0(output.folder, "SPCD_stanoutput_joint_v3/yhat_model_",model.no,"_1000samples.rds"))
 yrep <- readRDS(paste0(output.folder, "SPCD_stanoutput_joint_v3/yrep_model_",model.no,"_1000samples.rds"))
 
+## Traceplots
+# make and save the traceplots for the betas
+# 33 separate covariates, with 17 species and one population parameter
 
-growth.params = c(paste0("u_beta[", 1:17, ",1]"), "mu_beta[1]")
-dia.params = c(paste0("u_beta[", 1:17, ",2]"), "mu_beta[2]")
-RD.params = c(paste0("u_beta[", 1:17, ",3]"), "mu_beta[3]")
-ba.params = c(paste0("u_beta[", 1:17, ",4]"), "mu_beta[4]")
+for(i in 1:length(colnames(mod.data.full$xM))){
+  cov.params = c(paste0("u_beta[", 1:17, ",",i,"]"), paste0("mu_beta[",i,"]"))
+  plt.t <- traceplot(fit.1, pars = cov.params)
+  ggsave(filename = paste0("SPCD_stanoutput/images/traceplot_", colnames(mod.data.full$xM)[i], ".png"), 
+         plot = plt.t, width = 8, height = 6)
+  
+}
 
-traceplot(fit.1, pars = "alpha_SPP")
-traceplot(fit.1, pars = growth.params)
-traceplot(fit.1, pars = dia.params)
-traceplot(fit.1, pars = RD.params)
-traceplot(fit.1, pars = ba.params)
-#traceplot(fit.1, pars = "u_beta[6,1]")
-traceplot(fit.1, pars = "mu_beta")
+# plot up the alphas
+cov.params = c(paste0("alpha_SPP[", 1:17,"]"), "mu_alpha")
+plt.t <- traceplot(fit.1, pars = cov.params)
+ggsave(filename = paste0("SPCD_stanoutput/images/traceplot_alphas_SPP.png"), 
+       plot = plt.t, width = 8, height = 6)
+
+
+
+dev.off()
+
 
 beta.names <- data.frame(parameter = colnames(mod.data.full$xM), 
                          param.no = 1:length(colnames(mod.data.full$xM)))
@@ -236,14 +283,6 @@ beta.names <- data.frame(parameter = colnames(mod.data.full$xM),
 nvariables <- length(names(fit.1))
 
 nvariables
-#if(nvariables < 10){
-pdf( paste0("SPCD_stanoutput_v3/images/traceplots_mortality_model_6_all.species.pdf"))
-#specify to save plots in 0x0 grid
-par(mfrow = c(8,3))
-for (p in 1:nvariables) {   
-  print(traceplot (fit.1,pars = names(fit.1)[p], inc_warmup = FALSE))
-}
-dev.off()
 
 # names(fit.1) <- c(paste0("alpha_SPP_", 1:17),
 #                   colnames(mod.data$xM),
@@ -259,8 +298,8 @@ dev.off()
 #                   "lp__")
 
 # compare the observed status to the predicted status
-yrep.estimates <- readRDS(paste0(output.folder, "SPCD_stanoutput_joint_v3/yrep_model_",model.no,"_1000samples.rds"))%>%
-  subset_draws(chain = 1:3, iteration = 1000:1500)
+yrep.estimates <- readRDS(paste0(output.folder, "SPCD_stanoutput_joint_v3/yrep_model_",model.no,"_1000samples.rds"))#%>%
+#subset_draws(chain = 1:3, iteration = 1000:1500)
 
 yrep.quant <- summarise_draws(yrep.estimates, median, ~quantile(.x, probs = c(0.025, 0.975)))%>% rename(`ci.lo` = `2.5%`, `ci.hi` = `97.5%`)
 
@@ -278,8 +317,8 @@ ggsave(height = 8, width = 8, units = "in",paste0(output.folder, "SPCD_stanoutpu
 
 
 # compare the observed status to the predicted status
-yhat.estimates <- readRDS( paste0(output.folder, "SPCD_stanoutput_joint_v3/yhat_model_",model.no,"_1000samples.rds"))%>%
-  subset_draws(chain = 1:3, iteration = 1000:1500)
+yhat.estimates <- readRDS( paste0(output.folder, "SPCD_stanoutput_joint_v3/yhat_model_",model.no,"_1000samples.rds"))#%>%
+# subset_draws(chain = 1:3, iteration = 1000:1500)
 yhat.quant <- summarise_draws(yhat.estimates, median, ~quantile(.x, probs = c(0.025, 0.975)))%>% rename(`ci.lo` = `2.5%`, `ci.hi` = `97.5%`)
 
 yhat.quant$Mobs <- as.character(mod.data.full$y)
@@ -296,8 +335,8 @@ ggsave(height = 8, width = 8, units = "in",paste0(output.folder, "SPCD_stanoutpu
 
 
 # survival probability for in-sample data
-psurv.estimates <- readRDS( paste0(output.folder, "SPCD_stanoutput_joint_v3/mMrep_model_",model.no,"_1000samples.rds"))%>%
-  subset_draws(chain = 1:3, iteration = 1000:1500)
+psurv.estimates <- readRDS( paste0(output.folder, "SPCD_stanoutput_joint_v3/mMrep_model_",model.no,"_1000samples.rds"))#%>%
+#subset_draws(chain = 1:3, iteration = 1000:1500)
 
 psurv.quant <- summarise_draws(psurv.estimates, median, ~quantile(.x, probs = c(0.025, 0.975)))%>% rename(`ci.lo` = `2.5%`, `ci.hi` = `97.5%`)
 
@@ -310,10 +349,10 @@ psurv.quant <- left_join(psurv.quant, spp.table)
 ll.test.pmort <- psurv.quant
 saveRDS(ll.test.pmort, paste0(output.folder, "SPCD_stanoutput_joint_v3/ll.train.pmort.RDS"))
 
-rm(psurv.quant, yhat.quant, rep.quant)
+rm( yhat.quant, rep.quant)
 # survival probability for held out-sample data
-psurv.hat.estimates <- readRDS( paste0(output.folder, "SPCD_stanoutput_joint_v3/mMhat_model_",model.no,"_1000samples.rds"))%>%
-  subset_draws(chain = 1:3, iteration = 1000:1500)
+psurv.hat.estimates <- readRDS( paste0(output.folder, "SPCD_stanoutput_joint_v3/mMhat_model_",model.no,"_1000samples.rds"))#%>%
+#subset_draws(chain = 1:3, iteration = 1000:1500)
 
 psurv.hat.quant <- summarise_draws(psurv.hat.estimates, median, ~quantile(.x, probs = c(0.025, 0.975)))%>% rename(`ci.lo` = `2.5%`, `ci.hi` = `97.5%`)
 
@@ -331,8 +370,8 @@ saveRDS(ll.train.pmort, "SPCD_stanoutput_joint_v3/ll.train.pmort.RDS")
 # get accuracy of prediction
 # Accuracy
 #ext_fit <- rstan::extract(fit.1)
-accuracy.is <- mean(as.vector(yrep.quant$median) == mod.data.full$y)
-accuracy.oos <- mean(as.vector(yhat.quant$median) == mod.data.full$ytest)
+# accuracy.is <- mean(as.vector(yrep.quant$median) == mod.data.full$y)
+# accuracy.oos <- mean(as.vector(yhat.quant$median) == mod.data.full$ytest)
 
 # AUC using mltools auc_roc function
 # for in sample data
