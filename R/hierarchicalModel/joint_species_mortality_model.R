@@ -27,7 +27,7 @@ model.no <- 6
 
 set.seed(22)
 # run a giant for loop that runs models 1-9:
-for(m in 8:9) {
+for(m in 1:9) {
   
   
   model.no <- m
@@ -794,6 +794,8 @@ for(m in 8:9) {
   dir.create("SPCD_stanoutput_joint_v3/predicted_mort")
   
 }
+
+
 
 
 
