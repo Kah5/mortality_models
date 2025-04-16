@@ -27,7 +27,7 @@ model.no <- 6
 
 set.seed(22)
 # run a giant for loop that runs models 1-9:
-for(m in 1:9) {
+for(m in 8:9) {
   
   
   model.no <- m
@@ -260,17 +260,17 @@ for(m in 1:9) {
     )
   )
   
-  sigmas <-
-    subset_draws(joint.samples, variable = c("sigma_s", "sigma_aS"))#, chain = 1:2, iteration = 500:1500)
-  saveRDS(
-    sigmas,
-    paste0(
-      output.folder,
-      "SPCD_stanoutput_joint_v3/sigmas_model_",
-      model.no,
-      "_1000samples.rds"
-    )
-  )
+  # sigmas <-
+  #   subset_draws(joint.samples, variable = c("sigma_s", "sigma_aS"))#, chain = 1:2, iteration = 500:1500)
+  # saveRDS(
+  #   sigmas,
+  #   paste0(
+  #     output.folder,
+  #     "SPCD_stanoutput_joint_v3/sigmas_model_",
+  #     model.no,
+  #     "_1000samples.rds"
+  #   )
+  #)
   
   yrep <-
     subset_draws(joint.samples, variable = "y_rep")#, chain = 1:2, iteration = 500:1500)
@@ -319,58 +319,58 @@ for(m in 1:9) {
     )
   )
   
-  ## read in all the outputs to generate AUC scores
-  mMrep <-
-    readRDS(
-      paste0(
-        output.folder,
-        "SPCD_stanoutput_joint_v3/mMrep_model_",
-        model.no,
-        "_1000samples.rds"
-      )
-    )
-  mMhat <-
-    readRDS(
-      mMhat,
-      paste0(
-        output.folder,
-        "SPCD_stanoutput_joint_v3/mMhat_model_",
-        model.no,
-        "_1000samples.rds"
-      )
-    )
-  
-  yhat <-
-    readRDS(
-      paste0(
-        output.folder,
-        "SPCD_stanoutput_joint_v3/yhat_model_",
-        model.no,
-        "_1000samples.rds"
-      )
-    )
-  yrep <-
-    readRDS(
-      paste0(
-        output.folder,
-        "SPCD_stanoutput_joint_v3/yrep_model_",
-        model.no,
-        "_1000samples.rds"
-      )
-    )
-  
+  # ## read in all the outputs to generate AUC scores
+  # mMrep <-
+  #   readRDS(
+  #     paste0(
+  #       output.folder,
+  #       "SPCD_stanoutput_joint_v3/mMrep_model_",
+  #       model.no,
+  #       "_1000samples.rds"
+  #     )
+  #   )
+  # mMhat <-
+  #   readRDS(
+  #     mMhat,
+  #     paste0(
+  #       output.folder,
+  #       "SPCD_stanoutput_joint_v3/mMhat_model_",
+  #       model.no,
+  #       "_1000samples.rds"
+  #     )
+  #   )
+  # 
+  # yhat <-
+  #   readRDS(
+  #     paste0(
+  #       output.folder,
+  #       "SPCD_stanoutput_joint_v3/yhat_model_",
+  #       model.no,
+  #       "_1000samples.rds"
+  #     )
+  #   )
+  # yrep <-
+  #   readRDS(
+  #     paste0(
+  #       output.folder,
+  #       "SPCD_stanoutput_joint_v3/yrep_model_",
+  #       model.no,
+  #       "_1000samples.rds"
+  #     )
+  #   )
+  # 
   ## Traceplots
   # make and save the traceplots for the betas
   # 33 separate covariates, with 17 species and one population parameter
   
-  for (i in 1:length(colnames(mod.data.full$xM))) {
-    cov.params = c(paste0("u_beta[", 1:17, ",", i, "]"),
-                   paste0("mu_beta[", i, "]"))
+  for (j in 1:length(colnames(mod.data.full$xM))) {
+    cov.params = c(paste0("u_beta[", 1:17, ",", j, "]"),
+                   paste0("mu_beta[", j, "]"))
     plt.t <- traceplot(fit.1, pars = cov.params)
     ggsave(
       filename = paste0(
         "SPCD_stanoutput_joint_v3/images/traceplot_",
-        colnames(mod.data.full$xM)[i],
+        colnames(mod.data.full$xM)[j],
         "_model_",
         model.no,
         ".png"
@@ -398,7 +398,7 @@ for(m in 1:9) {
   
   
   
-  dev.off()
+  #dev.off()
   
   
   beta.names <- data.frame(parameter = colnames(mod.data.full$xM),
@@ -606,12 +606,12 @@ for(m in 1:9) {
         for (s in unique(mod.data.full$SPP)) {
           spp.idx <- mod.data.full$SPP %in% s
           spp.auc[[s]] <-
-            auc_roc(mod.data.full$y[spp.idx], as.vector(as.numeric(p.surv.hat[x, spp.idx])))
+            auc_roc( as.vector(as.numeric(p.surv.hat[x, spp.idx])), mod.data.full$y[spp.idx])
         }
         spp.auc.df <- do.call(cbind, spp.auc)
         
         overall.auc <-
-          auc_roc(mod.data.full$y, as.vector(as.numeric(p.surv.hat[x, ])))
+          auc_roc( as.vector(as.numeric(p.surv.hat[x, ])), mod.data.full$y)
         overall.auc
         
         all.auc.values <- cbind(overall.auc, spp.auc.df)
@@ -653,12 +653,12 @@ for(m in 1:9) {
       for (s in unique(mod.data.full$SPP)) {
         spp.idx <- mod.data.full$SPPrep %in% s
         spp.auc[[s]] <-
-          auc_roc(mod.data.full$ytest[spp.idx], as.vector(as.numeric(p.surv.rep[x, spp.idx])))
+          auc_roc( as.vector(as.numeric(p.surv.rep[x, spp.idx])), mod.data.full$ytest[spp.idx])
       }
       spp.auc.df <- do.call(cbind, spp.auc)
       
       overall.auc <-
-        auc_roc(mod.data.full$ytest, as.vector(as.numeric(p.surv.rep[x, ])))
+        auc_roc( as.vector(as.numeric(p.surv.rep[x, ])), mod.data.full$ytest)
       overall.auc
       
       all.auc.values <- cbind(overall.auc, spp.auc.df)
@@ -769,6 +769,228 @@ for(m in 1:9) {
   dir.create("SPCD_stanoutput_joint_v3/predicted_mort")
   
 }
+
+
+
+
+
+# ####################################
+# # redo the accuracy files here:
+# ######################################
+# # note that we dont need this long term--this was to fix outputs already saved with the incorrect AUC values
+# output.folder <- "data-store/data/output/"
+# for(m in 1:9) {
+#   
+#   
+#   model.no <- m
+#   
+#   cat(paste0("running model number ", model.no))
+#   
+#   mod.data.full <-
+#     readRDS (
+#       paste0(
+#         output.folder,
+#         "data-store/data/output/SPCD_stanoutput_joint_v3_model_",model.no,"/all_SPCD_model_",
+#         model.no,
+#         ".RDS"
+#       )
+#     )
+#   
+#   # get the psurv.hat.quant and psurv.quant objects
+#   psurv.hat.estimates <-
+#     readRDS(
+#       paste0(
+#         output.folder,
+#         "SPCD_stanoutput_joint_v3_model_",model.no,"/mMhat_model_",
+#         model.no,
+#         "_1000samples.rds"
+#       )
+#     )
+#   
+#   psurv.hat.quant <-
+#     summarise_draws(psurv.hat.estimates, median, ~ quantile(.x, probs = c(0.025, 0.975))) %>% rename(`ci.lo` = `2.5%`, `ci.hi` = `97.5%`)
+#   
+#   
+#   psurv.hat.quant$Mobs <- as.character(mod.data.full$y)
+#   psurv.hat.quant$spp <- mod.data.full$SPP
+#   psurv.hat.quant <- left_join(psurv.hat.quant, spp.table)
+#   
+#   # for in sample data
+#   actuals = mod.data.full$y
+#   preds = as.vector(psurv.hat.quant$median)
+#   auc.is <- auc_roc(preds, actuals)
+#   
+#   # get the range of responses for each sample:
+#   auc.is.list <- list()
+#   p.surv.hat <-
+#     psurv.hat.estimates %>% select(paste0("mMhat[", 1:mod.data.full$N, "]"))
+#   
+#   # need to split up by species
+#   
+#   auc.is.list <-
+#     lapply(
+#       1:nrow(psurv.hat.estimates),
+#       FUN = function(x) {
+#         spp.auc <- list()
+#         for (s in unique(mod.data.full$SPP)) {
+#           spp.idx <- mod.data.full$SPP %in% s
+#           spp.auc[[s]] <-
+#             auc_roc(as.vector(as.numeric(p.surv.hat[x, spp.idx])), mod.data.full$y[spp.idx])
+#         }
+#         spp.auc.df <- do.call(cbind, spp.auc)
+#         
+#         overall.auc <-
+#           auc_roc( as.vector(as.numeric(p.surv.hat[x, ])), mod.data.full$y)
+#         overall.auc
+#         
+#         all.auc.values <- cbind(overall.auc, spp.auc.df)
+#         colnames(all.auc.values) <- c("overall", 1:17)
+#         all.auc.values
+#       }
+#     )
+#   
+#   AUC.is.df <-
+#     do.call(rbind, auc.is.list) %>% reshape2::melt() %>% group_by(Var2) %>%
+#     summarise(
+#       median = median(value),
+#       auc.ci.lo = quantile(value, 0.025),
+#       auc.ci.hi = quantile(value, 0.975)
+#     ) %>%
+#     rename("spp" = "Var2")#
+#   
+#   
+#   AUC.is.df$spp <- c(18, 1:17)
+#   
+#   
+#   ## for out of sampled data
+#   psurv.estimates <-
+#     readRDS(
+#       paste0(
+#         output.folder,
+#         "SPCD_stanoutput_joint_v3_model_",model.no,"/mMrep_model_",
+#         model.no,
+#         "_1000samples.rds"
+#       )
+#     )
+#   
+#   psurv.quant <-
+#     summarise_draws(psurv.estimates, median, ~ quantile(.x, probs = c(0.025, 0.975))) %>% rename(`ci.lo` = `2.5%`, `ci.hi` = `97.5%`)
+#   
+#   #hist(psurv.quant$median)
+#   
+#   psurv.quant$Mobs <- as.character(mod.data.full$ytest)
+#   psurv.quant$spp <- mod.data.full$SPPrep
+#   psurv.quant <- left_join(psurv.quant, spp.table)
+#   
+#   
+#   actuals = mod.data.full$ytest
+#   preds = as.vector(psurv.quant$median)
+#   
+#   auc.oos <- auc_roc(preds, actuals)
+#   
+#   # get the range of responses for each sample:
+#   auc.oos.list <- list()
+#   p.surv.rep <-
+#     psurv.estimates %>% select(paste0("mMrep[", 1:mod.data.full$Nrep, "]"))
+#   
+#   
+#   auc.oos.list <- lapply(
+#     1:nrow(psurv.estimates),
+#     FUN = function(x) {
+#       spp.auc <- list()
+#       for (s in unique(mod.data.full$SPP)) {
+#         spp.idx <- mod.data.full$SPPrep %in% s
+#         spp.auc[[s]] <-
+#           auc_roc( as.vector(as.numeric(p.surv.rep[x, spp.idx])), mod.data.full$ytest[spp.idx])
+#       }
+#       spp.auc.df <- do.call(cbind, spp.auc)
+#       
+#       overall.auc <-
+#         auc_roc( as.vector(as.numeric(p.surv.rep[x, ])), mod.data.full$ytest)
+#       overall.auc
+#       
+#       all.auc.values <- cbind(overall.auc, spp.auc.df)
+#       colnames(all.auc.values) <- c("overall", 1:17)
+#       all.auc.values
+#       
+#       
+#     }
+#   )
+#   
+#   
+#   AUC.oos.df <-
+#     do.call(rbind, auc.oos.list) %>% reshape2::melt() %>% group_by(Var2) %>%
+#     summarise(
+#       median.oos = median(value),
+#       auc.oos.ci.lo = quantile(value, 0.025),
+#       auc.oos.ci.hi = quantile(value, 0.975)
+#     ) %>%
+#     rename("spp" = "Var2")
+#   AUC.oos.df$spp <- c(18, 1:17)
+#   
+#   #AUC.oos.df <- do.call(rbind, auc.oos.list)
+#   
+#   saveRDS(
+#     AUC.oos.df,
+#     paste0(
+#       output.folder,
+#       "SPCD_stanoutput_joint_v3_model_",model.no,"/AUC_oos_with_uncertainty.rds"
+#     )
+#   )
+#   saveRDS(
+#     AUC.is.df,
+#     paste0(
+#       output.folder,
+#       "SPCD_stanoutput_joint_v3_model_",model.no,"/AUC_is_with_uncertainty.rds"
+#     )
+#   )
+#   
+#   joint.table <- data.frame(SPCD.id = 1000,
+#                             spp = 18,
+#                             COMMON = "population")
+#   
+#   spp.joint.table <- rbind(spp.table, joint.table)
+#   
+#   AUC.is.df <- left_join(AUC.is.df, spp.joint.table)
+#   AUC.oos.df <- left_join(AUC.oos.df, spp.joint.table)
+#   
+#   model.assessment.df <- data.frame(
+#     SPCD = AUC.is.df$SPCD.id,
+#     COMMON = AUC.is.df$COMMON,
+#     model =  "hierarchical",
+#     remper.correction = remper.correction,
+#     
+#     auc.insample = auc.is,
+#     auc.insample.median = AUC.is.df$median,
+#     auc.insample.lo = AUC.is.df$auc.ci.lo,
+#     auc.insample.hi = AUC.is.df$auc.ci.hi,
+#     # out of sample
+#     auc.oosample = auc.oos,
+#     auc.oosample.median = AUC.oos.df$median.oos,
+#     auc.oosample.lo = AUC.oos.df$auc.oos.ci.lo,
+#     auc.oosample.hi = AUC.oos.df$auc.oos.ci.hi
+#   )
+#   
+#   
+#   
+#   write.csv(
+#     model.assessment.df ,
+#     paste0(
+#       output.folder,
+#       "SPCD_stanoutput_joint_v3_model_",model.no,"/Accuracy_df_model_",
+#       model.no,
+#       "_remper_0.5_species_joint_model_remper_corr_",
+#       remper.correction,
+#       ".csv"
+#     ),
+#     row.names = FALSE
+#   )
+#   
+#   
+#   
+# }
+
+
 
 # # make a big plot of the predictions
 # 
