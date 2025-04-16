@@ -697,6 +697,31 @@ for(m in 8:9) {
     )
   )
   
+  # save AUC samples:
+  
+  
+  AUC.oos.samples <-
+    do.call(rbind, auc.oos.list) %>% reshape2::melt() %>% group_by(Var2) 
+  
+  AUC.is.samples <-
+    do.call(rbind, auc.is.list) %>% reshape2::melt() %>% group_by(Var2) 
+  
+  
+  saveRDS(
+    AUC.oos.samples,
+    paste0(
+      output.folder,
+      "SPCD_stanoutput_joint_v3_model_",model.no,"/AUC_oos_samples.rds"
+    )
+  )
+  saveRDS(
+    AUC.is.samples,
+    paste0(
+      output.folder,
+      "SPCD_stanoutput_joint_v3_model_",model.no,"/AUC_is_samples.rds"
+    )
+  )
+  
   joint.table <- data.frame(SPCD.id = 1000,
                             spp = 18,
                             COMMON = "population")
