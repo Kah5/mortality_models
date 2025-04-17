@@ -390,4 +390,61 @@ ggplot(marginal_response_df %>% filter(  predictor.class %in% "Site x G & S" & !
 ggsave(height = 5, width = 12, 
        paste0(output.folder, "SPCD_stanoutput_full_standardized_v3/images/predicted_mortality/model_6_species_level_model_marginal_growth_site_noBF.png"))
 
+##############################################################################################
+# make one giant figure for the marginal species effects:
+# generate figures for all of these separately 
+growth.marginal <- ggplot(marginal_response_df %>% filter( predictor.class %in% "Growth & Size"), aes(x = Value, y = 1-mean, color = Species)) +
+  geom_line(size = 1) +
+  geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+  facet_grid(cols = vars(predictor.class), rows = vars(Predictor), scales = "free") +
+  labs(
+    x = "Predictor Value",
+    y = "Annual Probability of Mortality",
+    #title = "Effect of Predictors on Probability of Mortality"
+  ) +
+  theme_bw(base_size = 14)+theme(panel.grid = element_blank())
 
+Competition.marginal <- ggplot(marginal_response_df %>% filter( predictor.class %in% "Competition"), aes(x = Value, y = 1-mean, color = Species)) +
+  geom_line(size = 1) +
+  geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+  facet_grid(cols = vars(predictor.class), rows = vars(Predictor), scales = "free") +
+  labs(
+    x = "Predictor Value",
+    y = "Annual Probability of Mortality",
+    #title = "Effect of Predictors on Probability of Mortality"
+  ) +
+  theme_bw(base_size = 14)+theme(panel.grid = element_blank())
+
+site.cond.marginal <- ggplot(marginal_response_df %>% filter( predictor.class %in% "Site Conditions"), aes(x = Value, y = 1-mean, color = Species)) +
+  geom_line(size = 1) +
+  geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+  facet_grid(cols = vars(predictor.class), rows = vars(Predictor), scales = "free") +
+  labs(
+    x = "Predictor Value",
+    y = "Annual Probability of Mortality",
+    #title = "Effect of Predictors on Probability of Mortality"
+  ) +
+  theme_bw(base_size = 14)+theme(panel.grid = element_blank())
+
+Climate.marginal <- ggplot(marginal_response_df %>% filter( predictor.class %in% "Climate"), aes(x = Value, y = 1-mean, color = Species)) +
+  geom_line(size = 1) +
+  geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+  facet_grid(cols = vars(predictor.class), rows = vars(Predictor), scales = "free") +
+  labs(
+    x = "Predictor Value",
+    y = "Annual Probability of Mortality",
+    #title = "Effect of Predictors on Probability of Mortality"
+  ) +
+  theme_bw(base_size = 14)+theme(panel.grid = element_blank())
+
+
+
+species.legend <- cowplot::get_legend(growth.marginal)
+
+cowplot::plot_grid(cowplot::plot_grid(growth.marginal + theme(legend.position = "none"), 
+                                      Competition.marginal + theme(legend.position = "none"), 
+                                      site.cond.marginal + theme(legend.position = "none"), 
+                                      Climate.marginal + theme(legend.position = "none"), align = "hv"), species.legend, rel_widths = c(1,0.2))
+
+ggsave(height = 12, width = 12, 
+       paste0(output.folder, "SPCD_stanoutput_full_standardized_v3/images/predicted_mortality/model_6_species_level_model_marginal_main_effects_summary.png"))
