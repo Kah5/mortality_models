@@ -26,7 +26,7 @@ nspp[1:17,]$COMMON
 
 
 SPCD.id <- 318
-model.no <- 9
+model.no <- 6
 input.folder = "/home/rstudio/data-store/data/output/"
 
 for(m in 1:9){
@@ -144,31 +144,11 @@ for(m in 1:9){
   all.joint.betas$Species <- factor(all.joint.betas$Species, levels = c("population", unique(betas.quant$Species)[order(unique(betas.quant$Species))]))
   all.joint.betas$Covariate <- factor(all.joint.betas$Covariate, levels = unique(beta.names$Covariate))
   
-  ggplot(data = na.omit(all.joint.betas), aes(x = Species, y = median, color = significance, shape = Species %in% "population"))+geom_point()+
-    geom_errorbar(data = na.omit(all.joint.betas), aes(x = Species , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-    geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+facet_wrap(~Covariate, scales = "free_y")+theme_bw(base_size = 14)+
-    theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Covariate")+
-    scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
-    scale_shape_manual(values = c("TRUE" = 15, "FALSE" = 19))
-  
-  ggsave(height = 10, width = 11, units = "in", paste0(output.folder,"SPCD_stanoutput_joint_v3/images/Estimated_betas_all_model6.png"))
-  
-  ggplot(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population"), aes(x = Species, y = median, color = significance, shape = Species %in% "population"))+geom_point()+
-    geom_errorbar(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population"), aes(x = Species , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-    geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+facet_wrap(~Covariate, scales = "free_y")+theme_bw(base_size = 14)+
-    theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Covariate")+
-    scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
-    scale_shape_manual(values = c("TRUE" = 15, "FALSE" = 19))
-  
-  ggsave(height = 10, width = 11, units = "in", paste0(output.folder,"SPCD_stanoutput_joint_v3/images/Estimated_betas_all_model_",model.no,"_no_population.png"))
-  
-  ###################################################################################
-  # covariate names:
-  Covariate.types.df <- read.csv("model_covariate_types.csv")
-  #colnames(Covariate.types.df) <- c("Covariate", "Predictor", )
-  # if(model.no == 6){
   all.joint.betas$Covariate <- factor(all.joint.betas$Covariate, levels = unique(betas.quant$Covariate))
   
+  
+  # read in file with pretty covariate names:
+  Covariate.types.df <- read.csv("model_covariate_types.csv")
   # # join to new variable names and make sure they are in order
   all.joint.betas <- all.joint.betas %>% left_join(., Covariate.types.df)
   
@@ -176,6 +156,34 @@ for(m in 1:9){
   
   all.joint.betas$Predictor <- factor( all.joint.betas$Predictor, 
                                        levels = Covariate.types.df$Predictor)
+  
+  
+  
+  ggplot(data = na.omit(all.joint.betas), aes(x = Species, y = median, color = significance, shape = Species %in% "population"))+geom_point()+
+    geom_errorbar(data = na.omit(all.joint.betas), aes(x = Species , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
+    geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+facet_wrap(~Predictor, scales = "free_y")+
+    theme_bw(base_size = 12)+
+    theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Species")+
+    scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
+    scale_shape_manual(values = c("TRUE" = 15, "FALSE" = 19))
+  
+  ggsave(height = 22, width = 12, dpi = 350, units = "in", paste0(output.folder,"SPCD_stanoutput_joint_v3/images/Estimated_betas_all_model_",model.no,".png"))
+  
+  ggplot(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population"), aes(x = Species, y = median, color = significance, shape = Species %in% "population"))+geom_point()+
+    geom_errorbar(data = na.omit(all.joint.betas) %>% filter(! Species %in% "population"), aes(x = Species , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
+    geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
+    facet_wrap(~Predictor, scales = "free_y")+
+    theme_bw(base_size = 12)+
+    theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Species")+
+    scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
+    scale_shape_manual(values = c("TRUE" = 15, "FALSE" = 19))
+  
+  ggsave(height = 12, width = 12, dpi = 350, units = "in", paste0(output.folder,"SPCD_stanoutput_joint_v3/images/Estimated_betas_all_model_",model.no,"_no_population.png"))
+  
+  ###################################################################################
+  
+  #colnames(Covariate.types.df) <- c("Covariate", "Predictor", )
+  # if(model.no == 6){
   
   # # get the main effects
   # growth.diam <- c(unique(betas.quant$Covariate)[1:2])
@@ -278,25 +286,25 @@ for(m in 1:9){
     scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
     scale_shape_manual(values = c("TRUE" = 15, "FALSE" = 19))+coord_flip()
   
-  if(model.no ==1){  
+  if(model.no >= 2){  
     png(height = 5, width =5, units = "in",res = 300,  paste0(output.folder, "SPCD_stanoutput_joint_v3/images/full_main_effects_summary_model_",model.no,".png")) 
     cowplot::plot_grid(growth.diam)
     dev.off()
   }
   
-  if(model.no ==2){  
+  if(model.no ==3){  
     png(height = 5, width =5, units = "in",res = 300,  paste0(output.folder, "SPCD_stanoutput_joint_v3/images/full_main_effects_summary_model_",model.no,".png")) 
     cowplot::plot_grid(growth.diam, competition, align = "hv")
     dev.off()
   }
   
-  if(model.no ==3){  
+  if(model.no ==4){  
     png(height = 5, width =5, units = "in",res = 300,  paste0(output.folder, "SPCD_stanoutput_joint_v3/images/full_main_effects_summary_model_",model.no,".png")) 
     cowplot::plot_grid(growth.diam, competition,normals, align = "hv")
     dev.off()
   }
   
-  if(model.no ==4){  
+  if(model.no ==5){  
     png(height = 5, width =5, units = "in",res = 300,  paste0(output.folder, "SPCD_stanoutput_joint_v3/images/full_main_effects_summary_model_",model.no,".png")) 
     cowplot::plot_grid(growth.diam, competition,normals,site.cond, align = "hv")
     dev.off()
@@ -845,3 +853,110 @@ for(m in 1:9){
            dpi = 350)
   }
 }
+
+# read in all of the AUC outputs for each model and make one big plot and one big summary file:
+AUC.oos.list <- AUC.is.list <- list()
+for(model.no in 1:9){
+  
+  AUC.oos.df <-  readRDS(paste0(input.folder, "SPCD_stanoutput_joint_v3_model_", model.no, "/AUC_oos_with_uncertainty.rds"))
+  AUC.oos.df$Model <- paste0("Model ", model.no)
+  AUC.oos.df$AUC.type <- "Out-of-sample"
+  
+  AUC.is.df <-  readRDS(paste0(input.folder, "SPCD_stanoutput_joint_v3_model_", model.no, "/AUC_is_with_uncertainty.rds"))
+  AUC.is.df$Model <- paste0("Model ", model.no)
+  AUC.is.df$AUC.type <- "In-sample"
+  
+  AUC.oos.list[[model.no]]<- AUC.oos.df
+  AUC.is.list[[model.no]]<-  AUC.is.df
+  
+}
+
+summary.spp.table <- rbind(main.table %>% select(-Species), spp.table)
+AUC.oos.df <- do.call(rbind, AUC.oos.list) %>% left_join(., summary.spp.table)
+AUC.is.df <- do.call(rbind, AUC.is.list) %>% left_join(., summary.spp.table)
+AUC.is.df$COMMON <- factor(AUC.is.df$COMMON, unique(summary.spp.table$COMMON))
+AUC.oos.df$COMMON <- factor(AUC.is.df$COMMON, unique(summary.spp.table$COMMON))
+
+
+is.auc <- ggplot(AUC.is.df, aes(x = Model, y = median, shape = Model %in% "Model 6"))+geom_point()+
+  geom_errorbar(data = AUC.is.df, aes(x = Model, ymin = auc.ci.lo, ymax = auc.ci.hi))+
+  facet_wrap(~COMMON, scales =  "free_y")+
+  scale_color_manual( values = c( "black" , 
+                                  "red" ))+
+  theme_bw(base_size = 12)+
+  theme(axis.text.x = element_text(angle = 45,  hjust=1), legend.position = "none", 
+        panel.grid = element_blank()) +
+  xlab("")+ylab("In Sample AUC")
+
+
+
+ggsave(paste0(output.folder, "/model_summary_full/All_species_models_all9models_compare-auc-insample_joint_species.png"), 
+       is.auc,
+       width = 10, height = 6, 
+       dpi = 350)
+
+
+oos.auc <- ggplot(AUC.is.df, aes(x = Model, y = median, shape = Model %in% "Model 6"))+geom_point()+
+  geom_errorbar(data = AUC.is.df, aes(x = Model, ymin = auc.ci.lo, ymax = auc.ci.hi))+
+  facet_wrap(~COMMON, scales =  "free_y")+
+  scale_color_manual( values = c( "black" , 
+                                  "red" ))+
+  theme_bw(base_size = 12)+
+  theme(axis.text.x = element_text(angle = 45,  hjust=1), legend.position = "none", 
+        panel.grid = element_blank()) +
+  xlab("")+ylab("Out of Sample AUC")
+
+ggsave(paste0(output.folder, "/model_summary_full/All_species_models_all9models_compare-auc-outofsample_joint_species.png"), 
+       oos.auc,
+       width = 10, height = 6)
+##############
+# same plots but without all the free axes
+is.auc <- ggplot(AUC.is.df, aes(x = Model, y = median, shape = Model %in% "Model 6"))+geom_point()+
+  geom_errorbar(data = AUC.is.df, aes(x = Model, ymin = auc.ci.lo, ymax = auc.ci.hi))+
+  facet_wrap(~COMMON)+
+  scale_color_manual( values = c( "black" , 
+                                  "red" ))+
+  theme_bw(base_size = 12)+
+  theme(axis.text.x = element_text(angle = 45,  hjust=1), legend.position = "none", 
+        panel.grid = element_blank()) +
+  xlab("")+ylab("In Sample AUC")
+
+
+
+ggsave(paste0(output.folder, "/model_summary_full/All_species_models_all9models_compare-auc-insample_joint_species_same_scale.png"), 
+       is.auc,
+       width = 10, height = 6, 
+       dpi = 350)
+
+
+oos.auc <- ggplot(AUC.is.df, aes(x = Model, y = median, shape = Model %in% "Model 6"))+geom_point()+
+  geom_errorbar(data = AUC.is.df, aes(x = Model, ymin = auc.ci.lo, ymax = auc.ci.hi))+
+  facet_wrap(~COMMON)+
+  scale_color_manual( values = c( "black" , 
+                                  "red" ))+
+  theme_bw(base_size = 12)+
+  theme(axis.text.x = element_text(angle = 45,  hjust=1), legend.position = "none", 
+        panel.grid = element_blank()) +
+  xlab("")+ylab("Out of Sample AUC")
+
+ggsave(paste0(output.folder, "/model_summary_full/All_species_models_all9models_compare-auc-outofsample_joint_species_same_scale.png"), 
+       oos.auc,
+       width = 10, height = 6)
+
+saveRDS(AUC.is.df, paste0(output.folder, "/model_summary_full/AUC_is_all_models_joint.rds"))
+saveRDS(AUC.oos.df, paste0(output.folder, "/model_summary_full/AUC_is_all_models_joint.rds"))
+
+
+# save all outputs to the cyverse output directory now:
+file.rename(
+  "SPCD_stanoutput_joint_v3",
+  "joint_model_summary_v3"
+)
+
+# copy to the data-store output
+system(paste(
+  "cp -r",
+  "joint_model_summary_v3",
+  "data-store/data/output/"
+))
+
