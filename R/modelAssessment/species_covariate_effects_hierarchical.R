@@ -947,6 +947,73 @@ saveRDS(AUC.is.df, paste0(output.folder, "/model_summary_full/AUC_is_all_models_
 saveRDS(AUC.oos.df, paste0(output.folder, "/model_summary_full/AUC_is_all_models_joint.rds"))
 
 
+
+########################################################################
+# also plot the computational resources
+########################################################################
+# read in all of the core.hours outputs for each model and make one big plot and one big summary file:
+core.hours.list <- list()
+for(model.no in 1:9){
+  
+  core.hours.oos.df <-  read.csv(paste0(input.folder, "SPCD_stanoutput_joint_v3_model_", model.no, "/joint_model_time_diag_SPCD_joint_model_",model.no, "_remper_0.5.csv"))
+  core.hours.oos.df$Model <- paste0("Model ", model.no)
+  #core.hours.oos.df$core.hours.type <- "Out-of-sample"
+  
+  
+  
+  core.hours.list[[model.no]]<- core.hours.oos.df
+  
+  
+}
+
+summary.spp.table <- rbind(main.table %>% select(-Species), spp.table)
+core.hours.df <- do.call(rbind, core.hours.list) %>% left_join(., summary.spp.table)
+core.hours.df$COMMON <- FIESTA::ref_species[match(core.hours.df$SPCD.id, FIESTA::ref_species$SPCD),]$COMMON
+core.hours.df$COMMON<- factor(core.hours.df$COMMON, unique(summary.spp.table$COMMON))
+core.hours.df$Species <- FIESTA::ref_species[match(core.hours.df$SPCD.id, FIESTA::ref_species$SPCD),]$Species
+
+#colnames(core.hours.df)[13] <- "Species"
+# plot up the core hours vs in sample and out of sample AUC scores:
+AUC.oos.time <- left_join(core.hours.df %>% 
+                            select(n..:cores, cores:Model)%>% 
+                            rename("SPCD" = "SPCD.id"), AUC.oos.df)
+
+
+AUC.is.time <- left_join(core.hours.df %>% 
+                           select(n..:cores, cores:Model)%>% 
+                           rename("SPCD" = "SPCD.id"), AUC.is.df)
+
+ggplot()+geom_text(data = AUC.oos.time, aes( x = core.hours, y =  median.oos, label = model ))+
+  facet_wrap(~COMMON, scales = "free")+
+  theme_bw()+theme(panel.grid = element_blank())+ylab("Out-of-sample AUC")+xlab("Core Hours")
+ggsave(height = 7, width = 10, dpi = 350, 
+       paste0(output.folder, "/model_summary_full/core_hours_oosAUC_all_models_joint.png"))
+
+ggplot()+geom_text(data = AUC.oos.time, aes( x = core.hours, y =  median.oos, label = model ))+
+  facet_wrap(~COMMON, scales = "free_x")+
+  theme_bw()+theme(panel.grid = element_blank())+ylab("Out-of-sample AUC")+xlab("Core Hours")
+
+ggsave(height = 7, width = 10, dpi = 350, 
+       paste0(output.folder, "/model_summary_full/core_hours_oosAUC_all_models_joint_common_y.png"))
+
+
+ggplot()+geom_text(data = AUC.is.time, aes( x = core.hours, y =  median, label = model ))+
+  facet_wrap(~COMMON, scales = "free")+
+  theme_bw()+theme(panel.grid = element_blank())+ylab("In-sample AUC")+xlab("Core Hours")
+ggsave(height = 7, width = 10, dpi = 350, 
+       paste0(output.folder, "/model_summary_full/core_hours_isAUC_all_models_joint.png"))
+
+ggplot()+geom_text(data = AUC.is.time, aes( x = core.hours, y =  median, label = model ))+
+  facet_wrap(~COMMON, scales = "free_x")+
+  theme_bw()+theme(panel.grid = element_blank())+ylab("In-sample AUC")+xlab("Core Hours")
+
+ggsave(height = 7, width = 10, dpi = 350, 
+       paste0(output.folder, "/model_summary_full/core_hours_isAUC_all_models_joint_common_y.png"))
+
+
+saveRDS(AUC.is.time, paste0(output.folder, "/model_summary_full/core_hours_isAUC_all_models_joint.RDS"))
+saveRDS(AUC.oos.time, paste0(output.folder, "/model_summary_full/core_hours_oosAUC_all_models_joint.RDS"))
+
 # save all outputs to the cyverse output directory now:
 file.rename(
   "SPCD_stanoutput_joint_v3",
@@ -960,3 +1027,16 @@ system(paste(
   "data-store/data/output/"
 ))
 
+
+system(paste(
+  "cp -r",
+  "model_summary_full",
+  "data-store/data/output/"
+))
+
+
+# file.rename(
+#   "joint_model_summary_v3",
+#   "SPCD_stanoutput_joint_v3"
+#   
+# )
