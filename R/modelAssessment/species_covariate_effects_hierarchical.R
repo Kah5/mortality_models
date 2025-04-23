@@ -25,6 +25,61 @@ nspp[1:17,]$COMMON
 
 
 
+# set the species order using the factors:
+SP.TRAITS <- read.csv("NinemetsSpeciesTraits.csv") %>% filter(COMMON_NAME %in% unique(nspp[1:17,]$COMMON))
+# order the trait db by softwood-hardwood, then shade tolerance, then name (this puts all the oaks together b/c hickory and red oak have the same tolerance values)
+SP.TRAITS <- SP.TRAITS %>% group_by(SFTWD_HRDWD) %>% arrange(desc(SFTWD_HRDWD), desc(ShadeTol), desc(COMMON_NAME))
+
+SP.TRAITS$Color <- c(# softwoods
+  "#b2df8a",
+  "#003c30", 
+  "#b2182b", 
+  "#fee090", 
+  "#33a02c",
+  
+  
+  # sugar  maples
+  "#a6cee3",
+  "#1f78b4",
+  
+  # red maple
+  "#e31a1c",
+  # yellow birch
+  "#fdbf6f",
+  # oaks
+  "#cab2d6",
+  "#8073ac",
+  "#6a3d9a",
+  
+  # hickory
+  "#7f3b08",
+  # white ash
+  "#bababa",
+  # black cherry
+  "#4d4d4d",
+  # yellow poplar
+  "#ff7f00",
+  "#fccde5" # paper birch
+  
+  
+)
+
+SP.TRAITS$`Shade Tolerance`  <- ifelse(SP.TRAITS$ShadeTol >=4, "High", 
+                                       ifelse(SP.TRAITS$ShadeTol <=2.5, "Low", "Moderate"))
+
+# set up custom colors for species
+sppColors <- SP.TRAITS$Color 
+names(sppColors) <- unique(SP.TRAITS$COMMON_NAME) 
+
+species_fill <- scale_fill_manual(values = sppColors)
+species_color <- scale_color_manual(values = sppColors)
+
+# set up custom lines for shade tolerances
+sppLinetype <- c("solid", "dashed", "dotted")
+names(sppLinetype) <- unique(SP.TRAITS$`Shade Tolerance`)
+
+species_linetype <- scale_linetype_manual(values = sppLinetype)
+
 SPCD.id <- 318
 model.no <- 6
 input.folder = "/home/rstudio/data-store/data/output/"
@@ -91,6 +146,10 @@ for(m in 1:9){
   
   
   betas.quant$Covariate <- factor(betas.quant$Covariate, levels = unique(betas.quant$Covariate))
+  # order species by hardwood softwood, then shade tolence
+  betas.quant$Species <- factor(betas.quant$Species, levels = SP.TRAITS$COMMON_NAME)
+  
+  
   ggplot(data = na.omit(betas.quant), aes(x = Species, y = median, color = significance))+geom_point()+
     geom_errorbar(data = na.omit(betas.quant), aes(x = Species , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
     geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
@@ -99,7 +158,7 @@ for(m in 1:9){
     theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+
     ylab("Effect on Survival")+xlab("Parameter")+
     scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))
-  ggsave(height = 10, width = 15, units = "in",paste0(output.folder,"SPCD_stanoutput_joint_v3/images/Estimated_effects_on_mortality_model_model_",model.no,"_all_species_betas.png"))
+  ggsave(height = 10, width = 15,dpi = 350, units = "in",paste0(output.folder,"SPCD_stanoutput_joint_v3/images/Estimated_effects_on_mortality_model_model_",model.no,"_all_species_betas.png"))
   
   # get the population estimates for the betas
   
@@ -141,7 +200,7 @@ for(m in 1:9){
   ### combine the betas together
   all.joint.betas <- rbind(mubetas.quant %>% select(colnames(betas.quant)), betas.quant) 
   # reorder factors for better plotting
-  all.joint.betas$Species <- factor(all.joint.betas$Species, levels = c("population", unique(betas.quant$Species)[order(unique(betas.quant$Species))]))
+  all.joint.betas$Species <- factor(all.joint.betas$Species, levels = c("population", SP.TRAITS$COMMON_NAME))
   all.joint.betas$Covariate <- factor(all.joint.betas$Covariate, levels = unique(beta.names$Covariate))
   
   all.joint.betas$Covariate <- factor(all.joint.betas$Covariate, levels = unique(betas.quant$Covariate))
@@ -200,7 +259,7 @@ for(m in 1:9){
     scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
     scale_shape_manual(values = c("TRUE" = 15, "FALSE" = 19))
   
-  ggsave(height = 6, width = 11, units = "in", paste0(output.folder,"SPCD_stanoutput_joint_v3/images/Estimated_betas_main_effects_model_",model.no,"_no_population.png"))
+  ggsave(height = 6, width = 11, dpi = 350, units = "in", paste0(output.folder,"SPCD_stanoutput_joint_v3/images/Estimated_betas_main_effects_model_",model.no,"_no_population.png"))
   
   # reorganize to have broader categories:
   
@@ -287,13 +346,13 @@ for(m in 1:9){
     scale_shape_manual(values = c("TRUE" = 15, "FALSE" = 19))+coord_flip()
   
   if(model.no >= 2){  
-    png(height = 5, width =5, units = "in",res = 300,  paste0(output.folder, "SPCD_stanoutput_joint_v3/images/full_main_effects_summary_model_",model.no,".png")) 
+    png(height = 5, width =5, units = "in",res = 350,  paste0(output.folder, "SPCD_stanoutput_joint_v3/images/full_main_effects_summary_model_",model.no,".png")) 
     cowplot::plot_grid(growth.diam)
     dev.off()
   }
   
   if(model.no ==3){  
-    png(height = 5, width =5, units = "in",res = 300,  paste0(output.folder, "SPCD_stanoutput_joint_v3/images/full_main_effects_summary_model_",model.no,".png")) 
+    png(height = 5, width =5, units = "in",res = 350,  paste0(output.folder, "SPCD_stanoutput_joint_v3/images/full_main_effects_summary_model_",model.no,".png")) 
     cowplot::plot_grid(growth.diam, competition, align = "hv")
     dev.off()
   }
@@ -311,13 +370,20 @@ for(m in 1:9){
   }
   
   if(model.no >=5){  
-    png(height = 14, width = 12, units = "in",res = 300,  paste0(output.folder, "SPCD_stanoutput_joint_v3/images/full_main_effects_summary_model_",model.no,".png")) 
+    png(height = 15, width = 12, units = "in",res = 350,  paste0(output.folder, "SPCD_stanoutput_joint_v3/images/full_main_effects_summary_model_",model.no,".png")) 
     cowplot::plot_grid(growth.diam, normals, #anomalies, 
                        competition, site.cond, #positions, 
                        align = "hv")
     dev.off()
+    
+    png(height = 8, width = 15, units = "in",res = 350,  paste0(output.folder, "SPCD_stanoutput_joint_v3/images/full_main_effects_summary_model_",model.no,"_horizontal.png")) 
+    cowplot::plot_grid(growth.diam, normals, #anomalies, 
+                       competition, site.cond, #positions, 
+                       ncol = 4, 
+                       align = "hv")
+    dev.off()
   }
-  # do the same but reorder in terms of species type/forest type
+  # do the same but reorder in terms of species types
   betas.quant$E_SPGRPCD <- ref_species[match(betas.quant$Species, ref_species$COMMON_NAME), ]$E_SPGRPCD
   betas.quant$MAJOR_SPGRPCD <- ref_species[match(betas.quant$Species, ref_species$COMMON_NAME), ]$MAJOR_SPGRPCD
   betas.quant$GENUS <- ref_species[match(betas.quant$Species, ref_species$COMMON_NAME), ]$GENUS
@@ -479,7 +545,7 @@ for(m in 1:9){
     scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
     scale_shape_manual(values = c("TRUE" = 15, "FALSE" = 19))
   
-  ggsave(height = 5, width = 6, units = "in",paste0(output.folder,"SPCD_stanoutput_joint_v3/images/Estimated_alpha_all_model_",model.no,".png"))
+  ggsave(height = 5, width = 6, dpi = 350, units = "in",paste0(output.folder,"SPCD_stanoutput_joint_v3/images/Estimated_alpha_all_model_",model.no,".png"))
   
   ## combine alphas and betas together to make the figure for the paper
   # 
@@ -619,6 +685,8 @@ for(m in 1:9){
   ################################################################################
   # combine all of the species conditional responses together
   ################################################################################
+  
+  
   marginal_response <- list()
   for (i in 1:17){
     SPCD.id <- nspp[i,]$SPCD
@@ -629,18 +697,45 @@ for(m in 1:9){
   
   # get species common names
   marginal_response_df$Species <- FIESTA::ref_species[match(marginal_response_df$SPCD, FIESTA::ref_species$SPCD),]$COMMON
+  marginal_response_df$Species <- factor(marginal_response_df$Species, levels = SP.TRAITS$COMMON_NAME)
+  marginal_response_df$Predictor <- Covariate.types.df[match(marginal_response_df$Covariate, Covariate.types.df$Covariate),]$Predictor
+  marginal_response_df$Predictor <- factor(marginal_response_df$Predictor, levels =  unique(marginal_response_df$Predictor))
+  marginal_response_df$Colors <- SP.TRAITS[match(marginal_response_df$Species, SP.TRAITS$COMMON_NAME),]$Color
+  marginal_response_df$`Shade Tolerance` <- SP.TRAITS[match(marginal_response_df$Species, SP.TRAITS$COMMON_NAME),]$`Shade Tolerance`
   
-  ggplot(marginal_response_df, aes(x = Value, y = 1-mean, color = Species)) +
+  
+  
+  
+  ggplot(marginal_response_df, aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
     geom_line(size = 1) +
     geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
-    facet_wrap(~ Covariate, scales = "free") +
+    facet_wrap(~ Predictor, scales = "free") +
     labs(
       x = "Covariate Value",
       y = "Annual Probability of Mortality",
       title = "Effect of Covariates on Probability of Mortality"
     ) +
-    theme_bw(base_size = 16)+theme(panel.grid = element_blank()) 
-  ggsave(height = 12, width = 12, paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/model_",model.no,"_species_level_models_all_species_marginal_effects_joint.png"))
+    species_fill + species_color + species_linetype+
+    theme_bw(base_size = 14)+theme(panel.grid = element_blank(), legend.position = "bottom") 
+  ggsave(height = 12, width = 15, dpi = 350,
+         paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/model_",model.no,"_species_level_models_all_species_marginal_effects_joint.png"))
+  
+  # make the same plot but without BF
+  ggplot(marginal_response_df %>% filter(!Species %in% "balsam fir"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
+    geom_line(size = 1) +
+    geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+    facet_wrap(~ Predictor, scales = "free") +
+    labs(
+      x = "Covariate Value",
+      y = "Annual Probability of Mortality",
+      title = "Effect of Covariates on Probability of Mortality"
+    ) +
+    species_fill + species_color + species_linetype +
+    theme_bw(base_size = 14)+theme(panel.grid = element_blank(), legend.position = "bottom") 
+  ggsave(height = 12, width = 15, dpi = 350,
+         paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/model_",model.no,"_species_level_models_all_species_marginal_effects_joint_noBF.png"))
+  
+  
   
   
   ## split up by variable type:
@@ -649,7 +744,7 @@ for(m in 1:9){
   marginal_response_df$Predictor <- factor(marginal_response_df$Predictor, levels = unique(marginal_response_df$Predictor))
   
   
-  ggplot(marginal_response_df, aes(x = Value, y = 1-mean, color = Species)) +
+  ggplot(marginal_response_df, aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
     geom_line(size = 1) +
     geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
     facet_wrap(~ Predictor, scales = "free") +
@@ -658,15 +753,33 @@ for(m in 1:9){
       y = "Annual Probability of Mortality",
       title = "Effect of Covariates on Probability of Mortality"
     ) +
-    theme_bw(base_size = 12)+theme(panel.grid = element_blank()) 
-  ggsave(height = 12, width = 14.5, paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/summary/model_",model.no,"_species_level_models_all_species_marginal_effects.png"))
+    species_fill + species_color + species_linetype +
+    theme_bw(base_size = 14)+theme(panel.grid = element_blank(), legend.position = "bottom") 
+  ggsave(height = 12, width = 14.5, dpi = 350,
+         paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/summary/model_",model.no,"_species_level_models_all_species_marginal_effects.png"))
+  
+  # same but without Balsam fir
+  ggplot(marginal_response_df %>% filter(!Species %in% "balsam fir"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
+    geom_line(size = 1) +
+    geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+    facet_wrap(~ Predictor, scales = "free") +
+    labs(
+      x = "Scaled Covariate Value",
+      y = "Annual Probability of Mortality",
+      title = "Effect of Covariates on Probability of Mortality"
+    ) +
+    species_fill + species_color + species_linetype +
+    theme_bw(base_size = 14)+theme(panel.grid = element_blank(), legend.position = "bottom") 
+  ggsave(height = 12, width = 14.5, dpi = 350,
+         paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/summary/model_",model.no,"_species_level_models_all_species_marginal_effects_noBF.png"))
+  
   
   
   
   # generate figures for all of these separately 
   ggplot(marginal_response_df %>% 
            filter( predictor.class %in% c("Growth & Size", "Competition", "Climate", "Site Conditions") & 
-                     !Predictor %in% "Diameter x DIA_DIFF"), aes(x = Value, y = 1-mean, color = Species)) +
+                     !Predictor %in% "Diameter x DIA_DIFF"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
     geom_line(size = 1) +
     geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
     facet_wrap(~ Predictor, scales = "free") +
@@ -675,14 +788,15 @@ for(m in 1:9){
       y = "Annual Probability of Mortality",
       title = "Effect of Covariates on Probability of Mortality"
     ) +
-    theme_bw(base_size = 16)+theme(panel.grid = element_blank())
-  ggsave(height = 8.5, width = 14, 
+    species_fill + species_color + species_linetype +
+    theme_bw(base_size = 14)+theme(panel.grid = element_blank(), legend.position = "bottom")
+  ggsave(height = 10, width = 14, dpi = 350,
          paste0(output.folder,  "SPCD_stanoutput_joint_v3/predicted_mort/summary/model_",model.no,"_species_level_model_marginal_main_effects.png"))
   
   # balsam fir really domninates the graph so take it out to view
   ggplot(marginal_response_df %>% 
            filter( predictor.class %in% c("Growth & Size", "Competition", "Climate", "Site Conditions") & 
-                     !Predictor %in% "Diameter x DIA_DIFF" & !Species %in% "balsam fir"), aes(x = Value, y = 1-mean, color = Species)) +
+                     !Predictor %in% "Diameter x DIA_DIFF" & !Species %in% "balsam fir"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
     geom_line(size = 1) +
     geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
     facet_wrap(~ Predictor, scales = "free") +
@@ -691,12 +805,13 @@ for(m in 1:9){
       y = "Annual Probability of Mortality",
       title = "Effect of Covariates on Probability of Mortality"
     ) +
-    theme_bw(base_size = 12)+theme(panel.grid = element_blank())
-  ggsave(height = 8.5, width = 12.5, 
+    species_fill + species_color + species_linetype +
+    theme_bw(base_size = 14)+theme(panel.grid = element_blank(), legend.position = "bottom")
+  ggsave(height = 10, width = 12.5, dpi = 350,
          paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/summary/model_", model.no, "_species_level_model_marginal_main_effects_no_balsam_fir.png"))
   
   
-  ggplot(marginal_response_df %>% filter( predictor.class %in% "Growth & Size" ), aes(x = Value, y = 1-mean, color = Species)) +
+  ggplot(marginal_response_df %>% filter( predictor.class %in% "Growth & Size" ), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
     geom_line(size = 1) +
     geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
     facet_wrap(~ Predictor, scales = "free") +
@@ -705,12 +820,13 @@ for(m in 1:9){
       y = "Annual Probability of Mortality",
       title = "Growth & Size effects on Probability of Mortality"
     ) +
-    theme_bw(base_size = 16)+theme(panel.grid = element_blank())
-  ggsave(height = 5, width = 12, 
+    species_fill + species_color + species_linetype +
+    theme_bw(base_size = 14)+theme(panel.grid = element_blank())
+  ggsave(height = 6, width = 12, dpi = 350,
          paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/summary/model_", model.no, "_species_level_model_marginal_growth_diam.png"))
   
   if(model.no >=6){
-    ggplot(marginal_response_df %>% filter( predictor.class %in% "Competition" ), aes(x = Value, y = 1-mean, color = Species)) +
+    ggplot(marginal_response_df %>% filter( predictor.class %in% "Competition" ), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
       geom_line(size = 1) +
       geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
       facet_wrap(~ Predictor, scales = "free", ncol = 5) +
@@ -719,12 +835,13 @@ for(m in 1:9){
         y = "Annual Probability of Mortality",
         title = "Competition effects on Probability of Mortality"
       ) +
-      theme_bw(base_size = 16)+theme(panel.grid = element_blank())
-    ggsave(height = 5, width = 12, 
+      species_fill + species_color + species_linetype +
+      theme_bw(base_size = 14)+theme(panel.grid = element_blank())
+    ggsave(height = 6, width = 12, dpi = 350,
            paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/summary/model_", model.no, "_species_level_model_marginal_competition.png"))
     
     
-    ggplot(marginal_response_df %>% filter(  predictor.class %in% "Climate" ), aes(x = Value, y = 1-mean, color = Species)) +
+    ggplot(marginal_response_df %>% filter(  predictor.class %in% "Climate" ), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
       geom_line(size = 1) +
       geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
       facet_wrap(~ Predictor, scales = "free", ncol = 2) +
@@ -733,12 +850,13 @@ for(m in 1:9){
         y = "Annual Probability of Mortality",
         title = "Climate effects on Probability of Mortality"
       ) +
-      theme_bw(base_size = 16)+theme(panel.grid = element_blank())
-    ggsave(height = 8, width = 12, 
+      species_fill + species_color + species_linetype +
+      theme_bw(base_size = 14)+theme(panel.grid = element_blank())
+    ggsave(height = 8, width = 12, dpi = 350,
            paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/summary/model_", model.no, "_species_level_model_marginal_climate_vars.png"))
     
     
-    ggplot(marginal_response_df %>% filter( predictor.class %in% "Site Conditions" ), aes(x = Value, y = 1-mean, color = Species)) +
+    ggplot(marginal_response_df %>% filter( predictor.class %in% "Site Conditions" ), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
       geom_line(size = 1) +
       geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
       facet_wrap(~ Predictor, scales = "free", ncol = 5) +
@@ -747,12 +865,13 @@ for(m in 1:9){
         y = "Annual Probability of Mortality",
         title = "Site Condition effects on Probability of Mortality"
       ) +
-      theme_bw(base_size = 16)+theme(panel.grid = element_blank())
-    ggsave(height = 5, width = 12, 
+      species_fill + species_color + species_linetype +
+      theme_bw(base_size = 14)+theme(panel.grid = element_blank())
+    ggsave(height = 6, width = 12, dpi = 350,
            paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/summary/model_", model.no, "_species_level_model_marginal_site_vars.png"))
     
     ### interaction terms
-    ggplot(marginal_response_df %>% filter( predictor.class %in% "Competiton x G & S" & !Species %in% "balsam fir"), aes(x = Value, y = 1-mean, color = Species)) +
+    ggplot(marginal_response_df %>% filter( predictor.class %in% "Competiton x G & S" & !Species %in% "balsam fir"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
       geom_line(size = 1) +
       geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
       facet_wrap(~ Predictor, scales = "free", ncol = 3) +
@@ -761,12 +880,13 @@ for(m in 1:9){
         y = "Annual Probability of Mortality" #,
         # title = "Competition x G & S  on Probability of Mortality"
       ) +
-      theme_bw(base_size = 16)+theme(panel.grid = element_blank())
-    ggsave(height = 5, width = 12, 
+      species_fill + species_color + species_linetype +
+      theme_bw(base_size = 14)+theme(panel.grid = element_blank())
+    ggsave(height = 6, width = 12, dpi = 350,
            paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/summary/model_", model.no, "_species_level_model_marginal_growth_competition_noBF.png"))
     
     
-    ggplot(marginal_response_df %>% filter( predictor.class %in% "Climate x G & S" & !Species %in% "balsam fir" ), aes(x = Value, y = 1-mean, color = Species)) +
+    ggplot(marginal_response_df %>% filter( predictor.class %in% "Climate x G & S" & !Species %in% "balsam fir" ), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
       geom_line(size = 1) +
       geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
       facet_wrap(~ Predictor, scales = "free", ncol = 4) +
@@ -775,11 +895,12 @@ for(m in 1:9){
         y = "Annual Probability of Mortality"#,
         #title = "Effect of Covariates on Probability of Mortality"
       ) +
-      theme_bw(base_size = 16)+theme(panel.grid = element_blank())
+      species_fill + species_color + species_linetype +
+      theme_bw(base_size = 14)+theme(panel.grid = element_blank())
     ggsave(height = 8, width = 14, 
            paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/summary/model_", model.no, "_species_level_model_marginal_growth_cliamte_noBF.png"))
     
-    ggplot(marginal_response_df %>% filter(  predictor.class %in% "Site x G & S" & !Species %in% "balsam fir" ), aes(x = Value, y = 1-mean, color = Species)) +
+    ggplot(marginal_response_df %>% filter(  predictor.class %in% "Site x G & S" & !Species %in% "balsam fir" ), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
       geom_line(size = 1) +
       geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
       facet_wrap(~ Predictor, scales = "free", ncol = 3) +
@@ -788,14 +909,15 @@ for(m in 1:9){
         y = "Annual Probability of Mortality"#,
         #title = "Effect of Covariates on Probability of Mortality"
       ) +
-      theme_bw(base_size = 16)+theme(panel.grid = element_blank())
-    ggsave(height = 5, width = 12, 
+      species_fill + species_color + species_linetype +
+      theme_bw(base_size = 14)+theme(panel.grid = element_blank())
+    ggsave(height = 6, width = 12, 
            paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/summary/model_", model.no, "_species_level_model_marginal_growth_site_noBF.png"))
     
     ##############################################################################################
     # make one giant figure for the marginal species effects:
     # generate figures for all of these separately 
-    growth.marginal <- ggplot(marginal_response_df %>% filter( predictor.class %in% "Growth & Size"), aes(x = Value, y = 1-mean, color = Species)) +
+    growth.marginal <- ggplot(marginal_response_df %>% filter( predictor.class %in% "Growth & Size"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
       geom_line(size = 1) +
       geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
       facet_grid(cols = vars(predictor.class), rows = vars(Predictor), scales = "free") +
@@ -804,9 +926,10 @@ for(m in 1:9){
         y = "Annual Probability of Mortality",
         #title = "Effect of Predictors on Probability of Mortality"
       ) +
+      species_fill + species_color + species_linetype +
       theme_bw(base_size = 12)+theme(panel.grid = element_blank())
     
-    Competition.marginal <- ggplot(marginal_response_df %>% filter( predictor.class %in% "Competition"), aes(x = Value, y = 1-mean, color = Species)) +
+    Competition.marginal <- ggplot(marginal_response_df %>% filter( predictor.class %in% "Competition"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
       geom_line(size = 1) +
       geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
       facet_grid(cols = vars(predictor.class), rows = vars(Predictor), scales = "free") +
@@ -815,9 +938,10 @@ for(m in 1:9){
         y = "Annual Probability of Mortality",
         #title = "Effect of Predictors on Probability of Mortality"
       ) +
+      species_fill + species_color + species_linetype +
       theme_bw(base_size = 12)+theme(panel.grid = element_blank())
     
-    site.cond.marginal <- ggplot(marginal_response_df %>% filter( predictor.class %in% "Site Conditions"), aes(x = Value, y = 1-mean, color = Species)) +
+    site.cond.marginal <- ggplot(marginal_response_df %>% filter( predictor.class %in% "Site Conditions"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
       geom_line(size = 1) +
       geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
       facet_grid(cols = vars(predictor.class), rows = vars(Predictor), scales = "free") +
@@ -826,9 +950,10 @@ for(m in 1:9){
         y = "Annual Probability of Mortality",
         #title = "Effect of Predictors on Probability of Mortality"
       ) +
+      species_fill + species_color + species_linetype +
       theme_bw(base_size = 12)+theme(panel.grid = element_blank())
     
-    Climate.marginal <- ggplot(marginal_response_df %>% filter( predictor.class %in% "Climate"), aes(x = Value, y = 1-mean, color = Species)) +
+    Climate.marginal <- ggplot(marginal_response_df %>% filter( predictor.class %in% "Climate"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
       geom_line(size = 1) +
       geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
       facet_grid(cols = vars(predictor.class), rows = vars(Predictor), scales = "free") +
@@ -837,6 +962,7 @@ for(m in 1:9){
         y = "Annual Probability of Mortality",
         #title = "Effect of Predictors on Probability of Mortality"
       ) +
+      species_fill + species_color + species_linetype +
       theme_bw(base_size = 12)+theme(panel.grid = element_blank())
     
     
@@ -851,6 +977,210 @@ for(m in 1:9){
     ggsave(height = 12, width = 12, 
            paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/summary/model_",model.no,"_species_level_model_marginal_main_effects_summary.png"), 
            dpi = 350)
+    
+    # make one for the marginal effects, but without balsam fir:
+    ##############################################################################################
+    # make one giant figure for the marginal species effects:
+    # generate figures for all of these separately 
+    marginal_response_nobf <- marginal_response_df %>% filter(!Species %in% "balsam fir")
+    growth.marginal <- ggplot(marginal_response_nobf %>% filter( predictor.class %in% "Growth & Size"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
+      geom_line(size = 1) +
+      geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+      facet_grid(cols = vars(predictor.class), rows = vars(Predictor), scales = "free") +
+      labs(
+        x = "Predictor Value",
+        y = "Annual Probability of Mortality",
+        #title = "Effect of Predictors on Probability of Mortality"
+      ) +
+      species_fill + species_color + species_linetype +
+      theme_bw(base_size = 12)+theme(panel.grid = element_blank())
+    
+    Competition.marginal <- ggplot(marginal_response_nobf %>% filter( predictor.class %in% "Competition"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
+      geom_line(size = 1) +
+      geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+      facet_grid(cols = vars(predictor.class), rows = vars(Predictor), scales = "free") +
+      labs(
+        x = "Predictor Value",
+        y = "Annual Probability of Mortality",
+        #title = "Effect of Predictors on Probability of Mortality"
+      ) +
+      species_fill + species_color + species_linetype +
+      theme_bw(base_size = 12)+theme(panel.grid = element_blank())
+    
+    site.cond.marginal <- ggplot(marginal_response_nobf %>% filter( predictor.class %in% "Site Conditions"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
+      geom_line(size = 1) +
+      geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+      facet_grid(cols = vars(predictor.class), rows = vars(Predictor), scales = "free") +
+      labs(
+        x = "Predictor Value",
+        y = "Annual Probability of Mortality",
+        #title = "Effect of Predictors on Probability of Mortality"
+      ) +
+      species_fill + species_color + species_linetype +
+      theme_bw(base_size = 12)+theme(panel.grid = element_blank())
+    
+    Climate.marginal <- ggplot(marginal_response_nobf %>% filter( predictor.class %in% "Climate"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
+      geom_line(size = 1) +
+      geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+      facet_grid(cols = vars(predictor.class), rows = vars(Predictor), scales = "free") +
+      labs(
+        x = "Predictor Value",
+        y = "Annual Probability of Mortality",
+        #title = "Effect of Predictors on Probability of Mortality"
+      ) +
+      species_fill + species_color + species_linetype +
+      theme_bw(base_size = 12)+theme(panel.grid = element_blank())
+    
+    
+    
+    species.legend <- cowplot::get_legend(growth.marginal)
+    
+    cowplot::plot_grid(cowplot::plot_grid(growth.marginal + theme(legend.position = "none"), 
+                                          Competition.marginal + theme(legend.position = "none"), 
+                                          site.cond.marginal + theme(legend.position = "none"), 
+                                          Climate.marginal + theme(legend.position = "none"), align = "hv"), species.legend, rel_widths = c(1,0.2))
+    
+    ggsave(height = 12, width = 12, 
+           paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/summary/model_",model.no,"_species_level_model_marginal_main_effects_summary_noBF.png"), 
+           dpi = 350)
+    
+    
+    ################################################################
+    # finally, only plot effects significantly different from zero:
+    ################################################################
+    marginal_response_df
+    
+    significant.effects <- all.joint.betas %>% filter(significance %in% "significant") %>% 
+      select(Covariate, Species) %>% na.omit()
+    
+    
+    sig_marginal_effects <- left_join(significant.effects, marginal_response_df)
+    sig_marginal_effects_noBF <- sig_marginal_effects %>% filter(!Species %in% "balsam fir")
+    
+    growth.marginal <- ggplot(sig_marginal_effects %>% filter( predictor.class %in% "Growth & Size"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
+      geom_line(size = 1) +
+      geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+      facet_grid(cols = vars(predictor.class), rows = vars(Predictor), scales = "free") +
+      labs(
+        x = "Predictor Value",
+        y = "Annual Probability of Mortality",
+        #title = "Effect of Predictors on Probability of Mortality"
+      ) +
+      species_fill + species_color + species_linetype +
+      theme_bw(base_size = 12)+theme(panel.grid = element_blank())
+    
+    Competition.marginal <- ggplot(sig_marginal_effects %>% filter( predictor.class %in% "Competition"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
+      geom_line(size = 1) +
+      geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+      facet_grid(cols = vars(predictor.class), rows = vars(Predictor), scales = "free") +
+      labs(
+        x = "Predictor Value",
+        y = "Annual Probability of Mortality",
+        #title = "Effect of Predictors on Probability of Mortality"
+      ) +
+      species_fill + species_color + species_linetype +
+      theme_bw(base_size = 12)+theme(panel.grid = element_blank())
+    
+    site.cond.marginal <- ggplot(sig_marginal_effects %>% filter( predictor.class %in% "Site Conditions"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
+      geom_line(size = 1) +
+      geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+      facet_grid(cols = vars(predictor.class), rows = vars(Predictor), scales = "free") +
+      labs(
+        x = "Predictor Value",
+        y = "Annual Probability of Mortality",
+        #title = "Effect of Predictors on Probability of Mortality"
+      ) +
+      species_fill + species_color + species_linetype +
+      theme_bw(base_size = 12)+theme(panel.grid = element_blank())
+    
+    Climate.marginal <- ggplot(sig_marginal_effects %>% filter( predictor.class %in% "Climate"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
+      geom_line(size = 1) +
+      geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+      facet_grid(cols = vars(predictor.class), rows = vars(Predictor), scales = "free") +
+      labs(
+        x = "Predictor Value",
+        y = "Annual Probability of Mortality",
+        #title = "Effect of Predictors on Probability of Mortality"
+      ) +
+      species_fill + species_color + species_linetype +
+      theme_bw(base_size = 12)+theme(panel.grid = element_blank())
+    
+    
+    
+    species.legend <- cowplot::get_legend(growth.marginal)
+    
+    cowplot::plot_grid(cowplot::plot_grid(growth.marginal + theme(legend.position = "none"), 
+                                          Competition.marginal + theme(legend.position = "none"), 
+                                          site.cond.marginal + theme(legend.position = "none"), 
+                                          Climate.marginal + theme(legend.position = "none"), align = "hv"), species.legend, rel_widths = c(1,0.2))
+    
+    ggsave(height = 12, width = 12, 
+           paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/summary/model_",model.no,"_joint_marginal_main_effects_summary_sig_only.png"), 
+           dpi = 350)
+    
+    
+    # do the same but without balsam fir:
+    growth.marginal <- ggplot(sig_marginal_effects_noBF %>% filter( predictor.class %in% "Growth & Size"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
+      geom_line(size = 1) +
+      geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+      facet_grid(cols = vars(predictor.class), rows = vars(Predictor), scales = "free") +
+      labs(
+        x = "Predictor Value",
+        y = "Annual Probability of Mortality",
+        #title = "Effect of Predictors on Probability of Mortality"
+      ) +
+      species_fill + species_color + species_linetype +
+      theme_bw(base_size = 12)+theme(panel.grid = element_blank())
+    
+    Competition.marginal <- ggplot(sig_marginal_effects_noBF %>% filter( predictor.class %in% "Competition"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
+      geom_line(size = 1) +
+      geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+      facet_grid(cols = vars(predictor.class), rows = vars(Predictor), scales = "free") +
+      labs(
+        x = "Predictor Value",
+        y = "Annual Probability of Mortality",
+        #title = "Effect of Predictors on Probability of Mortality"
+      ) +
+      species_fill + species_color + species_linetype +
+      theme_bw(base_size = 12)+theme(panel.grid = element_blank())
+    
+    site.cond.marginal <- ggplot(sig_marginal_effects_noBF %>% filter( predictor.class %in% "Site Conditions"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
+      geom_line(size = 1) +
+      geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+      facet_grid(cols = vars(predictor.class), rows = vars(Predictor), scales = "free") +
+      labs(
+        x = "Predictor Value",
+        y = "Annual Probability of Mortality",
+        #title = "Effect of Predictors on Probability of Mortality"
+      ) +
+      species_fill + species_color + species_linetype +
+      theme_bw(base_size = 12)+theme(panel.grid = element_blank())
+    
+    Climate.marginal <- ggplot(sig_marginal_effects_noBF %>% filter( predictor.class %in% "Climate"), aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
+      geom_line(size = 1) +
+      geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+      facet_grid(cols = vars(predictor.class), rows = vars(Predictor), scales = "free") +
+      labs(
+        x = "Predictor Value",
+        y = "Annual Probability of Mortality",
+        #title = "Effect of Predictors on Probability of Mortality"
+      ) +
+      species_fill + species_color + species_linetype +
+      theme_bw(base_size = 12)+theme(panel.grid = element_blank())
+    
+    
+    
+    species.legend <- cowplot::get_legend(growth.marginal)
+    
+    cowplot::plot_grid(cowplot::plot_grid(growth.marginal + theme(legend.position = "none"), 
+                                          Competition.marginal + theme(legend.position = "none"), 
+                                          site.cond.marginal + theme(legend.position = "none"), 
+                                          Climate.marginal + theme(legend.position = "none"), align = "hv"), species.legend, rel_widths = c(1,0.2))
+    
+    ggsave(height = 12, width = 12, 
+           paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/summary/model_",model.no,"_joint_marginal_main_effects_summary_sig_only_noBF.png"), 
+           dpi = 350)
+    
   }
 }
 
@@ -890,7 +1220,7 @@ is.auc <- ggplot(AUC.is.df, aes(x = Model, y = median, shape = Model %in% "Model
 
 
 
-ggsave(paste0(output.folder, "/model_summary_full/All_species_models_all9models_compare-auc-insample_joint_species.png"), 
+ggsave(paste0(output.folder, "/model_summary_full/All_joint_model_all9models_compare-auc-insample_joint_species.png"), 
        is.auc,
        width = 10, height = 6, 
        dpi = 350)
@@ -906,7 +1236,7 @@ oos.auc <- ggplot(AUC.is.df, aes(x = Model, y = median, shape = Model %in% "Mode
         panel.grid = element_blank()) +
   xlab("")+ylab("Out of Sample AUC")
 
-ggsave(paste0(output.folder, "/model_summary_full/All_species_models_all9models_compare-auc-outofsample_joint_species.png"), 
+ggsave(paste0(output.folder, "/model_summary_full/All_joint_model_all9models_compare-auc-outofsample_joint_species.png"), 
        oos.auc,
        width = 10, height = 6)
 ##############
@@ -923,7 +1253,7 @@ is.auc <- ggplot(AUC.is.df, aes(x = Model, y = median, shape = Model %in% "Model
 
 
 
-ggsave(paste0(output.folder, "/model_summary_full/All_species_models_all9models_compare-auc-insample_joint_species_same_scale.png"), 
+ggsave(paste0(output.folder, "/model_summary_full/All_joint_model_all9models_compare-auc-insample_joint_species_same_scale.png"), 
        is.auc,
        width = 10, height = 6, 
        dpi = 350)
@@ -939,7 +1269,7 @@ oos.auc <- ggplot(AUC.is.df, aes(x = Model, y = median, shape = Model %in% "Mode
         panel.grid = element_blank()) +
   xlab("")+ylab("Out of Sample AUC")
 
-ggsave(paste0(output.folder, "/model_summary_full/All_species_models_all9models_compare-auc-outofsample_joint_species_same_scale.png"), 
+ggsave(paste0(output.folder, "/model_summary_full/All_joint_model_all9models_compare-auc-outofsample_joint_species_same_scale.png"), 
        oos.auc,
        width = 10, height = 6)
 
@@ -1019,6 +1349,7 @@ file.rename(
   "SPCD_stanoutput_joint_v3",
   "joint_model_summary_v3"
 )
+
 
 # copy to the data-store output
 system(paste(
