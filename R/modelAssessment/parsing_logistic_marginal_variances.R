@@ -371,37 +371,44 @@ get_statewide_marginal_variances <- function(st) {
   # Predictor-wise variance explained for this state
   cat("computing variance explained by each predictor")
   compute_var_explained <- function(k) {
-    N.st <- length(species.st)
     
-    logits.partial <- lapply(1:N.st, function(i) {
-      sp_i <- species.st[i]
-      slope_i <- beta_species[, paste0("u_beta[", s, ",", k, "]")]
+    # calculate partial logits by species
+    logits.partial <- lapply(unique(species.st), function(sp_i) {
+      
+      
+      #sp_i <- i #species.st[i]
+      #df_tree <- df_k %>% filter(SPP %in% sp.id)
+      species.index <- df_meta_st$SPP %in% sp_i
+      slope_i <- beta_species[, paste0("u_beta[", sp_i, ",", k, "]")]
+      
+      slope.alpha = data.frame(alpha = alpha_species[paste0("alpha_SPP[", sp_i, "]")], 
+                               slope_i = as.vector(slope_i[,1]), 
+                               draw = 1:nrow(slope_i), 
+                               predictor = predictor_names[k])
+      colnames(slope.alpha) <- c("alpha_spp", "slope_spp", "draw", "predictor")
       
       df.out <- data.frame(
         state = st,
-        tree = X[i, ]$tree,
+        tree = X_st[species.index, ]$tree,
         SPP.id = sp_i,
         SPCD = spp.table[sp_i, ]$SPCD,
         predictor = predictor_names[k],
-        predictor_val = X[i, predictor_names[k]],
-        draw = 1:nrow(beta_species[, 1]),
-        logit.part = alpha_species[paste0("alpha_SPP[", sp_i, "]")] + X_matrix[i, k] * slope_i
-      )
-      colnames(df.out) <- c(
-        "state",
-        "tree",
-        "SPP.id",
-        "SPCD",
-        "predictor",
-        "predictor_val",
-        "draw",
-        "logit.part"
-      )
-      df.out %>%
-        mutate(p_partial = plogis(logit.part)) #%>% left_join(.,spp.table)
+        predictor_val = X_st[species.index, predictor_names[k]]) %>% 
+        left_join(., slope.alpha, relationship = "many-to-many") %>% 
+        # calculate partial logit
+        mutate(logit.part = alpha_spp + predictor_val * slope_spp)%>%
+        mutate(p_partial = plogis(logit.part))
+      
+      saveRDS(df.out ,paste0(
+        "SPCD_stanoutput_joint_v3/predicted_mort/df_SPCD_",spp.table[sp_i, ]$SPCD,"_variance_state_",
+        st,
+        ".RDS"
+      ))
+      
+      df.out #%>% left_join(.,spp.table)
     })
     
-    #lapply(1:772, function(x)colnames(logits.partial[[x]]))
+    
     partial_logit_df <- do.call(rbind, logits.partial)
     
     # total_mean_by_k <- partial_logit_df %>%
@@ -419,7 +426,8 @@ get_statewide_marginal_variances <- function(st) {
   }
   
   var_parts <-
-    bind_rows(lapply(1:length(predictor_names), compute_var_explained))
+    lapply(1:length(predictor_names), compute_var_explained) %>%
+    do.call(rbind,.)
   saveRDS(
     var_parts,
     paste0(
