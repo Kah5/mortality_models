@@ -208,6 +208,7 @@ st <- 33
 
 df_meta <- plot.data.train
 df_meta$tree <- 1:N
+df_meta$SPP <- mod.data.full$SPP
 
 p_long <- as.data.frame(p_surv_train) %>% select(-.chain, -.iteration, -.draw) 
 colnames(p_long) <- paste0("tree_", 1:N)
@@ -401,7 +402,7 @@ get_statewide_marginal_variances <- function(st) {
       
       saveRDS(df.out ,paste0(
         "SPCD_stanoutput_joint_v3/predicted_mort/df_SPCD_",spp.table[sp_i, ]$SPCD,"_variance_state_",
-        st,
+        st,"_predictor_", predictor_names[k],
         ".RDS"
       ))
       
@@ -428,6 +429,8 @@ get_statewide_marginal_variances <- function(st) {
   var_parts <-
     lapply(1:length(predictor_names), compute_var_explained) %>%
     do.call(rbind,.)
+  
+  # save the full variance explained table by state
   saveRDS(
     var_parts,
     paste0(
@@ -436,21 +439,6 @@ get_statewide_marginal_variances <- function(st) {
       ".RDS"
     )
   )
-  
-  # var_summary2 <-
-  #   left_join(var_parts, group_mean_total, by = c("draw", "SPCD")) %>%
-  #   mutate(rel_var = (var_k / var_total)) %>%
-  #   group_by(predictor, SPCD) %>%
-  #   summarise(var_k_totals = median(var_k),
-  #             var_group_totals = median(var_total)) %>%
-  #   mutate(rel_var = var_k_totals / var_group_totals)
-  # 
-  # 
-  # summarize(
-  #   mean = mean(rel_var),
-  #   lower = quantile(rel_var, 0.05),
-  #   upper = quantile(rel_var, 0.95)
-  # )
   
   
   tot.var <- var_parts %>% group_by(SPCD, draw) %>%
