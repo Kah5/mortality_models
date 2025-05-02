@@ -248,6 +248,12 @@ get_statewide_marginal_variances <- function(st) {
   # # mutate(draw = as.integer(gsub("draw_", "", draw))) %>%
   # bind_cols(X[rep(1:N, S), ])
   
+  
+  
+  # for each tree get the beta samples
+  
+  
+  
   # get the marginal effects including random slopes ----
   
   #marginal_all <- list()
@@ -348,7 +354,7 @@ get_statewide_marginal_variances <- function(st) {
   # --- VARIANCE PARTITIONING BY PREDICTOR ---
   
   # Total group-level variance
-  group_mean_total <- df_k %>%
+  group_mean_total <- df_k_st %>%
     group_by(SPCD, state, tree, draw) %>%
     summarize(mean_p = mean(p_surv), .groups = "drop") %>%
     group_by(SPCD, state, draw) %>%
@@ -487,12 +493,12 @@ get_statewide_marginal_variances <- function(st) {
   main.preds <- unique(predictor_names)[1:12]
   inter.preds <- unique(predictor_names)[13:33]
   var_summary$Species <-
-    ref_species[match(var_summary$SPCD, ref_species$SPCD), ]$COMMON
+    FIESTA::ref_species[match(var_summary$SPCD, FIESTA::ref_species$SPCD), ]$COMMON
   
   write.csv(
     var_summary,
     paste0(
-      "SPCD_stanoutput_joint_v3/predicted_mort/variance_partitioning_by_predictor_state_",
+      "SPCD_stanoutput_joint_v3/predicted_mort/variance_partitioning_summary_by_predictor_state_",
       st,
       ".csv"
     ),
@@ -503,24 +509,192 @@ get_statewide_marginal_variances <- function(st) {
      marginal_summary_all, mean_by_group_k, 
      p_long_long, p_long_st, partial_logit_df)
   
-  # change the name of predicted_mort
+  var_parts <- readRDS(paste0("SPCD_stanoutput_joint_v3/predicted_mort/variance_explained_state_",st,".RDS"))
   
+  covariate.names <- read.csv("model_covariate_types.csv")
+  
+  
+  # species - wide summary total variance
+  tot.var <- var_parts %>%  group_by(SPCD, draw) %>%
+    summarise(var_total = sum(var_k))
+  
+  # species -wide summary total variance but without dia_diff
+  tot.var.no.dia.diff <- var_parts %>% filter(!predictor %in% "DIA_DIFF_scaled")%>% group_by(SPCD, draw) %>%
+    summarise(var_total = sum(var_k))
+  
+  # state - wide summary total variance
+  tot.var.st <- tot.var  %>% group_by(draw) %>% 
+    summarise(var_total_st = sum(var_total))
+  
+  var_summary <-
+    left_join(var_parts, tot.var, by = c("SPCD", "draw")) %>%
+    
+    #group_mean_total, by = c("draw", "SPCD")) %>%
+    mutate(rel_var = (var_k / var_total)) %>%
+    group_by(predictor, SPCD) %>%
+    summarize(
+      mean = mean(rel_var),
+      lower = quantile(rel_var, 0.05),
+      upper = quantile(rel_var, 0.95)
+    ) %>% 
+    rename("Covariate" = "predictor") %>% left_join(covariate.names)
+  
+  var_summary$Predictor <-
+    factor(var_summary$Predictor, levels = covariate.names$Predictor)
+  var_summary$COMMON <- FIESTA::ref_species[match(var_summary$SPCD, FIESTA::ref_species$SPCD),]$COMMON
+  
+  
+  ggplot(data = var_summary, aes(x = Predictor, y = mean)) + geom_point() +
+    geom_errorbar(aes(x = Predictor, ymin = lower, ymax = upper)) +
+    theme(axis.text = element_text(angle = 45, hjust = 1),
+          panel.grid = element_blank()) + facet_wrap( ~ SPCD, scales = "free_y")
+  
+  ggplot(data = var_summary %>% filter(!Predictor %in% "DIA_DIFF_scaled"),
+         aes(x = Predictor, y = mean)) + geom_point() +
+    geom_errorbar(aes(x = Predictor, ymin = lower, ymax = upper)) +
+    theme(axis.text = element_text(angle = 45, hjust = 1),
+          panel.grid = element_blank()) +
+    ylab ("relative variance in annaul prob(survival) explained by predictor") +
+    facet_wrap( ~ SPCD, scales = "free_y")
+  
+  
+  
+  
+  
+  ggplot(data = var_summary)+
+    geom_bar(aes(x = COMMON, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+    theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                           panel.background = element_blank())+
+    ylab("Average proportion of across-tree \n p(survival) variance explained")
+  
+  ggplot(data = var_summary)+
+    geom_bar(aes(x = COMMON, y = mean, fill = Predictor), stat = "identity", position = "stack")+
+    theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                           panel.background = element_blank())+
+    ylab("Average proportion of across-tree \n p(survival) variance explained")+
+    xlab("Species")
+  
+  
+  color.pred.class <- c(
+    "Site x G & S"= "#1b9e77",
+    "Competition x G & S"="#d95f02" ,
+    "Climate x G & S"="#7570b3" ,
+    "Climate"= "#e7298a" ,
+    "Growth & Size" = "#66a61e" ,
+    "Site Conditions" = "#e6ab02",
+    "Competition" = "#a6761d"
+  )
+  
+  var_summary$predictor.class <- factor(var_summary$predictor.class, 
+                                        levels = c(
+                                          "Growth & Size", 
+                                          "Competition",
+                                          "Climate",
+                                          "Site Conditions",
+                                          "Competition x G & S",
+                                          "Climate x G & S", 
+                                          "Site x G & S"
+                                          
+                                          
+                                        ))
+  ggplot(data = var_summary )+
+    geom_bar(aes(x = COMMON, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+    theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                           panel.background = element_blank())+
+    ylab("Average proportion of across-tree \n p(survival) variance explained")+
+    xlab("Species")+scale_fill_manual(values = color.pred.class, name = "")
+  ggsave(height = 4, width = 6, dpi = 350, paste0("SPCD_stanoutput_joint_v3/predicted_mort/images/Prop_variance_state_",st,".png"))
+  
+  ggplot(data = var_summary )+
+    geom_col(aes(x = "", y = mean, fill = predictor.class), color = "black",stat = "identity", position = "stack")+
+    theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                           panel.background = element_blank())+
+    ylab("Average proportion of across-tree \n p(survival) variance explained")+
+    xlab("Species")+scale_fill_manual(values = color.pred.class, name = "") +
+    coord_polar(theta = "y")+facet_wrap(~COMMON)
+  
+  ggplot(data = var_summary %>% filter(!Covariate %in% "DIA_DIFF_scaled" ))+
+    geom_col(aes(x = "", y = mean, fill = predictor.class), color = "black")+ #,stat = "identity", position = "stack")+
+    theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                           panel.background = element_blank())+
+    ylab("Average proportion of across-tree \n p(survival) variance explained")+
+    xlab("Species")+scale_fill_manual(values = color.pred.class, name = "") +
+    coord_polar(theta = "y")+facet_wrap(~COMMON)
+  
+  
+  # non-DIA_diff variables
+  ggplot(data = var_summary %>% filter(!Covariate %in% "DIA_DIFF_scaled"))+
+    geom_bar(aes(x = COMMON, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+    theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                           panel.background = element_blank())+
+    ylab("Average proportion of across-tree \n p(survival) variance explained")+
+    xlab("Species")+scale_fill_manual(values = color.pred.class, name = "")
+  ggsave(height = 4, width = 6, dpi = 350, paste0("SPCD_stanoutput_joint_v3/predicted_mort/images/Prop_variance_state_",st,"_no_diadiff.png"))
+  
+  ggplot(data = var_summary %>% filter(!Covariate %in% "DIA_DIFF_scaled"))+
+    geom_bar(aes(x = COMMON, y = mean, fill = Predictor), stat = "identity", position = "stack")+
+    theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                           panel.background = element_blank())+
+    ylab("Average proportion of across-tree \n p(survival) variance explained")+
+    xlab("Species")#+scale_fill_manual(values = color.pred.class)
+  
+  
+  # do the summary for all non-DIA_diff variables:
+  var_summary_no_dia_diff <-
+    left_join(var_parts %>% filter(!predictor %in% "DIA_DIFF_scaled"), tot.var.no.dia.diff, by = c("SPCD", "draw")) %>%
+    
+    #group_mean_total, by = c("draw", "SPCD")) %>%
+    mutate(rel_var = (var_k / var_total)) %>%
+    group_by(predictor, SPCD) %>%
+    summarize(
+      mean = mean(rel_var),
+      lower = quantile(rel_var, 0.05),
+      upper = quantile(rel_var, 0.95)
+    ) %>% 
+    rename("Covariate" = "predictor") %>% left_join(covariate.names)
+  
+  var_summary_no_dia_diff$Predictor <-
+    factor(var_summary_no_dia_diff$Predictor, levels = covariate.names$Predictor)
+  var_summary_no_dia_diff$COMMON <- FIESTA::ref_species[match(var_summary_no_dia_diff$SPCD, FIESTA::ref_species$SPCD),]$COMMON
+  
+  ggplot(data = var_summary_no_dia_diff )+
+    geom_col(aes(x = "", y = mean, fill = predictor.class), color = "black") + #,stat = "identity", position = "stack")+
+    theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                           panel.background = element_blank())+
+    ylab("Average proportion of across-tree \n p(survival) variance explained")+
+    xlab("")+scale_fill_manual(values = color.pred.class, name = "") +
+    coord_polar(theta = "y")+facet_wrap(~COMMON)
+  ggsave(height = 6, width = 6, dpi = 350, paste0("SPCD_stanoutput_joint_v3/predicted_mort/images/Prop_variance_state_",st,"_no_dia_diff_pie_spp.png"))
+  
+  # move all the state_variables to one folder and transfer
+  base::file.rename(
+    "SPCD_stanoutput_joint_v3/predicted_mort",
+    paste0("SPCD_stanoutput_joint_v3/model_6_variance_parse_state_", st)
+    
+  )
+  
+  
+  
+  # copy to the data-store output
   system(paste(
     "cp -r",
-    paste0("SPCD_stanoutput_joint_v3/predicted_mort/"),
+    paste0("SPCD_stanoutput_joint_v3/model_6_variance_parse_state_", st),
     "data-store/data/output/"
   ))
+  
+  # make a new predicted mort folder
+  dir.create("SPCD_stanoutput_joint_v3/predicted_mort")
+  
+  # make a state-level summary:
+  
+  
 }
 get_statewide_marginal_variances(st = 50)# 
+get_statewide_marginal_variances(st = 42)
 
 lapply(unique(plot.data.train$state), FUN = function(x){get_statewide_marginal_variances(st = x)} )
 
-# copy to the data-store output
-system(paste(
-  "cp -r",
-  paste0("SPCD_stanoutput_joint_v3_model_", model.no),
-  "data-store/data/output/"
-))
+
 
 # save outputs to cyverse 
 
@@ -571,190 +745,6 @@ ggplot(data = var_summary %>% filter(!predictor %in% "DIA_DIFF_scaled"))+
   ylab("Average proportion of variance explained")
 
 
-# --- visualizing the interactions ---
 
-interaction_vars <- inter.preds
-if (length(interaction_vars) > 0) {
-  interaction_plot <- marginal_summary_all %>%
-    filter(predictor %in% interaction_vars) %>%
-    ggplot(aes(x = factor(state), y = mean, fill = factor(species))) +
-    geom_col(position = "dodge") +
-    facet_wrap(~ predictor, scales = "free_y") +
-    geom_errorbar(aes(ymin = lower, ymax = upper),
-                  position = position_dodge(width = 0.9), width = 0.2) +
-    theme_minimal() +
-    labs(title = "Marginal Effects of Interaction Terms",
-         x = "State", y = "Marginal Effect", fill = "Species")
-  
-  ggsave("interaction_marginal_effects.png", interaction_plot, width = 10, height = 6)
-}
-
-
-# READ IN OUTPUTS FROM PARTICULAR STATES FOR EXAMPLE PLOT ----
-var_parts <- readRDS("C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/SPCD_stanoutput_joint_v3/variance_explained_state_9.RDS")
-
-covariate.names <- read.csv("C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/data/covariate_names/model_covariate_types.csv")
-
-
-# species - wide summary total variance
-tot.var <- var_parts %>%  group_by(SPCD, draw) %>%
-  summarise(var_total = sum(var_k))
-
-# species -wide summary total variance but without dia_diff
-tot.var.no.dia.diff <- var_parts %>% filter(!predictor %in% "DIA_DIFF_scaled")%>% group_by(SPCD, draw) %>%
-  summarise(var_total = sum(var_k))
-
-# state - wide summary total variance
-tot.var.st <- tot.var  %>% group_by(draw) %>% 
-  summarise(var_total_st = sum(var_total))
-
-var_summary <-
-  left_join(var_parts, tot.var, by = c("SPCD", "draw")) %>%
-  
-  #group_mean_total, by = c("draw", "SPCD")) %>%
-  mutate(rel_var = (var_k / var_total)) %>%
-  group_by(predictor, SPCD) %>%
-  summarize(
-    mean = mean(rel_var),
-    lower = quantile(rel_var, 0.05),
-    upper = quantile(rel_var, 0.95)
-  ) %>% 
-  rename("Covariate" = "predictor") %>% left_join(covariate.names)
-
-var_summary$Predictor <-
-  factor(var_summary$Predictor, levels = covariate.names$Predictor)
-var_summary$COMMON <- FIESTA::ref_species[match(var_summary$SPCD, FIESTA::ref_species$SPCD),]$COMMON
-
-
-ggplot(data = var_summary, aes(x = Predictor, y = mean)) + geom_point() +
-  geom_errorbar(aes(x = Predictor, ymin = lower, ymax = upper)) +
-  theme(axis.text = element_text(angle = 45, hjust = 1),
-        panel.grid = element_blank()) + facet_wrap( ~ SPCD, scales = "free_y")
-
-ggplot(data = var_summary %>% filter(!Predictor %in% "DIA_DIFF_scaled"),
-       aes(x = Predictor, y = mean)) + geom_point() +
-  geom_errorbar(aes(x = Predictor, ymin = lower, ymax = upper)) +
-  theme(axis.text = element_text(angle = 45, hjust = 1),
-        panel.grid = element_blank()) +
-  ylab ("relative variance in annaul prob(survival) explained by predictor") +
-  facet_wrap( ~ SPCD, scales = "free_y")
-
-
-
-
-
-ggplot(data = var_summary)+
- geom_bar(aes(x = COMMON, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
-  theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
-                         panel.background = element_blank())+
-  ylab("Average proportion of across-tree \n p(survival) variance explained")
-  
-ggplot(data = var_summary)+
-  geom_bar(aes(x = COMMON, y = mean, fill = Predictor), stat = "identity", position = "stack")+
-  theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
-                         panel.background = element_blank())+
-  ylab("Average proportion of across-tree \n p(survival) variance explained")+
-  xlab("Species")
-
-
-color.pred.class <- c(
-  "Site x G & S"= "#1b9e77",
-  "Competition x G & S"="#d95f02" ,
-   "Climate x G & S"="#7570b3" ,
-  "Climate"= "#e7298a" ,
-  "Growth & Size" = "#66a61e" ,
- "Site Conditions" = "#e6ab02",
-  "Competition" = "#a6761d"
-)
-
-
-ggplot(data = var_summary )+
-  geom_bar(aes(x = COMMON, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
-  theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
-                         panel.background = element_blank())+
-  ylab("Average proportion of across-tree \n p(survival) variance explained")+
-  xlab("Species")+scale_fill_manual(values = color.pred.class, name = "")
-ggsave(height = 4, width = 6, dpi = 350, "images/Prop_variance_state_9.png")
-
-ggplot(data = var_summary )+
-  geom_col(aes(x = "", y = mean, fill = predictor.class), color = "black",stat = "identity", position = "stack")+
-  theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
-                         panel.background = element_blank())+
-  ylab("Average proportion of across-tree \n p(survival) variance explained")+
-  xlab("Species")+scale_fill_manual(values = color.pred.class, name = "") +
-  coord_polar(theta = "y")+facet_wrap(~COMMON)
-
-ggplot(data = var_summary %>% filter(!Covariate %in% "DIA_DIFF_scaled" ))+
-  geom_col(aes(x = "", y = mean, fill = predictor.class), color = "black")+ #,stat = "identity", position = "stack")+
-  theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
-                         panel.background = element_blank())+
-  ylab("Average proportion of across-tree \n p(survival) variance explained")+
-  xlab("Species")+scale_fill_manual(values = color.pred.class, name = "") +
-  coord_polar(theta = "y")+facet_wrap(~COMMON)
-
-
-# non-DIA_diff variables
-ggplot(data = var_summary %>% filter(!Covariate %in% "DIA_DIFF_scaled"))+
-  geom_bar(aes(x = COMMON, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
-  theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
-                         panel.background = element_blank())+
-  ylab("Average proportion of across-tree \n p(survival) variance explained")+
-  xlab("Species")+scale_fill_manual(values = color.pred.class, name = "")
-ggsave(height = 4, width = 6, dpi = 350, "images/Prop_variance_state_no_dia_diff_9.png")
-
-ggplot(data = var_summary %>% filter(!Covariate %in% "DIA_DIFF_scaled"))+
-  geom_bar(aes(x = COMMON, y = mean, fill = Predictor), stat = "identity", position = "stack")+
-  theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
-                         panel.background = element_blank())+
-  ylab("Average proportion of across-tree \n p(survival) variance explained")+
-  xlab("Species")#+scale_fill_manual(values = color.pred.class)
-
-
-# do the summary for all non-DIA_diff variables:
-var_summary_no_dia_diff <-
-  left_join(var_parts %>% filter(!predictor %in% "DIA_DIFF_scaled"), tot.var.no.dia.diff, by = c("SPCD", "draw")) %>%
-  
-  #group_mean_total, by = c("draw", "SPCD")) %>%
-  mutate(rel_var = (var_k / var_total)) %>%
-  group_by(predictor, SPCD) %>%
-  summarize(
-    mean = mean(rel_var),
-    lower = quantile(rel_var, 0.05),
-    upper = quantile(rel_var, 0.95)
-  ) %>% 
-  rename("Covariate" = "predictor") %>% left_join(covariate.names)
-
-var_summary_no_dia_diff$Predictor <-
-  factor(var_summary_no_dia_diff$Predictor, levels = covariate.names$Predictor)
-var_summary_no_dia_diff$COMMON <- FIESTA::ref_species[match(var_summary_no_dia_diff$SPCD, FIESTA::ref_species$SPCD),]$COMMON
-
-ggplot(data = var_summary_no_dia_diff )+
-  geom_col(aes(x = "", y = mean, fill = predictor.class), color = "black") + #,stat = "identity", position = "stack")+
-  theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
-                         panel.background = element_blank())+
-  ylab("Average proportion of across-tree \n p(survival) variance explained")+
-  xlab("")+scale_fill_manual(values = color.pred.class, name = "") +
-  coord_polar(theta = "y")+facet_wrap(~COMMON)
-ggsave(height = 6, width = 6, dpi = 350, "images/Prop_variance_state_9_no_dia_diff_pie_spp.png")
-
-
-# make a state-level summary:
-
-var_summary <-
-  left_join(var_parts, tot.var.st, by = c("draw")) %>%
-  
-  #group_mean_total, by = c("draw", "SPCD")) %>%
-  mutate(rel_var_state = (var_k / var_total_st)) %>%
-  group_by(predictor, SPCD) %>%
-  summarize(
-    mean = mean(rel_var),
-    lower = quantile(rel_var, 0.05),
-    upper = quantile(rel_var, 0.95)
-  ) %>% 
-  rename("Covariate" = "predictor") %>% left_join(covariate.names)
-
-var_summary$Predictor <-
-  factor(var_summary$Predictor, levels = covariate.names$Predictor)
-var_summary$COMMON <- FIESTA::ref_species[match(var_summary$SPCD, FIESTA::ref_species$SPCD),]$COMMON
 
 
