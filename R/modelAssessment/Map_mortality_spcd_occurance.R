@@ -507,22 +507,38 @@ state.scales = c(
 
 
 
-
-
+# get a general remper for the span of our periodic data:
+T1.T2periodic <- state.summary.remper %>% select(State, T1, T2) %>% distinct() %>%
+  ungroup()%>%
+  summarise(T1.all = min(T1), 
+            T2.all = max(T2))
 
 
 state.locations <- state.summary.remper  %>% filter(year == last(year)) %>% arrange(mean_Tmax)
 state.locations$Yloc <- c(11.9, 12.4, 13, 13.5, 15.0, 15.9, 16.5, 17.0, 17.5, 18.1)
 
-ggplot()+geom_line(data = state.summary.remper , aes(x = year, y = mean_Tmax, group = State, color = State, linewidth =   `State Remeasurement`))+
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_line(data = state.summary.remper , aes(x = year, y = mean_Tmax, group = State, color = State, linewidth =   `State Remeasurement`))+
   scale_linewidth(range = c(0.1, 1))+
   geom_line(data = region.summary, aes(x = year, y = mean_Tmax_all), color = "black", linewidth = 1.1)+
   theme_bw()+ylab("Average Annual Tmax (C)")+xlab("Year")+
-  geom_label(data = state.locations, aes(label = State, 
-                                                                      x = year + 6, 
-                                                                      y = Yloc, 
-                                                                      color = State))+
-  theme(legend.position = "none")+scale_color_manual(values = state.scales)+xlim(1900, 2038)
+  geom_label_repel(data = state.locations, aes(label = State, 
+                                                                      x = year, 
+                                                                      y = mean_Tmax, 
+                                                                      color = State, 
+                                               x_nudge = year + 6), 
+                   direction = "y", box.padding = 0.5,  nudge_x = 2, min.segment.length = 1,
+                   
+                   #vjust = 0.5,
+                   hjust = 0.5)+
+  theme(legend.position = "none")+scale_color_manual(values = state.scales)+
+  
+  xlim(1900, 2038)+ ylim (8,19)
+ 
 ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_Tmax_time_series.png")
 
 
@@ -558,7 +574,12 @@ state.scales.ppt <- c("Ohio"="#543005",
 state.locations.ppt <- state.summary.remper  %>%  filter(year == last(year)) %>% arrange(mean_PPT)
 state.locations.ppt$yloc <- c(900, 950, 1000, 1050, 1100, 1150, 1200, 1260, 1350, 1400)
 
-ggplot()+geom_line(data = state.summary.remper, aes(x = year, y = mean_PPT, group = State, color = State), alpha = 0.9)+
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_line(data = state.summary.remper, aes(x = year, y = mean_PPT, group = State, color = State), alpha = 0.9)+
   scale_linewidth(range = c(0.1, 1))+
   geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
   theme_bw(base_size = 12)+ylab("Mean Precipitation (mm)")+xlab("Year")+
@@ -566,7 +587,8 @@ xlim(1900, 2038)+
   geom_label(data = state.locations.ppt, aes(label = State, 
                                          x = year + 8, 
                                          y = yloc, 
-                                         color = State))+
+                                         color = State), 
+             direction = "y", box.padding = 100, min.segment.length = 2)+
   scale_color_manual(values = state.scales.ppt)+
   theme(legend.position = "none")
 ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_PPT_time_series.png")
@@ -618,7 +640,12 @@ state.scales.Ndep <- c("Maine"="#543005",
 
 
 
-ggplot()+geom_line(data = Ndep.total.remper, aes(x = year, y = Avg.Ndep, group = State, color = State), alpha = 0.9)+
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_line(data = Ndep.total.remper, aes(x = year, y = Avg.Ndep, group = State, color = State), alpha = 0.9)+
   scale_linewidth(range = c(0.1, 1))+
   #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
   theme_bw(base_size = 12)+ylab("Reduced N deposition (kg/ha/year)")+xlab("Year")+
@@ -653,34 +680,46 @@ spongy <- read.csv("data/NE_spongy_moth_outbreaks.csv") %>%
   rename( "statecd"="STATECD") %>% left_join(., plotcommon.remper) %>%
   group_by(statecd)%>%
   mutate(max.def = max(Acres.Defoliated))
-state.locations.spongy <- spongy %>% filter(Acres.Defoliated == max.def ) %>% arrange(Acres.Defoliated)
+state.locations.spongy <- spongy %>% filter(Acres.Defoliated == max.def ) %>% arrange(Acres.Defoliated) %>%
+  mutate(State.year = paste(State, year))
 state.locations.spongy$acre.loc <- c(10000,120000, 130000,  600000, 650000, 700000, 1500000, 1900000, 2400000, 30000000, 44000000)
 
 spongy$State <- factor(spongy$State, levels = rev(c(state.locations.spongy$State)))
 
-state.scales.spongy <- c( "Ohio" = "#fdae61", 
-                          "West Virginia" = "#d6604d", 
-                          "Maryland" = "#f4a582", 
-                          "Vermont" = "#7fcdbb", 
-                          "New Hampshire" = "#41b6c4", 
-                          "New York" = "#1d91c0",
-                          "Connecticut" = "#225ea8" ,
-                           "Maine" = "#253494",
-                          "Pennsylvania"="#081d58")
 
+state.scales.spongy <- c("#FFAA00", 
+                          "#d94801", 
+                         "goldenrod", 
+                          "#98D851",
+                         "darkgreen",
+                         "#41b6c4",
+                          "#41b6c4", 
+                          "#1d91c0",
+                          "#225ea8" ,
+                           "#253494",
+                          "#081d58", 
+                          
+                          "#810f7c", 
+                         "#4d004b")
+names(state.scales.spongy) <- c(state.locations.spongy$State)
 
-ggplot()+geom_area(data = spongy %>% filter(!is.na(State)), aes(x = year, y = Acres.Defoliated, group = State, fill = State), alpha = 0.9, position = "stack")+
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_area(data = spongy %>% filter(!is.na(State)), aes(x = year, y = Acres.Defoliated, group = State, fill = State), alpha = 0.9, position = "stack")+
   #scale_linewidth(range = c(0.1, 1))+
   #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
   theme_bw(base_size = 12)+ylab("Acres Defoliated (Lymantria Dispar)")+xlab("Year")+
   xlim(1900, 2038)+
-  geom_label_repel(data = state.locations.spongy, aes(label = State,
+  geom_label_repel(data = state.locations.spongy, aes(label = State.year,
                                               x = year,
                                               y = Acres.Defoliated,
                                               color = State, 
-                                              nudge_x = ifelse(year < 1990, year - 25, year + 20), 
+                                              nudge_x = ifelse(year < 1990, year - 25, year + 15), 
                                               nudge_y = Acres.Defoliated+950000), 
-                   box.padding = 1, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5, 
+                   box.padding = 2, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5, 
                   
                  
                   direction = "y",
@@ -697,7 +736,9 @@ budworm <- read.csv("data/NE_spruce_budworm_outbreaks.csv") %>%
   mutate(K.Acres.Defoliated = Spruce.Budworm.Acres.Defoliated/1000)%>%
   group_by(statecd)%>%
   mutate(max.def = max(Spruce.Budworm.Acres.Defoliated))
-state.locations.budworm <- budworm %>% filter(Year == T1) %>% arrange(Spruce.Budworm.Acres.Defoliated)
+state.locations.budworm <- budworm %>% filter(Spruce.Budworm.Acres.Defoliated == max.def) %>% 
+  arrange(Spruce.Budworm.Acres.Defoliated) %>% mutate(earlier.yr = min(Year))%>%
+  filter(Year == earlier.yr)
 #state.locations.budworm$acre.loc <- c(10000,120000, 130000,  600000, 650000, 700000, 1500000, 1900000, 2400000, 30000000, 44000000)
 
 budworm$State <- factor(budworm$State, levels = rev(c(state.locations.budworm$State)))
@@ -705,7 +746,7 @@ budworm$State <- factor(budworm$State, levels = rev(c(state.locations.budworm$St
 state.scales.budworm <- c( "Ohio" = "#fdae61", 
                           "West Virginia" = "#d6604d", 
                           "Maryland" = "#f4a582", 
-                          "Vermont" = "#7fcdbb", 
+                          "Vermont" = "#d6604d", 
                           "New Hampshire" = "#41b6c4", 
                           "New York" = "#1d91c0",
                           "Connecticut" = "#225ea8" ,
@@ -713,7 +754,12 @@ state.scales.budworm <- c( "Ohio" = "#fdae61",
                           "Pennsylvania"="#081d58")
 
 
-ggplot()+geom_area(data = budworm %>% filter(!is.na(State) & ! State %in% "Total"), aes(x = Year, y = K.Acres.Defoliated, group = State, fill = State), alpha = 0.9, position = "stack")+
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_area(data = budworm %>% filter(!is.na(State) & ! State %in% "Total"), aes(x = Year, y = K.Acres.Defoliated, group = State, fill = State), alpha = 0.9, position = "stack")+
   #scale_linewidth(range = c(0.1, 1))+
   #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
   theme_bw(base_size = 12)+ylab("Spruce Budworm Defoliation (1000 acres)")+xlab("Year")+
@@ -770,23 +816,32 @@ beech.scale <- beech.bark.cos  %>% distinct() %>%
 
 # get the labels of the first year:
 
-state.locations.beech.scale <- beech.scale %>% left_join(., beech.bark.cos %>% group_by(State) %>% summarise(first.yr = min(SCALEYR))) %>% 
-  filter(year == first.yr) %>% arrange(first.yr)
+state.locations.beech.scale <- beech.scale %>% left_join(., beech.bark.cos %>% group_by(State) %>% summarise(first.yr = min(SCALEYR, na.rm = TRUE))) %>% 
+  filter(year == first.yr) %>% arrange(first.yr)%>%
+  mutate(State.year = paste(State, year))
 
-ggplot()+geom_line(data = beech.scale, aes(x = year, y = Percent.infested, group = State, color = State), linewidth = 2)+
+
+
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_line(data = beech.scale, aes(x = year, y = Percent.infested, group = State, color = State), linewidth = 2)+
   #scale_linewidth(range = c(0.1, 1))+
   #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
   theme_bw(base_size = 12)+ylab("Beech Scale Presence (% land area)")+xlab("Year")+
   xlim(1900, 2020)+
-  geom_label_repel(data = state.locations.beech.scale, aes(label = State,
+  geom_label_repel(data = state.locations.beech.scale, aes(label = State.year,
                                                        x = year,
                                                        y = Percent.infested,
                                                        color = State,
-                                                      # nudge_x = year,#ifelse(State == "Vermont", 1990, year - 25),
-                                                       nudge_y = Percent.infested+10
+                                                      nudge_x = ifelse(year < 1975, year -25, year + 25),
+                                                      nudge_y = ifelse(State %in% c("New York", "Maine"), Percent.infested-10, 
+                                                                       ifelse(State %in% c("Pennsylvania", "New Hampshire"), Percent.infested+7, Percent.infested))
                                                        ),
-                   box.padding = 1, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5,
-                   direction = "y", segment.color = "black")+
+                   box.padding = 0.25, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5,
+                   direction = "x", segment.color = "black")+
   #scale_fill_manual(values = state.scales.budworm)+
   scale_color_manual(values = state.scales.budworm)+
   theme(legend.position = "none")
@@ -854,14 +909,19 @@ ggplot()+geom_line(data = HWA.infest, aes(x = year, y = Percent.infested, group 
   #scale_fill_manual(values = state.scales.budworm)+
   scale_color_manual(values = state.scales.budworm)+
   theme(legend.position = "none")
-ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_HWA_time_series.png")
+#ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_HWA_time_series.png")
 
 
 # alternate labelling:
 state.locations.HWA.infest <- state.locations.HWA.infest %>%
   mutate(State.year = paste(State, year))
 
-ggplot()+geom_line(data = HWA.infest, aes(x = year, y = Percent.infested, group = State, color = State), linewidth = 2)+
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_line(data = HWA.infest, aes(x = year, y = Percent.infested, group = State, color = State), linewidth = 2)+
   #scale_linewidth(range = c(0.1, 1))+
   #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
   theme_bw(base_size = 12)+ylab("Hemlock Wooley Adelgid Presence (% land area)")+xlab("Year")+
