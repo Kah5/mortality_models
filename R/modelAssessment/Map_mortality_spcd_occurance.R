@@ -661,6 +661,7 @@ ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_Ndep_ti
 #### Plot pests and disturbances over time ----
 # read in the pest disturbance datafiles:
 # spongy moth --defoliation records by state
+# downloaded from here:https://apps.fs.usda.gov/nicportal/lddigest/cfm/dsp/dsplddigesthome.cfm
 # spruce budworm data --defoliation recoreds by state
 # beech bark disease: make table from: https://borealisdata.ca/dataset.xhtml?persistentId=doi:10.7939/DVN/10835
 # additional beech bark information: https://www.nrs.fs.usda.gov/pubs/jrnl/2007/nrs_2007_morin_001.pdf
@@ -674,116 +675,7 @@ ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_Ndep_ti
 # hemlock wooley adelgid infestations:
 # hard to track down: using this data here: https://hemlock-woolly-adelgid-national-initiative-gmsts.hub.arcgis.com/pages/distribution-maps
 # 
-
-# spongy month defoliation records by state:
-spongy <- read.csv("data/NE_spongy_moth_outbreaks.csv") %>% 
-  rename( "statecd"="STATECD") %>% left_join(., plotcommon.remper) %>%
-  group_by(statecd)%>%
-  mutate(max.def = max(Acres.Defoliated))
-state.locations.spongy <- spongy %>% filter(Acres.Defoliated == max.def ) %>% arrange(Acres.Defoliated) %>%
-  mutate(State.year = paste(State, year))
-state.locations.spongy$acre.loc <- c(10000,120000, 130000,  600000, 650000, 700000, 1500000, 1900000, 2400000, 30000000, 44000000)
-
-spongy$State <- factor(spongy$State, levels = rev(c(state.locations.spongy$State)))
-
-
-state.scales.spongy <- c("#FFAA00", 
-                          "#d94801", 
-                         "goldenrod", 
-                          "#98D851",
-                         "darkgreen",
-                         "#41b6c4",
-                          "#41b6c4", 
-                          "#1d91c0",
-                          "#225ea8" ,
-                           "#253494",
-                          "#081d58", 
-                          
-                          "#810f7c", 
-                         "#4d004b")
-names(state.scales.spongy) <- c(state.locations.spongy$State)
-
-ggplot()+
-  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
-                                      xmax = T2.all, 
-                                      ymin = -Inf, 
-                                      ymax = Inf), alpha = 0.25)+
-  geom_area(data = spongy %>% filter(!is.na(State)), aes(x = year, y = Acres.Defoliated, group = State, fill = State), alpha = 0.9, position = "stack")+
-  #scale_linewidth(range = c(0.1, 1))+
-  #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
-  theme_bw(base_size = 12)+ylab("Acres Defoliated (Lymantria Dispar)")+xlab("Year")+
-  xlim(1900, 2038)+
-  geom_label_repel(data = state.locations.spongy, aes(label = State.year,
-                                              x = year,
-                                              y = Acres.Defoliated,
-                                              color = State, 
-                                              nudge_x = ifelse(year < 1990, year - 25, year + 15), 
-                                              nudge_y = Acres.Defoliated+950000), 
-                   box.padding = 2, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5, 
-                  
-                 
-                  direction = "y",
-                  
-                   segment.color = "black")+
-  scale_fill_manual(values = state.scales.spongy)+
-  scale_color_manual(values = state.scales.spongy)+
-  theme(legend.position = "none")
-ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_Spongy_time_series.png")
-
-# spruce budworm defoliation records by state:
-budworm <- read.csv("data/NE_spruce_budworm_outbreaks.csv") %>% 
-  rename( "statecd"="STATECD") %>% left_join(., plotcommon.remper) %>%
-  mutate(K.Acres.Defoliated = Spruce.Budworm.Acres.Defoliated/1000)%>%
-  group_by(statecd)%>%
-  mutate(max.def = max(Spruce.Budworm.Acres.Defoliated))
-state.locations.budworm <- budworm %>% filter(Spruce.Budworm.Acres.Defoliated == max.def) %>% 
-  arrange(Spruce.Budworm.Acres.Defoliated) %>% mutate(earlier.yr = min(Year))%>%
-  filter(Year == earlier.yr)
-#state.locations.budworm$acre.loc <- c(10000,120000, 130000,  600000, 650000, 700000, 1500000, 1900000, 2400000, 30000000, 44000000)
-
-budworm$State <- factor(budworm$State, levels = rev(c(state.locations.budworm$State)))
-
-state.scales.budworm <- c( "Ohio" = "#fdae61", 
-                          "West Virginia" = "#d6604d", 
-                          "Maryland" = "#f4a582", 
-                          "Vermont" = "#d6604d", 
-                          "New Hampshire" = "#41b6c4", 
-                          "New York" = "#1d91c0",
-                          "Connecticut" = "#225ea8" ,
-                          "Maine" = "#253494",
-                          "Pennsylvania"="#081d58")
-
-
-ggplot()+
-  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
-                                      xmax = T2.all, 
-                                      ymin = -Inf, 
-                                      ymax = Inf), alpha = 0.25)+
-  geom_area(data = budworm %>% filter(!is.na(State) & ! State %in% "Total"), aes(x = Year, y = K.Acres.Defoliated, group = State, fill = State), alpha = 0.9, position = "stack")+
-  #scale_linewidth(range = c(0.1, 1))+
-  #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
-  theme_bw(base_size = 12)+ylab("Spruce Budworm Defoliation (1000 acres)")+xlab("Year")+
-  xlim(1900, 2038)+
-  geom_label_repel(data = state.locations.budworm, aes(label = State,
-                                                      x = Year,
-                                                      y = K.Acres.Defoliated,
-                                                      color = State, 
-                                                      nudge_x = ifelse(State == "Vermont", 1990, Year - 25), 
-                                                      nudge_y = Spruce.Budworm.Acres.Defoliated+95),
-                   box.padding = 5, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5, 
-                  
-                   segment.color = "black")+
-  scale_fill_manual(values = state.scales.budworm)+
-  scale_color_manual(values = state.scales.budworm)+
-  theme(legend.position = "none")
-ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_budworm_time_series.png")
-
-### Beech Bark disease spread ---
-beech.bark <- read.csv("data/beech_bark_spread/Cale_Morin-BeechScaleDatesCanadaUS.csv") %>%
-  filter(COUNTRY %in% "USA") %>%
-  rename("State" = "PRVSTTNAME") %>% 
-  filter(State %in% unique(state.summary.remper$State)) # just gets the remper states
-
+# get county level area information to plot disturbances by area:
 # since this is just the time it was first observed, we want county area or something:
 # Get county data for all the states
 counties <- counties(state = c("DE","RI","ME", "MA","MD", "NH", "NJ", "NY", "OH", "PA", "VT", "WV"), cb = TRUE) %>% 
@@ -799,6 +691,235 @@ CT.counties <- counties(state = "CT", cb = FALSE, year = 2015) %>%
 
 counties <- rbind(counties, CT.counties)
 
+
+
+# spongy month defoliation records by state:
+spongy <- read.csv("data/NE_spongy_moth_outbreaks.csv") %>% 
+  rename( "statecd"="STATECD") %>% left_join(., plotcommon.remper) %>%
+  group_by(statecd)%>%
+  mutate(max.def = max(Acres.Defoliated))
+
+# get total land and convert to hectares
+# according to tigris census.gov all units are in square meters
+state.area <- counties %>% mutate(ALAND.ha = ALAND/10000) %>%
+  group_by(State, STUSPS)%>% summarise(total.land.ha = sum(ALAND.ha))
+# join county area up to spongy moth and convert spongy moth defoliation to hectares too
+spongy <- spongy %>% left_join(., state.area) %>% 
+  mutate(HA.Defoliated = Acres.Defoliated/2.47105381)%>% #conversion
+  mutate(fraction.Defoliated = HA.Defoliated/total.land.ha)
+
+
+state.locations.spongy <- spongy %>% filter(Acres.Defoliated == max.def ) %>% arrange(Acres.Defoliated) %>%
+  mutate(State.year = paste(State, year))
+# state.locations.spongy$acre.loc <- c(10000,15000, 
+#                                      120000, 130000,  
+#                                      600000, 650000, 
+#                                      700000, 1000000, 1500000, 
+#                                      1900000, 2400000, 
+#                                      30000000, 44000000)
+
+spongy$State <- factor(spongy$State, levels = rev(c(state.locations.spongy$State)))
+
+
+state.scales.spongy <- c("#FFAA00", 
+                          "#d94801", 
+                         "goldenrod", 
+                          "#98D851",
+                         "darkgreen",
+                         "#01665e",
+                          "#35978f", 
+                          "#1d91c0",
+                          "#225ea8" ,
+                           "#253494",
+                          "#081d58", 
+                          
+                          "#810f7c", 
+                         "#4d004b")
+names(state.scales.spongy) <- c(state.locations.spongy$State)
+
+
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_line(data = spongy %>% filter(!is.na(State)), aes(x = year, y = fraction.Defoliated, group = State, color = State), alpha = 0.9, position = "identity", size = 1)+
+  #scale_linewidth(range = c(0.1, 1))+
+  #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
+  theme_bw(base_size = 12)+ylab("Fraction of Land Area Defoliated (Lymantria Dispar)")+xlab("Year")+
+  xlim(1900, 2038)+
+  geom_label_repel(data = state.locations.spongy, aes(label = State.year,
+                                              x = year,
+                                              y = fraction.Defoliated,
+                                              color = State, 
+                                              nudge_x = ifelse(year < 1990, year - 25, year + 15), 
+                                              #nudge_y = ifelse(State %in% c("Ohio", "Maine"),1500000, fraction.Defoliated+200000)
+                                              ), 
+                   box.padding = 3, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5, 
+                  
+                 
+                  direction = "y",
+                  
+                   segment.color = "black")+
+  scale_fill_manual(values = state.scales.spongy)+
+  scale_color_manual(values = state.scales.spongy)+
+  theme(legend.position = "none")
+ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_Spongy_fraction_defoliated_time_series.png")
+
+
+
+
+# plot up the total area defoliated:
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_area(data = spongy %>% filter(!is.na(State)), aes(x = year, y = HA.Defoliated, group = State, fill = State), alpha = 0.9, position = "stack")+
+  #scale_linewidth(range = c(0.1, 1))+
+  #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
+  theme_bw(base_size = 12)+ylab("Hectares Defoliated (Lymantria Dispar)")+xlab("Year")+
+  xlim(1900, 2038)+
+  geom_label_repel(data = state.locations.spongy, aes(label = State.year,
+                                                      x = year,
+                                                      y = HA.Defoliated,
+                                                      color = State, 
+                                                      nudge_x = ifelse(year < 1990, year - 25, year + 15), 
+                                                      nudge_y = ifelse(State %in% c("Ohio", "Maine"),1500000, HA.Defoliated+200000)
+  ), 
+  box.padding = 3, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5, 
+  
+  
+  direction = "y",
+  
+  segment.color = "black")+
+  scale_fill_manual(values = state.scales.spongy)+
+  scale_color_manual(values = state.scales.spongy)+
+  theme(legend.position = "none")
+ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_Spongy_time_series.png")
+
+
+
+
+
+# spruce budworm defoliation records by state:
+budworm <- read.csv("data/NE_spruce_budworm_outbreaks.csv") %>% 
+  rename( "statecd"="STATECD") %>% left_join(., plotcommon.remper) %>%
+  mutate(K.Acres.Defoliated = Spruce.Budworm.Acres.Defoliated/1000)%>%
+  group_by(statecd)%>%
+  mutate(max.def = max(Spruce.Budworm.Acres.Defoliated))%>% 
+  # join up with the state area
+  left_join(., state.area) %>% 
+  mutate(HA.Defoliated = Spruce.Budworm.Acres.Defoliated/2.47105381)%>% #conversion
+  mutate(fraction.Defoliated = Spruce.Budworm.Acres.Defoliated/total.land.ha)
+
+
+
+state.locations.budworm <- budworm %>% filter(Spruce.Budworm.Acres.Defoliated == max.def & !State %in% "Total" & !is.na(State)) %>% 
+  arrange(Spruce.Budworm.Acres.Defoliated) %>% mutate(earlier.yr = min(Year))%>%
+  filter(Year == earlier.yr)
+#state.locations.budworm$acre.loc <- c(10000,120000, 130000,  600000, 650000, 700000, 1500000, 1900000, 2400000, 30000000, 44000000)
+
+budworm$State <- factor(budworm$State, levels = rev(c(state.locations.budworm$State)))
+
+# state.scales.budworm <- c( "Ohio" = "#fdae61", 
+#                           "West Virginia" = "#d6604d", 
+#                           "Maryland" = "#f4a582", 
+#                           "Vermont" = "#d6604d", 
+#                           "New Hampshire" = "#41b6c4", 
+#                           "New York" = "#1d91c0",
+#                           "Connecticut" = "#225ea8" ,
+#                           "Maine" = "#253494",
+#                           "Pennsylvania"="#081d58")
+
+
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_area(data = budworm %>% filter(!is.na(State) & ! State %in% "Total" & !is.na(State)), aes(x = Year, y = fraction.Defoliated, group = State, color = State, fill = State), alpha = 0.5, position = "identity")+
+  #scale_linewidth(range = c(0.1, 1))+
+  #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
+  theme_bw(base_size = 12)+ylab("Spruce Budworm Defoliation (Fraction of State Land Area)")+xlab("Year")+
+  xlim(1900, 2038)+
+  geom_label_repel(data = state.locations.budworm, aes(label = State,
+                                                      x = Year,
+                                                      y = fraction.Defoliated,
+                                                      color = State, 
+                                                      nudge_x = ifelse(State == "Vermont", 1990, Year - 25)#, 
+                                                      #nudge_y = Spruce.Budworm.Acres.Defoliated+95
+                                                      ),
+                   box.padding = 1, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5, 
+                  
+                   segment.color = "black")+
+  scale_fill_manual(values = state.scales.spongy)+
+  scale_color_manual(values = state.scales.spongy)+
+  theme(legend.position = "none")
+ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_budworm_fraction_time_series_identity.png")
+
+
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_line(data = budworm %>% filter(!is.na(State) & ! State %in% "Total" & !is.na(State)), aes(x = Year, y = fraction.Defoliated, group = State, color = State, fill = State), size = 1.2, position = "identity")+
+  #scale_linewidth(range = c(0.1, 1))+
+  #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
+  theme_bw(base_size = 12)+ylab("Spruce Budworm Defoliation (Fraction of State Land Area)")+xlab("Year")+
+  xlim(1900, 2038)+
+  geom_label_repel(data = state.locations.budworm, aes(label = State,
+                                                       x = Year,
+                                                       y = fraction.Defoliated,
+                                                       color = State, 
+                                                       nudge_x = ifelse(State == "Vermont", 1990, Year - 25)#, 
+                                                       #nudge_y = Spruce.Budworm.Acres.Defoliated+95
+  ),
+  box.padding = 1, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5, 
+  
+  segment.color = "black")+
+  scale_fill_manual(values = state.scales.spongy)+
+  scale_color_manual(values = state.scales.spongy)+
+  theme(legend.position = "none")
+ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_budworm_fraction_time_series_line.png")
+
+# plot relativized acreage defoliated:
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_area(data = budworm %>% filter(!is.na(State) & ! State %in% "Total" & !is.na(State)), aes(x = Year, y = HA.Defoliated, group = State, fill = State), alpha = 0.9, position = "stack")+
+  #scale_linewidth(range = c(0.1, 1))+
+  #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
+  theme_bw(base_size = 12)+ylab("Spruce Budworm Defoliation (Hectares)")+xlab("Year")+
+  xlim(1900, 2038)+
+  geom_label_repel(data = state.locations.budworm, aes(label = State,
+                                                       x = Year,
+                                                       y = HA.Defoliated,
+                                                       color = State, 
+                                                       nudge_x = ifelse(State == "Vermont", 1990, Year - 25)#, 
+                                                       #nudge_y = Spruce.Budworm.Acres.Defoliated+95
+  ),
+  box.padding = 1, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5, 
+  
+  segment.color = "black")+
+  scale_fill_manual(values = state.scales.spongy)+
+  scale_color_manual(values = state.scales.spongy)+
+  theme(legend.position = "none")
+ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_budworm_time_series.png")
+
+
+
+
+### Beech Bark disease spread ---
+beech.bark <- read.csv("data/beech_bark_spread/Cale_Morin-BeechScaleDatesCanadaUS.csv") %>%
+  filter(COUNTRY %in% "USA") %>%
+  rename("State" = "PRVSTTNAME") %>% 
+  filter(State %in% unique(state.summary.remper$State)) # just gets the remper states
+
+
 # join to beech bark data
 beech.bark.cos <- counties %>% left_join(.,beech.bark %>% select(-REFERENCE)) %>% select(-STUSPS) 
 beech.bark.cos %>% filter(is.na(ALAND)) # make sure all have matches
@@ -810,9 +931,9 @@ beech.scale <- beech.bark.cos  %>% distinct() %>%
   # calculate rolling total of land where BB is present in each year
   group_by(State, year) %>%
            group_by(State, year, BB.county) %>%
-           summarise(Total.Land = sum(ALAND)) %>% spread(BB.county, Total.Land, fill = 0) %>%
-  mutate(Total.State = `Beech Bark Present` + `No observed Beech Bark`)%>%
-  mutate(Percent.infested = (`Beech Bark Present`/Total.State)*100)
+           summarise(Total.Land.ha = sum(ALAND/10000)) %>% spread(BB.county, Total.Land.ha, fill = 0) %>%
+  mutate(Total.State.ha = `Beech Bark Present` + `No observed Beech Bark`)%>%
+  mutate(Percent.infested = (`Beech Bark Present`/Total.State.ha)*100)
 
 # get the labels of the first year:
 
@@ -843,9 +964,60 @@ ggplot()+
                    box.padding = 0.25, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5,
                    direction = "x", segment.color = "black")+
   #scale_fill_manual(values = state.scales.budworm)+
-  scale_color_manual(values = state.scales.budworm)+
+  scale_color_manual(values = state.scales.spongy)+
   theme(legend.position = "none")
 ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_Beech_scale_time_series.png")
+
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_area(data = beech.scale, aes(x = year, y = Percent.infested, group = State, color = State, fill = State), alpha = 0.5, linewidth = 2, position = "identity")+
+  #scale_linewidth(range = c(0.1, 1))+
+  #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
+  theme_bw(base_size = 12)+ylab("Beech Scale Presence (% land area)")+xlab("Year")+
+  xlim(1900, 2020)+
+  geom_label_repel(data = state.locations.beech.scale, aes(label = State.year,
+                                                           x = year,
+                                                           y = Percent.infested,
+                                                           color = State,
+                                                           nudge_x = ifelse(year < 1975, year -25, year + 25),
+                                                           nudge_y = ifelse(State %in% c("New York", "Maine"), Percent.infested-10, 
+                                                                            ifelse(State %in% c("Pennsylvania", "New Hampshire"), Percent.infested+7, Percent.infested))
+  ),
+  box.padding = 0.25, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5,
+  direction = "x", segment.color = "black")+
+  scale_fill_manual(values = state.scales.spongy)+
+  scale_color_manual(values = state.scales.spongy)+
+  theme(legend.position = "none")
+#ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_Beech_scale_time_series.png")
+
+# plot the total area with beech scale presence:
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_area(data = beech.scale, aes(x = year, y = `Beech Bark Present`, group = State, color = State, fill = State), alpha = 0.9, linewidth = 1, position = "stack")+
+  #scale_linewidth(range = c(0.1, 1))+
+  #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
+  theme_bw(base_size = 12)+ylab("Total area with Beech Scale (hectares)")+xlab("Year")+
+  xlim(1900, 2020)+
+  geom_label_repel(data = state.locations.beech.scale, aes(label = State.year,
+                                                           x = year,
+                                                           y = `Beech Bark Present`,
+                                                           color = State,
+                                                           nudge_x = ifelse(year < 1975, year -25, year + 25) ,
+                                                          nudge_y = ifelse(State %in% c("New York", "Maine"), `Beech Bark Present`-1, 
+                                                                            ifelse(State %in% c("Pennsylvania", "New Hampshire"), `Beech Bark Present`+7, `Beech Bark Present`))
+  ),
+  box.padding = 1, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5,
+  direction = "both", segment.color = "black")+
+  scale_fill_manual(values = state.scales.spongy)+
+  scale_color_manual(values = state.scales.spongy)+
+  theme(legend.position = "none")
+ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_Beech_scale_time_series_Hectares_by_state.png")
 
 ### Beech Bark disease spread ---
 HWA <- read.csv("data/HWA_invested_counties_2023_3_6_24.csv")  # just gets the remper states
@@ -863,10 +1035,10 @@ HWA.infest <- HWA.cos  %>% distinct() %>%
   # calculate rolling total of land where BB is present in each year
   group_by(State, year) %>%
   group_by(State, year, HWA.county) %>%
-  summarise(Total.Land = sum(ALAND)) %>% 
-  spread(HWA.county, Total.Land, fill = 0) %>%
-  mutate(Total.State = `HWA Present` + `No observed HWA`)%>%
-  mutate(Percent.infested = (`HWA Present`/Total.State)*100)
+  summarise(Total.Land.ha = sum(ALAND/10000)) %>% 
+  spread(HWA.county, Total.Land.ha, fill = 0) %>%
+  mutate(Total.State.ha = `HWA Present` + `No observed HWA`)%>%
+  mutate(Percent.infested = (`HWA Present`/Total.State.ha)*100)
 
 # get the labels of the first year:
 
@@ -889,27 +1061,6 @@ state.scales.budworm <- c("#b11e02",
                           "#9c3ed6", 
                           "#ee34d2") 
 names(state.scales.budworm) <- state.locations.HWA.infest$State
-
-ggplot()+geom_line(data = HWA.infest, aes(x = year, y = Percent.infested, group = State, color = State), linewidth = 2)+
-  #scale_linewidth(range = c(0.1, 1))+
-  #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
-  theme_bw(base_size = 12)+ylab("Hemlock Wooley Adelgid Presence (% land area)")+xlab("Year")+
-  xlim(1900, 2020)+
-  geom_label_repel(data = state.locations.HWA.infest, aes(label = State,
-                                                           x = year,
-                                                           y = Percent.infested,
-                                                           color = State,
-                                                           nudge_x = ifelse(State == "Vermont", 1970, 
-                                                                            ifelse(State %in% c("Ohio", "Maine", "West Virginia", "New Hampshire"), year+10, year - 25)),
-                                                           nudge_y = ifelse(State == "New Hampshire",-25, Percent.infested)
-  ),
-  box.padding =2, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5,
-  direction = "y", 
-  segment.color = "black")+
-  #scale_fill_manual(values = state.scales.budworm)+
-  scale_color_manual(values = state.scales.budworm)+
-  theme(legend.position = "none")
-#ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_HWA_time_series.png")
 
 
 # alternate labelling:
@@ -938,9 +1089,11 @@ ggplot()+
   direction = "y", 
   segment.color = "black")+
   #scale_fill_manual(values = state.scales.budworm)+
-  scale_color_manual(values = state.scales.budworm)+
+  scale_color_manual(values = state.scales.spongy)+
   theme(legend.position = "none")+xlim(1900, 2030)
 ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_HWA_time_series_alternate.png")
+
+
 
 
 
