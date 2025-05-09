@@ -11,6 +11,57 @@ library(FIESTA)
 library(maps)
 library(mapdata)
 
+# set up custom colors for species
+# set the species order using the factors:
+SP.TRAITS <- read.csv("data/NinemetsSpeciesTraits.csv") %>% filter(COMMON_NAME %in% unique(nspp[1:17,]$COMMON))
+# order the trait db by softwood-hardwood, then shade tolerance, then name (this puts all the oaks together b/c hickory and red oak have the same tolerance values)
+SP.TRAITS <- SP.TRAITS %>% group_by(SFTWD_HRDWD) %>% arrange(desc(SFTWD_HRDWD), desc(ShadeTol), desc(COMMON_NAME))
+
+SP.TRAITS$Color <- c(# softwoods
+  "#b2df8a",
+  "#003c30", 
+  "#b2182b", 
+  "#fee090", 
+  "#33a02c",
+  
+  
+  # sugar  maples
+  "#a6cee3",
+  "#1f78b4",
+  
+  # red maple
+  "#e31a1c",
+  # yellow birch
+  "#fdbf6f",
+  # oaks
+  "#cab2d6",
+  "#8073ac",
+  "#6a3d9a",
+  
+  # hickory
+  "#7f3b08",
+  # white ash
+  "#bababa",
+  # black cherry
+  "#4d4d4d",
+  # yellow poplar
+  "#ff7f00",
+  "#fccde5"
+  
+  
+)
+
+SP.TRAITS$`Shade Tolerance`  <- ifelse(SP.TRAITS$ShadeTol >=4, "High", 
+                                       ifelse(SP.TRAITS$ShadeTol <=2.5, "Low", "Moderate"))
+
+
+sppColors <- c( "#f5f5f5", "#d9f0d3", SP.TRAITS$Color )
+names(sppColors) <- c("other hardwood", "other softwood", unique(SP.TRAITS$COMMON_NAME))
+
+species_fill <- scale_fill_manual(values = sppColors)
+species_color <- scale_color_manual(values = sppColors)
+
+
 ################################################################################
 # Read in mortality data for 17 species
 ################################################################################
@@ -89,11 +140,31 @@ TREE.data.all <- TREE.remeas %>%
   mutate(Tree.status = ifelse(M == 1, "dead", ifelse(M == 3, "cut", "live")), # add some labels to ID all dead trees
          DIAMETER_diff = ifelse(DIA_DIFF > 0, "positive", 
                                 ifelse(DIA_DIFF == 0,"zero", "negative")))
-
 TREE.data.all$STNAME <- ref_statecd[match(TREE.data.all$state, ref_statecd$VALUE),]$MEANING
+TREE.data.all$SW_HW <- SP.TRAITS[match(TREE.data.all$SPCD, SP.TRAITS$SPCD),]$SFTWD_HRDWD
+
+# get the top 17 species and make a table
+nspp <-  TREE.data.all %>% group_by(SPCD) %>% 
+    summarise(n = n(), 
+              pct = n/nrow(TREE.data.all)) %>% arrange (desc(`pct`))
+nspp$cumulative.pct <- cumsum(nspp$pct)
+nspp$COMMON <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$COMMON
+nspp$Species <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$GENUS, FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$SPECIES)
+
+  
+nspp %>% mutate(pct = round(pct, 3), 
+         cumulative.pct = round(cumulative.pct, 3)) %>% 
+  rename(`# of trees` = "n", 
+         `% of trees` = "pct",
+         `cumulative %` = "cumulative.pct", 
+        `Common name` = "COMMON") %>%
+  dplyr::select(Species, `Common name`, SPCD, `# of trees`, `% of trees`, `cumulative %`)|> gt()
+
+
 
 species.composition <- TREE.data.all %>%
-  mutate(Top.Species = ifelse(SPCD %in% nspp[1:17,]$SPCD, Species, "Other")) %>% # label for non-top species
+  mutate(Top.Species = ifelse(SPCD %in% nspp[1:17,]$SPCD, Species, 
+                              ifelse(SW_HW %in% "S", "other softwood","other hardwood"))) %>% # label for non-top species
   mutate(dbhold.cm = dbhold*2.54) %>%
   mutate(tree_ba_cm = (pi*dbhold.cm^2)/4, 
          tree_ba_m = (pi*(dbhold.cm/100)^2)/4) %>% #select(dbhold, dbhold.cm, tree_ba_cm, tree_ba_m)
@@ -105,61 +176,31 @@ species.composition <- TREE.data.all %>%
   mutate(`Percent Composition (Density)` = (Total.trees.sp/total.trees.st)*100, 
          `Percent Composition (BA)` = (Total.ba.sp_sq_m/total.ba.st_sq_m)*100)
 
+species.composition.nspp17 <- TREE.data.all %>% filter(SPCD %in% nspp[1:17,]$SPCD)%>%
+  mutate(Top.Species = ifelse(SPCD %in% nspp[1:17,]$SPCD, Species, 
+                              ifelse(SW_HW %in% "S", "other softwood","other hardwood"))) %>% # label for non-top species
+  mutate(dbhold.cm = dbhold*2.54) %>%
+  mutate(tree_ba_cm = (pi*dbhold.cm^2)/4, 
+         tree_ba_m = (pi*(dbhold.cm/100)^2)/4) %>% #select(dbhold, dbhold.cm, tree_ba_cm, tree_ba_m)
+  group_by(state, STNAME) %>% mutate(total.trees.st = n(), 
+                                     total.ba.st_sq_m = sum(tree_ba_m, na.rm =TRUE)) %>%
+  group_by(state, STNAME, Top.Species, total.trees.st, total.ba.st_sq_m) %>%
+  summarise(Total.trees.sp = n(), 
+            Total.ba.sp_sq_m = sum(tree_ba_m, na.rm =TRUE)) %>%
+  mutate(`Percent Composition (Density)` = (Total.trees.sp/total.trees.st)*100, 
+         `Percent Composition (BA)` = (Total.ba.sp_sq_m/total.ba.st_sq_m)*100)
 
-# set up custom colors for species
-# set the species order using the factors:
-SP.TRAITS <- read.csv("data/NinemetsSpeciesTraits.csv") %>% filter(COMMON_NAME %in% unique(nspp[1:17,]$COMMON))
-# order the trait db by softwood-hardwood, then shade tolerance, then name (this puts all the oaks together b/c hickory and red oak have the same tolerance values)
-SP.TRAITS <- SP.TRAITS %>% group_by(SFTWD_HRDWD) %>% arrange(desc(SFTWD_HRDWD), desc(ShadeTol), desc(COMMON_NAME))
-
-SP.TRAITS$Color <- c(# softwoods
-  "#b2df8a",
-  "#003c30", 
-  "#b2182b", 
-  "#fee090", 
-  "#33a02c",
-  
-  
-  # sugar  maples
-  "#a6cee3",
-  "#1f78b4",
-  
-  # red maple
-  "#e31a1c",
-  # yellow birch
-  "#fdbf6f",
-  # oaks
-  "#cab2d6",
-  "#8073ac",
-  "#6a3d9a",
-  
-  # hickory
-  "#7f3b08",
-  # white ash
-  "#bababa",
-  # black cherry
-  "#4d4d4d",
-  # yellow poplar
-  "#ff7f00",
-  "#fccde5"
-  
-  
-)
-
-SP.TRAITS$`Shade Tolerance`  <- ifelse(SP.TRAITS$ShadeTol >=4, "High", 
-                                       ifelse(SP.TRAITS$ShadeTol <=2.5, "Low", "Moderate"))
-
-
-sppColors <- c( "#f5f5f5", SP.TRAITS$Color )
-names(sppColors) <- c("Other",unique(SP.TRAITS$COMMON_NAME))
-
-species_fill <- scale_fill_manual(values = sppColors)
-species_color <- scale_color_manual(values = sppColors)
 
 # order the species by shade tolerence
-species.composition$Top.Species <- factor(species.composition$Top.Species, levels = c(unique(SP.TRAITS$COMMON_NAME),"Other" ) )
+species.composition$Top.Species <- factor(species.composition$Top.Species, levels = c("other softwood", "other hardwood",unique(SP.TRAITS$COMMON_NAME)) )
 species.composition$STNAME <- factor(species.composition$STNAME, levels = c("Maine", "New Hampshire", "Vermont", "New York", 
                                                                                  "Connecticut", "New Jersey", "Pennsylvania", "Ohio", "Maryland","West Virginia"))
+
+species.composition.nspp17$Top.Species <- factor(species.composition.nspp17$Top.Species, levels = c(unique(SP.TRAITS$COMMON_NAME)) )
+species.composition.nspp17$STNAME <- factor(species.composition.nspp17$STNAME, levels = c("Maine", "New Hampshire", "Vermont", "New York", 
+                                                                            "Connecticut", "New Jersey", "Pennsylvania", "Ohio", "Maryland","West Virginia"))
+
+# plot up compostion charts for all the trees, including other hardwood
 ggplot() + 
   geom_bar(data = species.composition, aes(x = STNAME, y = `Percent Composition (Density)`, group = Top.Species, fill = Top.Species), position = "stack", stat = "identity")+
   theme_bw(base_size = 14)+
@@ -191,25 +232,56 @@ ggplot() +
         axis.ticks = element_blank(),
         panel.grid  = element_blank())+species_fill+
   labs(x="", y="")
+ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_composition_by_density_pie.png")
 
-# create a sankey diagram
-# need a dataframe of 
-# Species, tree id, Survival, y = 
-# 
-TREE.data.all
+
+# plot up figures of compostion for all the species looked at here
+# plot up compostion charts for all the trees, including other hardwood
+ggplot() + 
+  geom_bar(data = species.composition.nspp17, aes(x = STNAME, y = `Percent Composition (Density)`, group = Top.Species, fill = Top.Species), position = "stack", stat = "identity")+
+  theme_bw(base_size = 14)+
+  xlab("State")+
+  theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+        panel.grid = element_blank(), legend.title = element_blank())+species_fill
+ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_composition_by_density_nspp17.png")
+
+ggplot() + 
+  geom_bar(data = species.composition.nspp17, aes(x = STNAME, y = `Percent Composition (BA)`, group = Top.Species, fill = Top.Species), position = "stack", stat = "identity")+
+  theme_bw(base_size = 14)+
+  xlab("State")+
+  theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+        panel.grid = element_blank(), legend.title = element_blank())+species_fill
+ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_composition_by_BA_nspp17.png")
+
+
+# make pie charts:
+ggplot() + 
+  geom_bar(data = species.composition.nspp17, aes(x = factor(1), y = `Percent Composition (Density)`, fill = Top.Species), stat = "identity", color = "black", width = 1)+
+  coord_polar(theta = "y")+
+  facet_wrap(~STNAME)+
+  theme_bw(base_size = 14)+
+  #theme_void() +
+  xlab("State")+
+  theme(
+    legend.title = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid  = element_blank())+species_fill+
+  labs(x="", y="")
+ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_composition_by_density_pie_nspp17.png")
+
+######################################################################################
+# create a sankey diagram showing tree mortality by species ----
+# using ggalluvial
+
 
 species.mort.summary <- TREE.data.all %>%
-  mutate(Top.Species = ifelse(SPCD %in% nspp[1:17,]$SPCD, Species, "Other")) %>% # label for non-top species
-  #mutate(dbhold.cm = dbhold*2.54) %>%
-  #mutate(tree_ba_cm = (pi*dbhold.cm^2)/4, 
-   #      tree_ba_m = (pi*(dbhold.cm/100)^2)/4) %>% #select(dbhold, dbhold.cm, tree_ba_cm, tree_ba_m)
-  #group_by(state, STNAME) %>% mutate(total.trees.st = n()) %>%
+  mutate(Top.Species = ifelse(SPCD %in% nspp[1:17,]$SPCD, Species, 
+                              ifelse(SW_HW %in% "S", "other softwood","other hardwood"))) %>% # label for non-top species
   group_by(Top.Species, Tree.status) %>%
   mutate(
     species_t3 = ifelse(Tree.status == "live", Top.Species, NA)  # same species if alive
   )
-
-
 # Prepare alluvial plot data
 tree_alluvial <- species.mort.summary %>%
   mutate(
@@ -222,40 +294,49 @@ tree_alluvial <- species.mort.summary %>%
   count(T1, T2, T3, name = "count")
 tree_alluvial$T2 <- factor(tree_alluvial$T2, levels = c("live", "cut", "dead"))
 
-# Plot
-ggplot(tree_alluvial,
-       aes(axis1 = T1, axis2 = T2, axis3 = T3, y = count)) +
-  geom_alluvium(aes(fill = T1), width = 1/12) +
-  geom_stratum(width = 1/12, fill = "grey90", color = "black") +
+tree_alluvial$T1 <- factor(tree_alluvial$T1, levels = c(unique(SP.TRAITS$COMMON_NAME),"other softwood", "other hardwood") )
+
+
+
+#"linear", "cubic", "quintic", "sine", "arctangent", and "sigmoid". "xspline"
+# Plot up the data in a sankey diagram
+ggplot(tree_alluvial ,
+       aes(axis1 = T1, axis2 = T3,  y = count)) +
+  geom_alluvium(aes(fill = T1), width = 1/12, curve_type = "sigmoid") +
+  geom_stratum(aes(fill = T1),width = 1/3, color = "black") +
   geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 3) +
-  scale_x_discrete(limits = c("Species at T1", "Status at T2", "Species at T3"),
+  scale_x_discrete(limits = c("Species Composition at T1", "Species Composition at T2"),
                    expand = c(.05, .05)) +
   labs(title = "Tree Species Composition and Survival Over Time",
        y = "Number of Trees") +
-  theme_minimal()+species_fill + species.color
+  theme_minimal()+species_fill + species_color+
+  theme(axis.title.y = element_blank(), axis.ticks = element_blank(), 
+        axis.text.y = element_blank(), 
+        panel.grid = element_blank(), 
+        legend.positon = "none")
+ggsave(height = 10, width = 7, dpi = 350, "images/Compostion_sankey.png")
 
-# Plot
-ggplot(tree_alluvial %>% filter(!T1 %in% "Other"),
-       aes(axis1 = T1, axis2 = T2, axis3 = T3, y = count)) +
-  geom_alluvium(aes(fill = T1), width = 1/12) +
-  geom_stratum(width = 1/12, fill = "grey90", color = "black") +
+#"linear", "cubic", "quintic", "sine", "arctangent", and "sigmoid". "xspline"
+# Plot up the data in a sankey diagram
+ggplot(tree_alluvial %>% filter(T1 %in% nspp[1:17,]$COMMON),
+       aes(axis1 = T1, axis2 = T3,  y = count)) +
+  geom_alluvium(aes(fill = T1), width = 1/12, curve_type = "sigmoid") +
+  geom_stratum(aes(fill = T1),width = 1/3, color = "black") +
   geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 3) +
-  scale_x_discrete(limits = c("Species at T1", "Status at T2", "Species at T3"),
+  scale_x_discrete(limits = c("Species Composition at T1", "Species Composition at T2"),
                    expand = c(.05, .05)) +
   labs(title = "Tree Species Composition and Survival Over Time",
        y = "Number of Trees") +
-  theme_minimal()+species_fill + species_color
+  theme_minimal()+species_fill + species_color+
+  theme(axis.title.y = element_blank(), axis.ticks = element_blank(), 
+        axis.text.y = element_blank(), 
+        panel.grid = element_blank(), 
+        legend.positon = "none")
+ggsave(height = 10, width = 7, dpi = 350, "images/Compostion_sankey_nspp17.png")
 
 
 
-ggplot(species.mort.summary %>% filter(!Top.Species %in% "Other"),
-       aes(y = Frequency,
-           axis1 = Top.Species, axis2 = Tree.status, axis3 = Top.Species,
-           fill = Top.Species)) +
-  geom_alluvium() + geom_stratum() +
-  geom_text(stat = "stratum", aes(label = paste(after_stat(stratum)))) +
-  scale_x_discrete(limits = c("T1", "Tree Status", "T2")) +species_fill
-  # scale_x_discrete(limits = c("Class", "Sex", "Age"))
+############################################################################
 
 
 cleaned.data.full <- cleaned.data
