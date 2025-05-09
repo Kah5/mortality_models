@@ -15,9 +15,19 @@ library(mapdata)
 # Read in mortality data for 17 species
 ################################################################################
 cleaned.data <- readRDS( "data/cleaned.data.mortality.TRplots.RDS")
-unique(cleaned.data$SPCD)
 
-# get the top species
+cleaned.data <- cleaned.data %>% filter(!is.na(ba) & !is.na(slope) & ! is.na(physio) & !is.na(aspect))%>% 
+  dplyr::select(state, county, pltnum, cndtn, point, tree, PLOT.ID, cycle, spp, dbhcur, dbhold, status, damage, Species, SPCD,
+                remper, LAT_FIADB, LONG_FIADB, elev, DIA_DIFF, annual.growth, M, relative.growth, si, physio:RD) %>% distinct()
+# get summary of damages for later use:
+N.DAMAGE <- cleaned.data %>% group_by(SPCD, damage) %>% summarise(n.by.damage = n())
+N.DAMAGE$SPECIES <- ref_species[match(N.DAMAGE$SPCD, ref_species$SPCD),]$COMMON
+ref_damage<- ref_codes %>% filter(VARIABLE %in% "AGENTCD")
+N.DAMAGE$damage_agent <- ref_damage[match(N.DAMAGE$damage, ref_damage$VALUE),]$MEANING
+N.DAMAGE$damage_agent <- ifelse(N.DAMAGE$damage == 0, "None", N.DAMAGE$damage_agent)
+#saveRDS(N.DAMAGE, "data/N.DAMAGE.table.RDS")
+
+
 nspp <- cleaned.data %>% group_by(SPCD) %>% summarise(n = n(), 
                                                       pct = n/nrow(cleaned.data)) %>% arrange (desc(`pct`))
 
@@ -27,14 +37,247 @@ nspp$cumulative.pct <- cumsum(nspp$pct)
 
 # link up to the species table:
 nspp$COMMON <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$COMMON
+nspp$Species <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$GENUS, FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$SPECIES)
+
+#View(nspp)
 
 nspp[1:17,]$COMMON
 
+library(gt)
+nspp[1:17,] %>% mutate(pct = round(pct, 3), 
+                       cumulative.pct = round(cumulative.pct, 3)) %>% rename(`# of trees` = "n", 
+                                                                             `% of trees` = "pct",
+                                                                             `cumulative %` = "cumulative.pct", 
+                                                                             `Common name` = "COMMON") %>%
+  dplyr::select(Species, `Common name`, SPCD, `# of trees`, `% of trees`, `cumulative %`)|> gt()
+
+
+
+cleaned.data$SPGRPCD <- FIESTA::ref_species[match(cleaned.data$SPCD, FIESTA::ref_species$SPCD),]$E_SPGRPCD
+
+SPGRP.df <- FIESTA::ref_codes %>% filter(VARIABLE %in% "SPGRPCD") %>% filter(VALUE %in% unique(cleaned.data$SPGRPCD))
+cleaned.data$SPGRPNAME <- SPGRP.df[match(cleaned.data$SPGRPCD, SPGRP.df$VALUE),]$MEANING
+cleaned.data$STNAME <- ref_statecd[match(cleaned.data$state, ref_statecd$VALUE),]$MEANING
+
+
+## calculate compositoin from number of trees and tree BA by state
+# cleaned.data only has the 17 species of interest, get the full records here:
+TREE.remeas <- readRDS("data/unfiltered_TREE.remeas.rds")
+
+################################################################################
+# Actual filtering of all the data--
+###############################################################################
+# caution! this includes logged tree & all species too just for exploration!
+TREE.data.all <- TREE.remeas %>% 
+  # for each tree caclulate annual growth if dbhold is not NA and the remper is > 0
+  group_by(PLOT.ID, point, state, county, pltnum, tree, date) %>% 
+  
+  # for dead trees (dead, non-salvable dead, and snags), calculate annual growth as diameter diff/ half of remper
+  # for live trees, calculate annual growht as diamber diff/remper
+  mutate(annual.growth = ifelse(status %in% c(2,  4, 5) & ! is.na(dbhold) & ! remper == 0, 
+                                DIA_DIFF/(remper/2), DIA_DIFF/remper),
+         M = ifelse(status %in%  c(2, 4, 5), 1, 
+                    ifelse(status %in% c(3), 3, 0)), # if a tree is dead, non-salvable deead or a snag, mark as dead
+         relative.growth = (annual.growth/dbhold)*100) %>% ungroup() %>% 
+  # acutal filtering section
+  filter( exprem > 0 & # if exprem == 0, these could be modeled plots?
+            dbhold >= 5 & # need an initial dbh greater than 5
+            ! remper == 0 & # if remper is listed as zero, filter out
+            DIA_DIFF >= 0 ) %>% #& # filter out diameter differences >= 0
+            #!status == 3 & # remove cut trees
+            #SPCD %in% nspp[1:17,]$SPCD)%>% # filter species in the top 17 of all species
+  mutate(Tree.status = ifelse(M == 1, "dead", ifelse(M == 3, "cut", "live")), # add some labels to ID all dead trees
+         DIAMETER_diff = ifelse(DIA_DIFF > 0, "positive", 
+                                ifelse(DIA_DIFF == 0,"zero", "negative")))
+
+TREE.data.all$STNAME <- ref_statecd[match(TREE.data.all$state, ref_statecd$VALUE),]$MEANING
+
+species.composition <- TREE.data.all %>%
+  mutate(Top.Species = ifelse(SPCD %in% nspp[1:17,]$SPCD, Species, "Other")) %>% # label for non-top species
+  mutate(dbhold.cm = dbhold*2.54) %>%
+  mutate(tree_ba_cm = (pi*dbhold.cm^2)/4, 
+         tree_ba_m = (pi*(dbhold.cm/100)^2)/4) %>% #select(dbhold, dbhold.cm, tree_ba_cm, tree_ba_m)
+  group_by(state, STNAME) %>% mutate(total.trees.st = n(), 
+                             total.ba.st_sq_m = sum(tree_ba_m, na.rm =TRUE)) %>%
+  group_by(state, STNAME, Top.Species, total.trees.st, total.ba.st_sq_m) %>%
+  summarise(Total.trees.sp = n(), 
+            Total.ba.sp_sq_m = sum(tree_ba_m, na.rm =TRUE)) %>%
+  mutate(`Percent Composition (Density)` = (Total.trees.sp/total.trees.st)*100, 
+         `Percent Composition (BA)` = (Total.ba.sp_sq_m/total.ba.st_sq_m)*100)
+
+
+# set up custom colors for species
+# set the species order using the factors:
+SP.TRAITS <- read.csv("data/NinemetsSpeciesTraits.csv") %>% filter(COMMON_NAME %in% unique(nspp[1:17,]$COMMON))
+# order the trait db by softwood-hardwood, then shade tolerance, then name (this puts all the oaks together b/c hickory and red oak have the same tolerance values)
+SP.TRAITS <- SP.TRAITS %>% group_by(SFTWD_HRDWD) %>% arrange(desc(SFTWD_HRDWD), desc(ShadeTol), desc(COMMON_NAME))
+
+SP.TRAITS$Color <- c(# softwoods
+  "#b2df8a",
+  "#003c30", 
+  "#b2182b", 
+  "#fee090", 
+  "#33a02c",
+  
+  
+  # sugar  maples
+  "#a6cee3",
+  "#1f78b4",
+  
+  # red maple
+  "#e31a1c",
+  # yellow birch
+  "#fdbf6f",
+  # oaks
+  "#cab2d6",
+  "#8073ac",
+  "#6a3d9a",
+  
+  # hickory
+  "#7f3b08",
+  # white ash
+  "#bababa",
+  # black cherry
+  "#4d4d4d",
+  # yellow poplar
+  "#ff7f00",
+  "#fccde5"
+  
+  
+)
+
+SP.TRAITS$`Shade Tolerance`  <- ifelse(SP.TRAITS$ShadeTol >=4, "High", 
+                                       ifelse(SP.TRAITS$ShadeTol <=2.5, "Low", "Moderate"))
+
+
+sppColors <- c( "#f5f5f5", SP.TRAITS$Color )
+names(sppColors) <- c("Other",unique(SP.TRAITS$COMMON_NAME))
+
+species_fill <- scale_fill_manual(values = sppColors)
+species_color <- scale_color_manual(values = sppColors)
+
+# order the species by shade tolerence
+species.composition$Top.Species <- factor(species.composition$Top.Species, levels = c(unique(SP.TRAITS$COMMON_NAME),"Other" ) )
+species.composition$STNAME <- factor(species.composition$STNAME, levels = c("Maine", "New Hampshire", "Vermont", "New York", 
+                                                                                 "Connecticut", "New Jersey", "Pennsylvania", "Ohio", "Maryland","West Virginia"))
+ggplot() + 
+  geom_bar(data = species.composition, aes(x = STNAME, y = `Percent Composition (Density)`, group = Top.Species, fill = Top.Species), position = "stack", stat = "identity")+
+  theme_bw(base_size = 14)+
+  xlab("State")+
+  theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+        panel.grid = element_blank(), legend.title = element_blank())+species_fill
+ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_composition_by_density.png")
+
+ggplot() + 
+  geom_bar(data = species.composition, aes(x = STNAME, y = `Percent Composition (BA)`, group = Top.Species, fill = Top.Species), position = "stack", stat = "identity")+
+  theme_bw(base_size = 14)+
+  xlab("State")+
+  theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+        panel.grid = element_blank(), legend.title = element_blank())+species_fill
+ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_composition_by_BA.png")
+
+
+# make pie charts:
+ggplot() + 
+  geom_bar(data = species.composition, aes(x = factor(1), y = `Percent Composition (Density)`, fill = Top.Species), stat = "identity", color = "black", width = 1)+
+  coord_polar(theta = "y")+
+  facet_wrap(~STNAME)+
+  theme_bw(base_size = 14)+
+  #theme_void() +
+  xlab("State")+
+  theme(
+         legend.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        panel.grid  = element_blank())+species_fill+
+  labs(x="", y="")
+
+# create a sankey diagram
+# need a dataframe of 
+# Species, tree id, Survival, y = 
+# 
+TREE.data.all
+
+species.mort.summary <- TREE.data.all %>%
+  mutate(Top.Species = ifelse(SPCD %in% nspp[1:17,]$SPCD, Species, "Other")) %>% # label for non-top species
+  #mutate(dbhold.cm = dbhold*2.54) %>%
+  #mutate(tree_ba_cm = (pi*dbhold.cm^2)/4, 
+   #      tree_ba_m = (pi*(dbhold.cm/100)^2)/4) %>% #select(dbhold, dbhold.cm, tree_ba_cm, tree_ba_m)
+  #group_by(state, STNAME) %>% mutate(total.trees.st = n()) %>%
+  group_by(Top.Species, Tree.status) %>%
+  mutate(
+    species_t3 = ifelse(Tree.status == "live", Top.Species, NA)  # same species if alive
+  )
+
+
+# Prepare alluvial plot data
+tree_alluvial <- species.mort.summary %>%
+  mutate(
+    T1 = Top.Species,
+    T2 = Tree.status,
+    T3 = ifelse(Tree.status == "live", species_t3, 
+                ifelse(Tree.status == "cut","cut","dead"))
+  ) %>%
+  
+  count(T1, T2, T3, name = "count")
+tree_alluvial$T2 <- factor(tree_alluvial$T2, levels = c("live", "cut", "dead"))
+
+# Plot
+ggplot(tree_alluvial,
+       aes(axis1 = T1, axis2 = T2, axis3 = T3, y = count)) +
+  geom_alluvium(aes(fill = T1), width = 1/12) +
+  geom_stratum(width = 1/12, fill = "grey90", color = "black") +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 3) +
+  scale_x_discrete(limits = c("Species at T1", "Status at T2", "Species at T3"),
+                   expand = c(.05, .05)) +
+  labs(title = "Tree Species Composition and Survival Over Time",
+       y = "Number of Trees") +
+  theme_minimal()+species_fill + species.color
+
+# Plot
+ggplot(tree_alluvial %>% filter(!T1 %in% "Other"),
+       aes(axis1 = T1, axis2 = T2, axis3 = T3, y = count)) +
+  geom_alluvium(aes(fill = T1), width = 1/12) +
+  geom_stratum(width = 1/12, fill = "grey90", color = "black") +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 3) +
+  scale_x_discrete(limits = c("Species at T1", "Status at T2", "Species at T3"),
+                   expand = c(.05, .05)) +
+  labs(title = "Tree Species Composition and Survival Over Time",
+       y = "Number of Trees") +
+  theme_minimal()+species_fill + species_color
+
+
+
+ggplot(species.mort.summary %>% filter(!Top.Species %in% "Other"),
+       aes(y = Frequency,
+           axis1 = Top.Species, axis2 = Tree.status, axis3 = Top.Species,
+           fill = Top.Species)) +
+  geom_alluvium() + geom_stratum() +
+  geom_text(stat = "stratum", aes(label = paste(after_stat(stratum)))) +
+  scale_x_discrete(limits = c("T1", "Tree Status", "T2")) +species_fill
+  # scale_x_discrete(limits = c("Class", "Sex", "Age"))
+
+
+cleaned.data.full <- cleaned.data
+
+mortality.summary <- cleaned.data.full %>% filter(SPCD %in% unique(nspp[1:17,]$SPCD)) %>%
+  group_by(SPCD, M) %>% summarise(ntrees = n()) %>%
+  spread(M, ntrees) %>% rename("live" = `0`, 
+                               "dead" = `1`)
+mortality.summary$`Common name` <- FIESTA::ref_species[match(mortality.summary$SPCD, FIESTA::ref_species$SPCD),]$COMMON
+mortality.summary %>% dplyr::select(`Common name`, SPCD, live, dead) %>% mutate(total = live + dead) %>% ungroup() |> gt()
+colnames(cleaned.data.full)
 
 cleaned.data.17 <- cleaned.data %>% dplyr::select(-spp) %>% filter(SPCD %in% unique(nspp[1:17,]$SPCD))
 
+#####################################################################################################state######################################################################################################################
+# Plot the species compositition ----
+#####################################################################################################state######################################################################################################################
+
+
+
 ################################################################################
-# For each species get the combined species name that matches the little maps
+# For each species get the combined species name that matches the little maps----
 ################################################################################
 plt.all <- left_join(cleaned.data.17, ref_species) 
 plt.shp <- plt.all %>% mutate(GENUS = tolower(GENUS), 
@@ -48,6 +291,9 @@ plt.shp <- plt.all %>% mutate(GENUS = tolower(GENUS),
 
 plt.shp$shp.code <- ifelse(plt.shp$SCIENTIFIC_NAME %in% "Pinus strobus", "pinustrb", plt.shp$shp.code)
 plt.shp$shp.code <- ifelse(plt.shp$SCIENTIFIC_NAME %in% "Acer saccharum", "acersacr", plt.shp$shp.code)
+
+
+
 
 ################################################################################
 # Function to create maps
@@ -1110,6 +1356,10 @@ cleaned.data %>% group_by(SPCD) %>%
 # read in historic damage data:
 damage.table <- readRDS("data/N.DAMAGE.table.RDS")
 ggplot(data = damage.table %>% filter(! damage_agent %in% "None"), aes(x = damage_agent, y = n.by.damage))+geom_point()
+
+
+
+
 
 #####################################################################################################state######################################################################################################################
 #Map out species-level model predicted probability of mortality for Figure 1 ----
