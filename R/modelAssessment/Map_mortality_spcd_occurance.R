@@ -203,7 +203,7 @@ species.composition.nspp17$STNAME <- factor(species.composition.nspp17$STNAME, l
 # plot up compostion charts for all the trees, including other hardwood
 ggplot() + 
   geom_bar(data = species.composition, aes(x = STNAME, y = `Percent Composition (Density)`, group = Top.Species, fill = Top.Species), position = "stack", stat = "identity")+
-  theme_bw(base_size = 14)+
+  theme_bw(base_size = 12)+
   xlab("State")+
   theme(axis.text.x = element_text(angle = 60, hjust = 1), 
         panel.grid = element_blank(), legend.title = element_blank())+species_fill
@@ -295,29 +295,34 @@ tree_alluvial <- species.mort.summary %>%
 tree_alluvial$T2 <- factor(tree_alluvial$T2, levels = c("live", "cut", "dead"))
 
 tree_alluvial$T1 <- factor(tree_alluvial$T1, levels = c(unique(SP.TRAITS$COMMON_NAME),"other softwood", "other hardwood") )
-
-
-
+tree_alluvial$T_pct <- nspp[match(tree_alluvial$T1, nspp$COMMON),]$pct*100
+tree_alluvial$T_pct <- ifelse(tree_alluvial$T1 %in% "other hardwood", sum(nspp[18:nrow(nspp),]$pct)*100, tree_alluvial$T_pct) # get the total values for the non-focal species
+tree_alluvial$T_pct <- paste0(round(tree_alluvial$T_pct, digits = 2), "%")
+tree.shade.order.pct <- tree_alluvial %>% ungroup()%>% select(T_pct, T1) %>% distinct()%>% arrange(by = T1)
+tree_alluvial$T_pct <- factor(tree_alluvial$T_pct, levels =c(tree.shade.order.pct$T_pct))
+tree.counts <- tree_alluvial %>% ungroup()%>% select(T1, T_pct, count) %>% group_by(T1, T_pct) %>% summarise(total = sum(count)) 
 #"linear", "cubic", "quintic", "sine", "arctangent", and "sigmoid". "xspline"
+
+
 # Plot up the data in a sankey diagram
-ggplot(tree_alluvial ,
+ggplot(data = tree_alluvial ,
        aes(axis1 = T1, axis2 = T3,  y = count)) +
-  geom_alluvium(aes(fill = T1), width = 1/12, curve_type = "sigmoid") +
-  geom_stratum(aes(fill = T1),width = 1/3, color = "black") +
+  geom_alluvium(data = tree_alluvial ,aes(fill = T1), width = 1/12, curve_type = "sigmoid") +
+  geom_stratum(data = tree_alluvial ,aes(fill = T1),width = 1/3, color = "black") +
+  #geom_label_repel(aes(x = 0.8, label = T_pct, color = T1),  show.legend = FALSE,  position = "stack") +
   geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 3) +
   scale_x_discrete(limits = c("Species Composition at T1", "Species Composition at T2"),
                    expand = c(.05, .05)) +
   labs(title = "Tree Species Composition and Survival Over Time",
        y = "Number of Trees") +
-  theme_minimal()+species_fill + species_color+
-  theme(axis.title.y = element_blank(), axis.ticks = element_blank(), 
-        axis.text.y = element_blank(), 
-        panel.grid = element_blank(), 
+  theme_minimal()+species_fill + species_color#+
+  theme(axis.title.y = element_blank(), axis.ticks = element_blank(),
+        axis.text.y = element_blank(),
+        panel.grid = element_blank(),
         legend.positon = "none")
 ggsave(height = 10, width = 7, dpi = 350, "images/Compostion_sankey.png")
 
-#"linear", "cubic", "quintic", "sine", "arctangent", and "sigmoid". "xspline"
-# Plot up the data in a sankey diagram
+
 ggplot(tree_alluvial %>% filter(T1 %in% nspp[1:17,]$COMMON),
        aes(axis1 = T1, axis2 = T3,  y = count)) +
   geom_alluvium(aes(fill = T1), width = 1/12, curve_type = "sigmoid") +
@@ -335,6 +340,40 @@ ggplot(tree_alluvial %>% filter(T1 %in% nspp[1:17,]$COMMON),
 ggsave(height = 10, width = 7, dpi = 350, "images/Compostion_sankey_nspp17.png")
 
 
+#add percentage to the sankey diagram
+# to do this we need to use the lodes formate of the data
+
+tree_alluvial_long <- to_lodes_form(tree_alluvial %>% ungroup()%>% select(T1, T3, T_pct, count), axes = 1:2,
+                              key = "variable", value = "value", id = "cohort",
+                              diffuse = T1)
+
+
+
+ggplot(
+  data =tree_alluvial_long,
+  aes(x = variable, stratum = value, alluvium = cohort, y = count)
+) +
+  geom_alluvium(aes(fill=T1), width = 1/12, curve_type = "sigmoid") +
+  geom_stratum(aes(fill=T1), width = 1/3, color = "black") +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 3) +
+  theme_minimal() +species_fill+
+ 
+  geom_label(stat = "stratum",
+                  aes( fill = T1,
+                      label = ifelse(variable == "T1" & !value %in% c(
+                        "cut","dead"), as.character(T_pct), NA)),
+                  direction = "y", nudge_x = -0.3, min.segment.length = Inf, show.legend = FALSE)+
+  # scale_x_discrete(limits = c("Species Composition at T1", "Species Composition at T2"),
+  #                  expand = c(.05, .05)) +
+  # labs(title = "Tree Species Composition and Survival Over Time",
+  #      y = "Number of Trees") +
+  theme_minimal()+species_fill + 
+  theme(axis.title.y = element_blank(), axis.ticks = element_blank(), 
+        axis.text.y = element_blank(), 
+        panel.grid = element_blank(), 
+        legend.positon = "none")+
+  guides(fill=guide_legend(title=NULL))
+ggsave(height = 10, width = 10, dpi = 350, "images/Compostion_sankey_percentages.png")
 
 ############################################################################
 
