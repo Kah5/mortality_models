@@ -10,6 +10,58 @@ library(here)
 library(FIESTA)
 library(maps)
 library(mapdata)
+library(ggrepel)
+library(tigris)
+
+
+################################################################################
+# Read in mortality data for 17 species
+################################################################################
+cleaned.data <- readRDS( "data/cleaned.data.mortality.TRplots.RDS")
+
+cleaned.data <- cleaned.data %>% filter(!is.na(ba) & !is.na(slope) & ! is.na(physio) & !is.na(aspect))%>% 
+  dplyr::select(state, county, pltnum, cndtn, point, tree, PLOT.ID, date,cycle, spp, dbhcur, dbhold, status, damage, Species, SPCD,
+                remper, LAT_FIADB, LONG_FIADB, elev, DIA_DIFF, annual.growth, M, relative.growth, si, physio:RD) %>% distinct()
+# get summary of damages for later use:
+N.DAMAGE <- cleaned.data %>% group_by(SPCD, damage) %>% summarise(n.by.damage = n())
+N.DAMAGE$SPECIES <- ref_species[match(N.DAMAGE$SPCD, ref_species$SPCD),]$COMMON
+ref_damage<- ref_codes %>% filter(VARIABLE %in% "AGENTCD")
+N.DAMAGE$damage_agent <- ref_damage[match(N.DAMAGE$damage, ref_damage$VALUE),]$MEANING
+N.DAMAGE$damage_agent <- ifelse(N.DAMAGE$damage == 0, "None", N.DAMAGE$damage_agent)
+#saveRDS(N.DAMAGE, "data/N.DAMAGE.table.RDS")
+
+
+nspp <- cleaned.data %>% group_by(SPCD) %>% summarise(n = n(), 
+                                                      pct = n/nrow(cleaned.data)) %>% arrange (desc(`pct`))
+
+nspp$cumulative.pct <- cumsum(nspp$pct)
+
+
+
+# link up to the species table:
+nspp$COMMON <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$COMMON
+nspp$Species <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$GENUS, FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$SPECIES)
+
+#View(nspp)
+
+nspp[1:17,]$COMMON
+
+library(gt)
+nspp[1:17,] %>% mutate(pct = round(pct, 3), 
+                       cumulative.pct = round(cumulative.pct, 3)) %>% rename(`# of trees` = "n", 
+                                                                             `% of trees` = "pct",
+                                                                             `cumulative %` = "cumulative.pct", 
+                                                                             `Common name` = "COMMON") %>%
+  dplyr::select(Species, `Common name`, SPCD, `# of trees`, `% of trees`, `cumulative %`)|> gt()
+
+
+
+cleaned.data$SPGRPCD <- FIESTA::ref_species[match(cleaned.data$SPCD, FIESTA::ref_species$SPCD),]$E_SPGRPCD
+
+SPGRP.df <- FIESTA::ref_codes %>% filter(VARIABLE %in% "SPGRPCD") %>% filter(VALUE %in% unique(cleaned.data$SPGRPCD))
+cleaned.data$SPGRPNAME <- SPGRP.df[match(cleaned.data$SPGRPCD, SPGRP.df$VALUE),]$MEANING
+cleaned.data$STNAME <- ref_statecd[match(cleaned.data$state, ref_statecd$VALUE),]$MEANING
+
 
 # set up custom colors for species
 # set the species order using the factors:
@@ -62,58 +114,14 @@ species_fill <- scale_fill_manual(values = sppColors)
 species_color <- scale_color_manual(values = sppColors)
 
 
-################################################################################
-# Read in mortality data for 17 species
-################################################################################
-cleaned.data <- readRDS( "data/cleaned.data.mortality.TRplots.RDS")
-
-cleaned.data <- cleaned.data %>% filter(!is.na(ba) & !is.na(slope) & ! is.na(physio) & !is.na(aspect))%>% 
-  dplyr::select(state, county, pltnum, cndtn, point, tree, PLOT.ID, cycle, spp, dbhcur, dbhold, status, damage, Species, SPCD,
-                remper, LAT_FIADB, LONG_FIADB, elev, DIA_DIFF, annual.growth, M, relative.growth, si, physio:RD) %>% distinct()
-# get summary of damages for later use:
-N.DAMAGE <- cleaned.data %>% group_by(SPCD, damage) %>% summarise(n.by.damage = n())
-N.DAMAGE$SPECIES <- ref_species[match(N.DAMAGE$SPCD, ref_species$SPCD),]$COMMON
-ref_damage<- ref_codes %>% filter(VARIABLE %in% "AGENTCD")
-N.DAMAGE$damage_agent <- ref_damage[match(N.DAMAGE$damage, ref_damage$VALUE),]$MEANING
-N.DAMAGE$damage_agent <- ifelse(N.DAMAGE$damage == 0, "None", N.DAMAGE$damage_agent)
-#saveRDS(N.DAMAGE, "data/N.DAMAGE.table.RDS")
-
-
-nspp <- cleaned.data %>% group_by(SPCD) %>% summarise(n = n(), 
-                                                      pct = n/nrow(cleaned.data)) %>% arrange (desc(`pct`))
-
-nspp$cumulative.pct <- cumsum(nspp$pct)
-
-
-
-# link up to the species table:
-nspp$COMMON <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$COMMON
-nspp$Species <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$GENUS, FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$SPECIES)
-
-#View(nspp)
-
-nspp[1:17,]$COMMON
-
-library(gt)
-nspp[1:17,] %>% mutate(pct = round(pct, 3), 
-                       cumulative.pct = round(cumulative.pct, 3)) %>% rename(`# of trees` = "n", 
-                                                                             `% of trees` = "pct",
-                                                                             `cumulative %` = "cumulative.pct", 
-                                                                             `Common name` = "COMMON") %>%
-  dplyr::select(Species, `Common name`, SPCD, `# of trees`, `% of trees`, `cumulative %`)|> gt()
-
-
-
-cleaned.data$SPGRPCD <- FIESTA::ref_species[match(cleaned.data$SPCD, FIESTA::ref_species$SPCD),]$E_SPGRPCD
-
-SPGRP.df <- FIESTA::ref_codes %>% filter(VARIABLE %in% "SPGRPCD") %>% filter(VALUE %in% unique(cleaned.data$SPGRPCD))
-cleaned.data$SPGRPNAME <- SPGRP.df[match(cleaned.data$SPGRPCD, SPGRP.df$VALUE),]$MEANING
-cleaned.data$STNAME <- ref_statecd[match(cleaned.data$state, ref_statecd$VALUE),]$MEANING
 
 
 ## calculate compositoin from number of trees and tree BA by state
 # cleaned.data only has the 17 species of interest, get the full records here:
 TREE.remeas <- readRDS("data/unfiltered_TREE.remeas.rds")
+
+
+
 
 ################################################################################
 # Actual filtering of all the data--
@@ -855,21 +863,26 @@ state.summary.remper <- left_join(state.summary, plotcommon.remper) %>%
 remper.vals <- state.summary.remper %>% filter(year %in% T1:T2) %>% group_by(statecd, State, T1, T2) %>% 
   summarise(PPT.val = mean(mean_PPT), 
             Tmax.val = mean(mean_Tmax))
-state.scales = c(
-  "Maine" = "#00441b",
-  "Vermont" = "#004529",
-  "New Hampshire" = "#006837",
-  "New York" = "#238443",
-  
- 
-  "Connecticut" = "#fd8d3c",
-  "New Jersey" = "#fc4e2a",
-  "Maryland" = "#a50026",
-  
-  "Ohio" = "#d73027",         
-  "Pennsylvania" = "#f46d43",
-  "West Virginia" = "#bd0026"
-)
+
+# set up a general state color scale:
+state.scales <- c("#FFAA00", 
+                         "#d94801", 
+                         "goldenrod", 
+                         "#98D851",
+                         "darkgreen",
+                         "#01665e",
+                         "#35978f", 
+                         "#1d91c0",
+                         "#225ea8" ,
+                         "#253494",
+                         "#081d58", 
+                         
+                         "#810f7c", 
+                         "#4d004b")
+names(state.scales) <- c("Ohio","Delaware","Vermont","Maryland","West Virginia",
+                                "Maine","Rhode Island","New Jersey","Connecticut","New Hampshire",
+                                "New York","Massachusetts","Pennsylvania" )
+
 
 
 
@@ -888,7 +901,7 @@ ggplot()+
                                       xmax = T2.all, 
                                       ymin = -Inf, 
                                       ymax = Inf), alpha = 0.25)+
-  geom_line(data = state.summary.remper , aes(x = year, y = mean_Tmax, group = State, color = State, linewidth =   `State Remeasurement`))+
+  geom_line(data = state.summary.remper , aes(x = year, y = mean_Tmax, group = State, color = State))+
   scale_linewidth(range = c(0.1, 1))+
   geom_line(data = region.summary, aes(x = year, y = mean_Tmax_all), color = "black", linewidth = 1.1)+
   theme_bw()+ylab("Average Annual Tmax (C)")+xlab("Year")+
@@ -908,34 +921,33 @@ ggplot()+
 ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_Tmax_time_series.png")
 
 
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_line(data = state.summary.remper , aes(x = year, y = mean_Tmax, group = State, color = State))+
+  scale_linewidth(range = c(0.1, 1))+
+  geom_line(data = region.summary, aes(x = year, y = mean_Tmax_all), color = "black", linewidth = 1.1)+
+  theme_bw()+ylab("Average Annual Tmax (C)")+xlab("Year")+
+  geom_label_repel(data = state.locations, aes(label = State, 
+                                               x = year, 
+                                               y = mean_Tmax, 
+                                               color = State, 
+                                               x_nudge = year + 6), 
+                   direction = "y", box.padding = 0.5,  nudge_x = 2, min.segment.length = 1,
+                   
+                   #vjust = 0.5,
+                   hjust = 0.5)+
+  theme(legend.position = "none")+scale_color_manual(values = state.scales)+
+  
+  xlim(1925, 2038)+ ylim (9,19)
+
+ggsave(height = 5, width = 5, units = "in", dpi = 300, "images/all_state_Tmax_time_series_1925_2030.png")
+
+
 # do the same with precipitation
 
-state.scales = c(
-  "Maine" = "#00441b",
-  "Vermont" = "#004529",
-  "New Hampshire" = "#006837",
-  "New York" = "#238443",
-  
-  
-  "Connecticut" = "#fd8d3c",
-  "New Jersey" = "#fc4e2a",
-  "Maryland" = "#a50026",
-  
-  "Ohio" = "#d73027",         
-  "Pennsylvania" = "#f46d43",
-  "West Virginia" = "#bd0026"
-)
-
-state.scales.ppt <- c("Ohio"="#543005",
-"Vermont"="#8c510a",
-"Maryland"="#bf812d",
-"Pennsylvania"="#dfc27d",
-"New York"="#fec44f",
-"New Jersey"="#66c2a4",
-"New Hampshire"="#80cdc1",
-"Connecticut" = "#35978f",
-"Maine"="#01665e",
-"West Virginia"="#003c30")
 
 state.locations.ppt <- state.summary.remper  %>%  filter(year == last(year)) %>% arrange(mean_PPT)
 state.locations.ppt$yloc <- c(900, 950, 1000, 1050, 1100, 1150, 1200, 1260, 1350, 1400)
@@ -955,9 +967,30 @@ xlim(1900, 2038)+
                                          y = yloc, 
                                          color = State), 
              direction = "y", box.padding = 100, min.segment.length = 2)+
-  scale_color_manual(values = state.scales.ppt)+
+  scale_color_manual(values = state.scales)+
   theme(legend.position = "none")
 ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_PPT_time_series.png")
+
+
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_line(data = state.summary.remper, aes(x = year, y = mean_PPT, group = State, color = State), alpha = 0.9)+
+  scale_linewidth(range = c(0.1, 1))+
+  geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
+  theme_bw(base_size = 12)+ylab("Mean Precipitation (mm)")+xlab("Year")+
+  xlim(1925, 2038)+
+  geom_label(data = state.locations.ppt, aes(label = State, 
+                                             x = year + 8, 
+                                             y = yloc, 
+                                             color = State), 
+             direction = "y", box.padding = 100, min.segment.length = 2)+
+  scale_color_manual(values = state.scales)+
+  theme(legend.position = "none")
+ggsave(height = 5, width = 5, units = "in", dpi = 300, "images/all_state_PPT_time_series_1925_2030.png")
+
 
 # get the N deposition data
 boxdir <- "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
@@ -1020,9 +1053,29 @@ ggplot()+
                                              x = 1920,
                                              y = Ndep.loc,
                                              color = State))+
-  scale_color_manual(values = state.scales.Ndep)+
+  scale_color_manual(values = state.scales)+
   theme(legend.position = "none")
 ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_Ndep_time_series.png")
+
+
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_line(data = Ndep.total.remper, aes(x = year, y = Avg.Ndep, group = State, color = State), alpha = 0.9)+
+  scale_linewidth(range = c(0.1, 1))+
+  #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
+  theme_bw(base_size = 12)+ylab("Reduced N deposition (kg/ha/year)")+xlab("Year")+
+  xlim(1935, 2038)+
+  geom_label(data = state.locations.ndep, aes(label = State,
+                                              x = 1920,
+                                              y = Ndep.loc,
+                                              color = State))+
+  scale_color_manual(values = state.scales)+
+  theme(legend.position = "none")
+ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_Ndep_time_series_1925_2030.png")
+
 
 #### Plot pests and disturbances over time ----
 # read in the pest disturbance datafiles:
@@ -1132,6 +1185,34 @@ ggplot()+
   theme(legend.position = "none")
 ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_Spongy_fraction_defoliated_time_series.png")
 
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_line(data = spongy %>% filter(!is.na(State)), aes(x = year, y = fraction.Defoliated, group = State, color = State), alpha = 0.9, position = "identity", size = 1)+
+  #scale_linewidth(range = c(0.1, 1))+
+  #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
+  theme_bw(base_size = 12)+ylab("Fraction of Land Area Defoliated (Lymantria Dispar)")+xlab("Year")+
+  xlim(1925, 2038)+
+  geom_label_repel(data = state.locations.spongy, aes(label = State.year,
+                                                      x = year,
+                                                      y = fraction.Defoliated,
+                                                      color = State, 
+                                                      nudge_x = ifelse(year < 1990, year - 25, year + 15), 
+                                                      #nudge_y = ifelse(State %in% c("Ohio", "Maine"),1500000, fraction.Defoliated+200000)
+  ), 
+  box.padding = 3, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5, 
+  
+  
+  direction = "y",
+  
+  segment.color = "black")+
+  scale_fill_manual(values = state.scales.spongy)+
+  scale_color_manual(values = state.scales.spongy)+
+  theme(legend.position = "none")
+ggsave(height = 5, width = 5, units = "in", dpi = 300, 
+       "images/all_state_Spongy_fraction_defoliated_time_series_1925_2030.png")
 
 
 
@@ -1163,6 +1244,35 @@ ggplot()+
   scale_color_manual(values = state.scales.spongy)+
   theme(legend.position = "none")
 ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_Spongy_time_series.png")
+# plot up the total area defoliated:
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_area(data = spongy %>% filter(!is.na(State)), aes(x = year, y = HA.Defoliated, group = State, fill = State), alpha = 0.9, position = "stack")+
+  #scale_linewidth(range = c(0.1, 1))+
+  #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
+  theme_bw(base_size = 12)+ylab("Hectares Defoliated (Lymantria Dispar)")+xlab("Year")+
+  xlim(1925, 2038)+
+  geom_label_repel(data = state.locations.spongy, aes(label = State.year,
+                                                      x = year,
+                                                      y = HA.Defoliated,
+                                                      color = State, 
+                                                      nudge_x = ifelse(year < 1990, year - 25, year + 15), 
+                                                      nudge_y = ifelse(State %in% c("Ohio", "Maine"),1500000, HA.Defoliated+200000)
+  ), 
+  box.padding = 3, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5, 
+  
+  
+  direction = "y",
+  
+  segment.color = "black")+
+  scale_fill_manual(values = state.scales.spongy)+
+  scale_color_manual(values = state.scales.spongy)+
+  theme(legend.position = "none")
+ggsave(height = 5, width = 5, units = "in", dpi = 300, 
+       "images/all_state_Spongy_time_series_1925_2030.png")
 
 
 
@@ -1276,6 +1386,32 @@ ggplot()+
   theme(legend.position = "none")
 ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_budworm_time_series.png")
 
+# plot relativized acreage defoliated:
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_area(data = budworm %>% filter(!is.na(State) & ! State %in% "Total" & !is.na(State)), aes(x = Year, y = HA.Defoliated, group = State, fill = State), alpha = 0.9, position = "stack")+
+  #scale_linewidth(range = c(0.1, 1))+
+  #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
+  theme_bw(base_size = 12)+ylab("Spruce Budworm Defoliation (Hectares)")+xlab("Year")+
+  xlim(1925, 2038)+
+  geom_label_repel(data = state.locations.budworm, aes(label = State,
+                                                       x = Year,
+                                                       y = HA.Defoliated,
+                                                       color = State, 
+                                                       nudge_x = ifelse(State == "Vermont", 1990, Year - 25)#, 
+                                                       #nudge_y = Spruce.Budworm.Acres.Defoliated+95
+  ),
+  box.padding = 1, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5, 
+  
+  segment.color = "black")+
+  scale_fill_manual(values = state.scales.spongy)+
+  scale_color_manual(values = state.scales.spongy)+
+  theme(legend.position = "none")
+ggsave(height = 5, width = 5, units = "in", dpi = 300, 
+       "images/all_state_budworm_time_series_1925_2030.png")
 
 
 
@@ -1385,7 +1521,33 @@ ggplot()+
   theme(legend.position = "none")
 ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_Beech_scale_time_series_Hectares_by_state.png")
 
-### Beech Bark disease spread ---
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_area(data = beech.scale, aes(x = year, y = `Beech Bark Present`, group = State, color = State, fill = State), alpha = 0.9, linewidth = 1, position = "stack")+
+  #scale_linewidth(range = c(0.1, 1))+
+  #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
+  theme_bw(base_size = 12)+ylab("Total area with Beech Scale (hectares)")+xlab("Year")+
+  xlim(1925, 2020)+
+  geom_label_repel(data = state.locations.beech.scale, aes(label = State.year,
+                                                           x = year,
+                                                           y = `Beech Bark Present`,
+                                                           color = State#,
+                                                           #nudge_x = ifelse(year < 1975, year -25, year + 25) ,
+                                                           #nudge_y = ifelse(State %in% c("New York", "Maine"), `Beech Bark Present`-1, 
+                                                            #                ifelse(State %in% c("Pennsylvania", "New Hampshire"), `Beech Bark Present`+7, `Beech Bark Present`))
+  ),
+  box.padding = 1, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5,
+  direction = "y", segment.color = "black")+
+  scale_fill_manual(values = state.scales.spongy)+
+  scale_color_manual(values = state.scales.spongy)+
+  theme(legend.position = "none")
+ggsave(height = 5, width = 5, units = "in", dpi = 300, "images/all_state_Beech_scale_time_series_Hectares_by_state_1925_2030.png")
+
+
+### Hemlock wooley adelgid disease spread ---
 HWA <- read.csv("data/HWA_invested_counties_2023_3_6_24.csv")  # just gets the remper states
 
 # since this is just the time it was first observed, we want county area or something:
@@ -1459,7 +1621,55 @@ ggplot()+
   theme(legend.position = "none")+xlim(1900, 2030)
 ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_HWA_time_series_alternate.png")
 
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_line(data = HWA.infest, aes(x = year, y = Percent.infested, group = State, color = State), linewidth = 2)+
+  #scale_linewidth(range = c(0.1, 1))+
+  #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
+  theme_bw(base_size = 12)+ylab("Hemlock Wooley Adelgid Presence (% land area)")+xlab("Year")+
+  geom_label_repel(data = state.locations.HWA.infest, aes(label = State.year,
+                                                          x = year,
+                                                          y = Percent.infested,
+                                                          color = State,
+                                                          nudge_x = ifelse(State %in% c("Vermont", "Ohio"),2035, 
+                                                                           ifelse(State %in% c("Maine", "New Hampshire"), year+10, year - 35)),
+                                                          nudge_y = ifelse(State == "Ohio",12, Percent.infested)
+  ),
+  box.padding =2, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5,
+  direction = "y", 
+  segment.color = "black")+
+  #scale_fill_manual(values = state.scales.budworm)+
+  scale_color_manual(values = state.scales.spongy)+
+  theme(legend.position = "none")+xlim(1925, 2030)
+ggsave(height = 5, width = 5, units = "in", dpi = 300, "images/all_state_HWA_time_series_alternate_1925_2030.png")
 
+ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_area(data = HWA.infest, aes(x = year, y = `HWA Present`,  color = State, fill = State), linewidth= 0.5, position = "stack")+
+  #scale_linewidth(range = c(0.1, 1))+
+  #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
+  theme_bw(base_size = 12)+ylab("Hemlock Wooley Adelgid Presence \n (Hectares)")+xlab("Year")+
+  geom_label_repel(data = state.locations.HWA.infest, aes(label = State.year,
+                                                          x = year,
+                                                          y = Percent.infested,
+                                                          color = State,
+                                                          # nudge_x = ifelse(State %in% c("Vermont", "Ohio"),2035, 
+                                                          #                  ifelse(State %in% c("Maine", "New Hampshire"), year+10, year - 35)),
+                                                          # nudge_y = ifelse(State == "Ohio",12, Percent.infested)
+  ),
+  box.padding =1, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5,
+  direction = "both", 
+  segment.color = "black")+
+  scale_fill_manual(values = state.scales.spongy)+
+  scale_color_manual(values = state.scales.spongy)+
+  theme(legend.position = "none")+xlim(1925, 2030)
+ggsave(height = 5, width = 5, units = "in", dpi = 300, "images/all_state_HWA_time_series_land_area_1925_2030.png")
 
 
 
