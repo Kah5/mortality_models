@@ -237,6 +237,13 @@ get_statewide_marginal_variances <- function(st) {
   # get the metadata for the state only
   df_meta_st <- df_meta %>% filter(state %in% st)
   
+  trees.per.spp <- df_meta_st %>% filter(state %in% st) %>%
+    group_by(Species, spp, SPCD)%>%
+    summarise(ntree_spp = n())
+  
+  # if there is less than 1 tree for that species/state, remove from calculation:
+  
+  
   # # get all of the draws for p(survival of) each tree 
   # p_long_st <-
   #   p_long %>% select(c(paste0("tree_", df_meta_st$tree), "draw"))
@@ -400,9 +407,13 @@ get_statewide_marginal_variances <- function(st) {
   # Predictor-wise variance explained for this state
   cat("computing variance explained by each predictor")
   compute_var_explained <- function(k) {
+    # if there is more than one tree per species
+    spp.in.state <- data.frame(spp = species.st)%>% left_join(.,spp.table)%>%
+      group_by(spp)%>% summarise(n()) %>% 
+      filter(`n()` > 2)
     
     # calculate partial logits by species
-    logits.partial <- lapply(unique(species.st), function(sp_i) {
+    logits.partial <- lapply(spp.in.state$spp, function(sp_i) {
       
       
       #sp_i <- i #species.st[i]
@@ -445,11 +456,12 @@ get_statewide_marginal_variances <- function(st) {
     #   group_by(tree, SPCD, state, draw) %>%
     #   summarize(mean_p_k = mean(p_partial), .groups = "drop")
     
+    
     mean_by_group_k <- partial_logit_df %>%
       group_by(tree, SPCD, state, draw) %>%
-      summarize(mean_p_k = mean(p_partial), .groups = "drop") %>%
+      summarize(mean_p_k = mean(p_partial, na.rm = TRUE), .groups = "drop") %>%
       group_by(draw, SPCD) %>%
-      summarize(var_k = var(mean_p_k), .groups = "drop") %>%
+      summarize(var_k = var(mean_p_k, na.rm =TRUE), .groups = "drop") %>%
       mutate(predictor = predictor_names[k])
     
     return(mean_by_group_k)
@@ -471,7 +483,7 @@ get_statewide_marginal_variances <- function(st) {
   
   
   tot.var <- var_parts %>% group_by(SPCD, draw) %>%
-    summarise(var_total = sum(var_k))
+    summarise(var_total = sum(var_k, na.rm =TRUE))
   
   var_summary <-
     left_join(var_parts, tot.var, by = c("SPCD", "draw")) %>%
