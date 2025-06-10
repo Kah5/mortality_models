@@ -28,3 +28,7 @@ nspp$Species <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$S
 nspp$COMMON <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$GENUS, FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$SPECIES)
 
 
+# copy the posterior estimates files (for variance partitioning, if the models have been run)
+file.list <- system("find data-store/data/iplant/home/kellyheilman/analyses/Mortality_hierarchical_models-2025-04-07-18-56-47.7/SPCD_stanoutput_joint_v3_model_6/ -name '*1000samples.rds'", intern = TRUE ) 
+
+system(paste("cp", paste(file.list, collapse = " "), "SPCD_stanoutput_joint_v3/samples"))
