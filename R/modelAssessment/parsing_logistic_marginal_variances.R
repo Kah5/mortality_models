@@ -3,8 +3,12 @@ library(rstan)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(FIESTA)
+library(posterior)
 
 output.folder <- "/home/rstudio/"
+#output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models"
+
 nspp <- data.frame(SPCD = c(316, 318, 833, 832, 261, 531, 802, 129, 762,  12, 541,  97, 621, 400, 371, 241, 375))
 nspp$Species <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$GENUS, FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$SPECIES)
 nspp$COMMON <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$GENUS, FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$SPECIES)
@@ -12,13 +16,14 @@ nspp$COMMON <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SP
 
 # Load input data ----
 # mod.data.full contains all the infomration used to fit the model
-mod.data.full <- readRDS("SPCD_stanoutput_joint_v3/all_SPCD_model_6.RDS")
+#mod.data.full <- readRDS("SPCD_stanoutput_joint_v3/all_SPCD_model_6.RDS")
 
 
 model.no <- 6
 # set up species table
 spp.table <- data.frame(SPCD = nspp[1:17,]$SPCD, 
                         SPP.id = 1:17, 
+                        spp = 1:17,
                         Species = nspp[1:17,]$COMMON)
 # but we also need the state id from the data, so add here from species data
 
@@ -36,10 +41,10 @@ xM.list <-
 
 for (i in 1:17) {
   # SPCD.id
-  SPCD.id <- spp.table[i, ]$SPCD.id
+  SPCD.id <- spp.table[i, ]$SPCD
   load(
     paste0(
-      "SPCD_standata_general_full_standardized_v3/SPCD_",
+      getwd(), "/SPCD_standata_general_full_standardized_v3/SPCD_",
       SPCD.id,
       "remper_correction_0.5model_",
       model.no,
@@ -98,7 +103,7 @@ saveRDS (
   mod.data.full,
   paste0(
     output.folder,
-    "SPCD_stanoutput_joint_v3/all_SPCD_model_",
+    "/SPCD_stanoutput_joint_v3/all_SPCD_model_",
     model.no,
     ".RDS"
   )
@@ -110,7 +115,7 @@ saveRDS (
   plot.data.train,
   paste0(
     output.folder,
-    "SPCD_stanoutput_joint_v3/train_plot_data_SPCD_model_",
+    "/SPCD_stanoutput_joint_v3/train_plot_data_SPCD_model_",
     model.no,
     ".RDS"
   )
@@ -121,7 +126,7 @@ saveRDS (
   plot.data.test,
   paste0(
     output.folder,
-    "SPCD_stanoutput_joint_v3/test_plot_data_SPCD_model_",
+    "/SPCD_stanoutput_joint_v3/test_plot_data_SPCD_model_",
     model.no,
     ".RDS"
   )
@@ -130,21 +135,28 @@ saveRDS (
 
 
 saveRDS(spp.table,
-        paste0(output.folder, "SPCD_stanoutput_joint_v3/spp.table.rds"))
+        paste0(output.folder, "/SPCD_stanoutput_joint_v3/spp.table.rds"))
 spp.table <-
-  readRDS(paste0(output.folder, "SPCD_stanoutput_joint_v3/spp.table.rds"))
+  readRDS(paste0(output.folder, "/SPCD_stanoutput_joint_v3/spp.table.rds"))
 
 
 # Load posterior estimates ----
 
 # read in alphas by species
-alpha_species <- readRDS("SPCD_stanoutput_joint_v3/alpha.spp_model_6_1000samples.rds")
+alpha_species <- readRDS(paste0(output.folder,"/SPCD_stanoutput_joint_v3/samples/alpha.spp_model_6_1000samples.rds"))
+
+# get random sample of each parameter:
+rand.draws <- sample(1:max(alpha_species$.iteration), 100)
+alpha_species <- alpha_species %>% posterior::subset_draws(iteration = rand.draws)
+
 
 # read in betas by species
-beta_species <- readRDS("SPCD_stanoutput_joint_v3/u_betas_model_6_1000samples.rds")
+beta_species <- readRDS(paste0(output.folder,"/SPCD_stanoutput_joint_v3/samples/u_betas_model_6_1000samples.rds"))%>% 
+  posterior::subset_draws(iteration = rand.draws)
 
 # read in posterior probability by individual (mMhat)
-p_surv_train <- readRDS("SPCD_stanoutput_joint_v3/mMhat_model_6_1000samples.rds")
+p_surv_train <- readRDS(paste0(output.folder,"/SPCD_stanoutput_joint_v3/samples/mMhat_model_6_1000samples.rds"))%>% 
+  posterior::subset_draws(iteration = rand.draws)
 
 
 # Set up groups and marginal covs ----
@@ -210,45 +222,52 @@ df_meta <- plot.data.train
 df_meta$tree <- 1:N
 df_meta$SPP <- mod.data.full$SPP
 
-p_long <- as.data.frame(p_surv_train) %>% select(-.chain, -.iteration, -.draw) 
-colnames(p_long) <- paste0("tree_", 1:N)
-p_long$draw <- 1:S
+# p_long <- as.data.frame(p_surv_train) %>% select(-.chain, -.iteration, -.draw) 
+# colnames(p_long) <- paste0("tree_", 1:N)
+# p_long$draw <- 1:S
 
 # filter only trees in a given state:
-#st <- 9
+#st <- 36
 
 get_statewide_marginal_variances <- function(st) {
   
+  # get the metadata for the state only
   df_meta_st <- df_meta %>% filter(state %in% st)
-  p_long_st <-
-    p_long %>% select(c(paste0("tree_", df_meta_st$tree), "draw"))
+  
+  # # get all of the draws for p(survival of) each tree 
+  # p_long_st <-
+  #   p_long %>% select(c(paste0("tree_", df_meta_st$tree), "draw"))
+  
+  # filter out the covariate data for each tree in the state
   X_st <- X %>% filter(tree %in% df_meta_st$tree)
+  
+  # get the species ID indexing
   species.st <- mod.data.full$SPP[df_meta$state %in% st]
   
   
-  
+  # set up a species indexing dataframe with the tree id, and species information
   Species.indexing <- data.frame(tree = X$tree,
                                  spp = mod.data.full$SPP) %>%
     left_join(., spp.table)
   
-  # reformat
-  p_long_long <- pivot_longer(
-    p_long_st,
-    cols = starts_with("tree_"),
-    names_to = "tree",
-    names_prefix = "tree_",
-    values_to = "p_surv"
-  ) %>%
-    mutate(tree = as.integer(tree)) #%>%
+  # # reformat p_long_st (actually a wide format) to be a long format dataframe
+  # p_long_long <- pivot_longer(
+  #   p_long_st,
+  #   cols = starts_with("tree_"),
+  #   names_to = "tree",
+  #   names_prefix = "tree_",
+  #   values_to = "p_surv"
+  # ) %>%
+  #   mutate(tree = as.integer(tree)) #%>%
   #left_join(., Species.indexing)
   
-  df_k_st <- df_meta_st %>%
-    left_join(p_long_long)# %>%
-  # # pivot_longer(cols = starts_with("draw_"), names_to = "draw", values_to = "p_surv") %>%
+  # join up the the long format data up to the state information
+  # runing intoe some memory sisue here
+  # df_k_st <- df_meta_st %>%
+  #   left_join(p_long_long)# %>%
+  # # # pivot_longer(cols = starts_with("draw_"), names_to = "draw", values_to = "p_surv") %>%
   # # mutate(draw = as.integer(gsub("draw_", "", draw))) %>%
   # bind_cols(X[rep(1:N, S), ])
-  
-  
   
   # for each tree get the beta samples
   
@@ -259,120 +278,120 @@ get_statewide_marginal_variances <- function(st) {
   #marginal_all <- list()
   
   
-  get_marginal_pred_val <- function (k){
-    #for (k in 1:length(predictor_names)) {
-    cat(paste(
-      "getting marginal response of",
-      predictor_names[k],
-      "in state",
-      st, "\n"
-    ))
-    slope_k <- matrix(NA, nrow = length(species.st), ncol = S)
-    
-    
-    species.betas <- paste0("u_beta[", species.st, ",", k, "]")
-    
-    df_k <- df_k_st %>%
-      
-      # get the name of beta of interest for each species
-      mutate(beta_k_name = paste0("u_beta[", SPP, ",", k, "]")) #%>% #select(beta_k_name)
-    # get the beta sample of interest
-    
-    # for each tree get the beta samples
-    #marginal_tree_list <- list()
-    
-    
-    
-    species.level.marg.effect <- function(sp.id){
-      #tree.no <- tre #unique(df_k$tree)[tre]
-      df_tree <- df_k %>% filter(SPP %in% sp.id)
-      
-      beta_tree <- beta_species[, unique(df_tree$beta_k_name)] %>% 
-        mutate(draw = 1:nrow(beta_species[,1]), 
-               beta_k_name = unique(df_tree$beta_k_name)) %>%
-        rename("beta_sample" = unique(df_tree$beta_k_name))
-      
-      marg_tree <- df_tree %>% select(tree, draw, state, county, SPCD, p_surv) %>%
-        left_join(., beta_tree) %>% #, relationship = "many-to-many") %>%
-        ungroup() %>%
-        mutate(marginal_effect = p_surv * (1 - p_surv) * beta_sample)
-      
-      marg_tree
-    }
-    #species.level.marg.effect(sp.id = 2)
-    
-    # for (tre in 1:length(unique(df_k$tree))) {
-    marg_tree_st <-lapply(unique(species.st), species.level.marg.effect) %>%
-      do.call(rbind,.)
-    
-    
-    marg_tree_st$species <-
-      FIESTA::ref_species[match(marg_tree_st$SPCD, FIESTA::ref_species$SPCD), ]$COMMON
-    
-    # save the samples
-    saveRDS(
-      marg_tree_st,
-      paste0(
-        "SPCD_stanoutput_joint_v3/predicted_mort/marginal_state/marginal_trees_",
-        unique(predictor_names)[k],
-        "_state_",
-        st ,
-        ".RDS"
-      )
-    )
-    
-    df_k_summary <- marg_tree_st %>%
-      group_by(species, state, draw) %>%
-      summarize(marginal = mean(marginal_effect),
-                .groups = "drop") %>%
-      group_by(species, state) %>%
-      summarize(
-        mean = mean(marginal),
-        lower = quantile(marginal, 0.05),
-        upper = quantile(marginal, 0.95),
-        .groups = "drop"
-      ) %>%
-      mutate(predictor = unique(predictor_names)[k])
-    
-    df_k_summary
-  }
-  marginal_all <- lapply(1:length(predictor_names), get_marginal_pred_val )
-  marginal_summary_all <- do.call(rbind, marginal_all)
-  #marginal_summary_all <- bind_rows(marginal_all)
+  # get_marginal_pred_val <- function (k){
+  #   #for (k in 1:length(predictor_names)) {
+  #   cat(paste(
+  #     "getting marginal response of",
+  #     predictor_names[k],
+  #     "in state",
+  #     st, "\n"
+  #   ))
+  #   slope_k <- matrix(NA, nrow = length(species.st), ncol = S)
+  #   
+  #   
+  #   species.betas <- paste0("u_beta[", species.st, ",", k, "]")
+  #   
+  #   df_k <- df_meta_st %>% #df_k_st %>%
+  #     
+  #     # get the name of beta of interest for each species
+  #     mutate(beta_k_name = paste0("u_beta[", SPP, ",", k, "]")) #%>% #select(beta_k_name)
+  #   # get the beta sample of interest
+  #   
+  #   # for each tree get the beta samples
+  #   #marginal_tree_list <- list()
+  #   
+  #   
+  #   
+  #   species.level.marg.effect <- function(sp.id){
+  #     #tree.no <- tre #unique(df_k$tree)[tre]
+  #     df_tree <- df_k %>% filter(SPP %in% sp.id)
+  #     
+  #     beta_tree <- beta_species[, unique(df_tree$beta_k_name)] %>% 
+  #       mutate(draw = 1:nrow(beta_species[,1]), 
+  #              beta_k_name = unique(df_tree$beta_k_name)) %>%
+  #       rename("beta_sample" = unique(df_tree$beta_k_name))
+  #     
+  #     marg_tree <- df_tree %>% select(tree, draw, state, county, SPCD, p_surv) %>%
+  #       left_join(., beta_tree) %>% #, relationship = "many-to-many") %>%
+  #       ungroup() %>%
+  #       mutate(marginal_effect = p_surv * (1 - p_surv) * beta_sample)
+  #     
+  #     marg_tree
+  #   }
+  #   #species.level.marg.effect(sp.id = 2)
+  #   
+  #   # for (tre in 1:length(unique(df_k$tree))) {
+  #   marg_tree_st <- lapply(unique(species.st), species.level.marg.effect) %>%
+  #     do.call(rbind,.)
+  #   
+  #   
+  #   marg_tree_st$species <-
+  #     FIESTA::ref_species[match(marg_tree_st$SPCD, FIESTA::ref_species$SPCD), ]$COMMON
+  #   
+  #   # save the samples
+  #   saveRDS(
+  #     marg_tree_st,
+  #     paste0(
+  #       "SPCD_stanoutput_joint_v3/predicted_mort/marginal_state/marginal_trees_",
+  #       unique(predictor_names)[k],
+  #       "_state_",
+  #       st ,
+  #       ".RDS"
+  #     )
+  #   )
+  #   
+  #   df_k_summary <- marg_tree_st %>%
+  #     group_by(species, state, draw) %>%
+  #     summarize(marginal = mean(marginal_effect),
+  #               .groups = "drop") %>%
+  #     group_by(species, state) %>%
+  #     summarize(
+  #       mean = mean(marginal),
+  #       lower = quantile(marginal, 0.05),
+  #       upper = quantile(marginal, 0.95),
+  #       .groups = "drop"
+  #     ) %>%
+  #     mutate(predictor = unique(predictor_names)[k])
+  #   
+  #   df_k_summary
+  # }
+  # marginal_all <- lapply(1:length(predictor_names), get_marginal_pred_val )
+  # marginal_summary_all <- do.call(rbind, marginal_all)
+  # #marginal_summary_all <- bind_rows(marginal_all)
+  # 
+  # write.csv(
+  #   marginal_summary_all,
+  #   paste0(
+  #     "SPCD_stanoutput_joint_v3/predicted_mort/marginal_effects_by_species_state_",
+  #     st,
+  #     ".csv"
+  #   ),
+  #   row.names = FALSE
+  # )
   
-  write.csv(
-    marginal_summary_all,
-    paste0(
-      "SPCD_stanoutput_joint_v3/predicted_mort/marginal_effects_by_species_state_",
-      st,
-      ".csv"
-    ),
-    row.names = FALSE
-  )
-  
-  rm(marginal_all)
-  # --- VARIANCE PARTITIONING BY PREDICTOR ---
-  
-  # Total group-level variance
-  group_mean_total <- df_k_st %>%
-    group_by(SPCD, state, tree, draw) %>%
-    summarize(mean_p = mean(p_surv), .groups = "drop") %>%
-    group_by(SPCD, state, draw) %>%
-    summarize(var_total = var(mean_p, na.rm = TRUE),
-              .groups = "drop")
-  
-  ggplot(group_mean_total, aes(var_total)) + geom_histogram() +
-    facet_wrap( ~ SPCD) +
-    xlab("Total Variance in tree-level predicted probability of surival")
-  
-  saveRDS(
-    df_k,
-    paste0(
-      "SPCD_stanoutput_joint_v3/predicted_mort/df_total_preds_state_",
-      st,
-      ".RDS"
-    )
-  )
+  # rm(marginal_all)
+  # # --- VARIANCE PARTITIONING BY PREDICTOR ---
+  # 
+  # # Total group-level variance
+  # group_mean_total <- df_k_st %>%
+  #   group_by(SPCD, state, tree, draw) %>%
+  #   summarize(mean_p = mean(p_surv), .groups = "drop") %>%
+  #   group_by(SPCD, state, draw) %>%
+  #   summarize(var_total = var(mean_p, na.rm = TRUE),
+  #             .groups = "drop")
+  # 
+  # ggplot(group_mean_total, aes(var_total)) + geom_histogram() +
+  #   facet_wrap( ~ SPCD) +
+  #   xlab("Total Variance in tree-level predicted probability of surival")
+  # 
+  # saveRDS(
+  #   df_k,
+  #   paste0(
+  #     "SPCD_stanoutput_joint_v3/predicted_mort/df_total_preds_spp_state_",
+  #     st,
+  #     ".RDS"
+  #   )
+  # )
   
   
   # Predictor-wise variance explained for this state
@@ -401,15 +420,16 @@ get_statewide_marginal_variances <- function(st) {
         SPCD = spp.table[sp_i, ]$SPCD,
         predictor = predictor_names[k],
         predictor_val = X_st[species.index, predictor_names[k]]) %>% 
+        # link up alphas and betas for each species
         left_join(., slope.alpha, relationship = "many-to-many") %>% 
         # calculate partial logit
         mutate(logit.part = alpha_spp + predictor_val * slope_spp)%>%
         mutate(p_partial = plogis(logit.part))
       
-      saveRDS(df.out ,paste0(
-        "SPCD_stanoutput_joint_v3/predicted_mort/df_SPCD_",spp.table[sp_i, ]$SPCD,"_variance_state_",
-        st,"_predictor_", predictor_names[k],
-        ".RDS"
+      saveRDS(df.out ,paste0(output.folder,
+                             "/SPCD_stanoutput_joint_v3/predicted_mort/state_",st,"/df_SPCD_",spp.table[sp_i, ]$SPCD,"_variance_state_",
+                             st,"_predictor_", predictor_names[k],
+                             ".RDS"
       ))
       
       df.out #%>% left_join(.,spp.table)
@@ -440,7 +460,7 @@ get_statewide_marginal_variances <- function(st) {
   saveRDS(
     var_parts,
     paste0(
-      "SPCD_stanoutput_joint_v3/predicted_mort/variance_explained_state_",
+      "SPCD_stanoutput_joint_v3/predicted_mort/state_",st,"/variance_explained_state_",
       st,
       ".RDS"
     )
@@ -498,7 +518,7 @@ get_statewide_marginal_variances <- function(st) {
   write.csv(
     var_summary,
     paste0(
-      "SPCD_stanoutput_joint_v3/predicted_mort/variance_partitioning_summary_by_predictor_state_",
+      "SPCD_stanoutput_joint_v3/predicted_mort/state_",st,"/variance_partitioning_summary_by_predictor_state_",
       st,
       ".csv"
     ),
@@ -509,7 +529,7 @@ get_statewide_marginal_variances <- function(st) {
      marginal_summary_all, mean_by_group_k, 
      p_long_long, p_long_st, partial_logit_df)
   
-  var_parts <- readRDS(paste0("SPCD_stanoutput_joint_v3/predicted_mort/variance_explained_state_",st,".RDS"))
+  var_parts <- readRDS(paste0("SPCD_stanoutput_joint_v3/predicted_mort/state_",st,"/variance_explained_state_",st,".RDS"))
   
   covariate.names <- read.csv("model_covariate_types.csv")
   
@@ -544,35 +564,35 @@ get_statewide_marginal_variances <- function(st) {
   var_summary$COMMON <- FIESTA::ref_species[match(var_summary$SPCD, FIESTA::ref_species$SPCD),]$COMMON
   
   
-  ggplot(data = var_summary, aes(x = Predictor, y = mean)) + geom_point() +
-    geom_errorbar(aes(x = Predictor, ymin = lower, ymax = upper)) +
-    theme(axis.text = element_text(angle = 45, hjust = 1),
-          panel.grid = element_blank()) + facet_wrap( ~ SPCD, scales = "free_y")
-  
-  ggplot(data = var_summary %>% filter(!Predictor %in% "DIA_DIFF_scaled"),
-         aes(x = Predictor, y = mean)) + geom_point() +
-    geom_errorbar(aes(x = Predictor, ymin = lower, ymax = upper)) +
-    theme(axis.text = element_text(angle = 45, hjust = 1),
-          panel.grid = element_blank()) +
-    ylab ("relative variance in annaul prob(survival) explained by predictor") +
-    facet_wrap( ~ SPCD, scales = "free_y")
-  
-  
+  # ggplot(data = var_summary, aes(x = Predictor, y = mean)) + geom_point() +
+  #   geom_errorbar(aes(x = Predictor, ymin = lower, ymax = upper)) +
+  #   theme(axis.text = element_text(angle = 45, hjust = 1),
+  #         panel.grid = element_blank()) + facet_wrap( ~ SPCD, scales = "free_y")
+  # 
+  # ggplot(data = var_summary %>% filter(!Predictor %in% "DIA_DIFF_scaled"),
+  #        aes(x = Predictor, y = mean)) + geom_point() +
+  #   geom_errorbar(aes(x = Predictor, ymin = lower, ymax = upper)) +
+  #   theme(axis.text = element_text(angle = 45, hjust = 1),
+  #         panel.grid = element_blank()) +
+  #   ylab ("relative variance in annaul prob(survival) explained by predictor") +
+  #   facet_wrap( ~ SPCD, scales = "free_y")
   
   
   
-  ggplot(data = var_summary)+
-    geom_bar(aes(x = COMMON, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
-    theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
-                           panel.background = element_blank())+
-    ylab("Average proportion of across-tree \n p(survival) variance explained")
   
-  ggplot(data = var_summary)+
-    geom_bar(aes(x = COMMON, y = mean, fill = Predictor), stat = "identity", position = "stack")+
-    theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
-                           panel.background = element_blank())+
-    ylab("Average proportion of across-tree \n p(survival) variance explained")+
-    xlab("Species")
+  
+  # ggplot(data = var_summary)+
+  #   geom_bar(aes(x = COMMON, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+  #   theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+  #                          panel.background = element_blank())+
+  #   ylab("Average proportion of across-tree \n p(survival) variance explained")
+  # 
+  # ggplot(data = var_summary)+
+  #   geom_bar(aes(x = COMMON, y = mean, fill = Predictor), stat = "identity", position = "stack")+
+  #   theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+  #                          panel.background = element_blank())+
+  #   ylab("Average proportion of across-tree \n p(survival) variance explained")+
+  #   xlab("Species")
   
   
   color.pred.class <- c(
@@ -603,24 +623,24 @@ get_statewide_marginal_variances <- function(st) {
                            panel.background = element_blank())+
     ylab("Average proportion of across-tree \n p(survival) variance explained")+
     xlab("Species")+scale_fill_manual(values = color.pred.class, name = "")
-  ggsave(height = 4, width = 6, dpi = 350, paste0("SPCD_stanoutput_joint_v3/predicted_mort/images/Prop_variance_state_",st,".png"))
+  ggsave(height = 4, width = 6, dpi = 350, paste0("SPCD_stanoutput_joint_v3/predicted_mort/state_",st,"/Prop_variance_state_",st,".png"))
   
-  ggplot(data = var_summary )+
-    geom_col(aes(x = "", y = mean, fill = predictor.class), color = "black",stat = "identity", position = "stack")+
-    theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
-                           panel.background = element_blank())+
-    ylab("Average proportion of across-tree \n p(survival) variance explained")+
-    xlab("Species")+scale_fill_manual(values = color.pred.class, name = "") +
-    coord_polar(theta = "y")+facet_wrap(~COMMON)
-  
-  ggplot(data = var_summary %>% filter(!Covariate %in% "DIA_DIFF_scaled" ))+
-    geom_col(aes(x = "", y = mean, fill = predictor.class), color = "black")+ #,stat = "identity", position = "stack")+
-    theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
-                           panel.background = element_blank())+
-    ylab("Average proportion of across-tree \n p(survival) variance explained")+
-    xlab("Species")+scale_fill_manual(values = color.pred.class, name = "") +
-    coord_polar(theta = "y")+facet_wrap(~COMMON)
-  
+  # ggplot(data = var_summary )+
+  #   geom_col(aes(x = "", y = mean, fill = predictor.class), color = "black",stat = "identity", position = "stack")+
+  #   theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+  #                          panel.background = element_blank())+
+  #   ylab("Average proportion of across-tree \n p(survival) variance explained")+
+  #   xlab("Species")+scale_fill_manual(values = color.pred.class, name = "") +
+  #   coord_polar(theta = "y")+facet_wrap(~COMMON)
+  # 
+  # ggplot(data = var_summary %>% filter(!Covariate %in% "DIA_DIFF_scaled" ))+
+  #   geom_col(aes(x = "", y = mean, fill = predictor.class), color = "black")+ #,stat = "identity", position = "stack")+
+  #   theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+  #                          panel.background = element_blank())+
+  #   ylab("Average proportion of across-tree \n p(survival) variance explained")+
+  #   xlab("Species")+scale_fill_manual(values = color.pred.class, name = "") +
+  #   coord_polar(theta = "y")+facet_wrap(~COMMON)
+  # 
   
   # non-DIA_diff variables
   ggplot(data = var_summary %>% filter(!Covariate %in% "DIA_DIFF_scaled"))+
@@ -629,15 +649,15 @@ get_statewide_marginal_variances <- function(st) {
                            panel.background = element_blank())+
     ylab("Average proportion of across-tree \n p(survival) variance explained")+
     xlab("Species")+scale_fill_manual(values = color.pred.class, name = "")
-  ggsave(height = 4, width = 6, dpi = 350, paste0("SPCD_stanoutput_joint_v3/predicted_mort/images/Prop_variance_state_",st,"_no_diadiff.png"))
+  ggsave(height = 4, width = 6, dpi = 350, paste0("SPCD_stanoutput_joint_v3/predicted_mort/state_",st,"/Prop_variance_state_",st,"_no_diadiff.png"))
   
-  ggplot(data = var_summary %>% filter(!Covariate %in% "DIA_DIFF_scaled"))+
-    geom_bar(aes(x = COMMON, y = mean, fill = Predictor), stat = "identity", position = "stack")+
-    theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
-                           panel.background = element_blank())+
-    ylab("Average proportion of across-tree \n p(survival) variance explained")+
-    xlab("Species")#+scale_fill_manual(values = color.pred.class)
-  
+  # ggplot(data = var_summary %>% filter(!Covariate %in% "DIA_DIFF_scaled"))+
+  #   geom_bar(aes(x = COMMON, y = mean, fill = Predictor), stat = "identity", position = "stack")+
+  #   theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+  #                          panel.background = element_blank())+
+  #   ylab("Average proportion of across-tree \n p(survival) variance explained")+
+  #   xlab("Species")#+scale_fill_manual(values = color.pred.class)
+  # 
   
   # do the summary for all non-DIA_diff variables:
   var_summary_no_dia_diff <-
@@ -664,28 +684,15 @@ get_statewide_marginal_variances <- function(st) {
     ylab("Average proportion of across-tree \n p(survival) variance explained")+
     xlab("")+scale_fill_manual(values = color.pred.class, name = "") +
     coord_polar(theta = "y")+facet_wrap(~COMMON)
-  ggsave(height = 6, width = 6, dpi = 350, paste0("SPCD_stanoutput_joint_v3/predicted_mort/images/Prop_variance_state_",st,"_no_dia_diff_pie_spp.png"))
-  
-  # move all the state_variables to one folder and transfer
-  base::file.rename(
-    "SPCD_stanoutput_joint_v3/predicted_mort",
-    paste0("SPCD_stanoutput_joint_v3/model_6_variance_parse_state_", st)
-    
-  )
-  
-  
+  ggsave(height = 6, width = 6, dpi = 350, paste0("SPCD_stanoutput_joint_v3/predicted_mort/state_",st,"/Prop_variance_state_",st,"_no_dia_diff_pie_spp.png"))
   
   # copy to the data-store output
   system(paste(
     "cp -r",
-    paste0("SPCD_stanoutput_joint_v3/model_6_variance_parse_state_", st),
+    paste0("SPCD_stanoutput_joint_v3/predicted_mort/state_",st,"/"),
     "data-store/data/output/"
   ))
   
-  # make a new predicted mort folder
-  dir.create("SPCD_stanoutput_joint_v3/predicted_mort")
-  
-  # make a state-level summary:
   
   
 }
