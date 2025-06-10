@@ -499,32 +499,32 @@ get_statewide_marginal_variances <- function(st) {
   var_summary$predictor <-
     factor(var_summary$predictor, levels = predictor_names)
   
-  ggplot(data = var_summary, aes(x = predictor, y = mean)) + geom_point() +
-    geom_errorbar(aes(x = predictor, ymin = lower, ymax = upper)) +
-    theme(axis.text = element_text(angle = 45, hjust = 1),
-          panel.grid = element_blank()) + facet_wrap( ~ SPCD, scales = "free_y")
-  
-  ggplot(data = var_summary %>% filter(!predictor %in% "DIA_DIFF_scaled"),
-         aes(x = predictor, y = mean)) + geom_point() +
-    geom_errorbar(aes(x = predictor, ymin = lower, ymax = upper)) +
-    theme(axis.text = element_text(angle = 45, hjust = 1),
-          panel.grid = element_blank()) +
-    ylab ("relative variance in annaul prob(survival) explained by predictor") +
-    facet_wrap( ~ SPCD, scales = "free_y")
-  
-  var_summary %>% filter(SPCD %in% 129)
-  
-  ggplot(
-    data = var_summary %>% filter(!predictor %in% "DIA_DIFF_scaled" &
-                                    SPCD %in% 129),
-    aes(x = predictor, y = mean)
-  ) + geom_point() +
-    geom_errorbar(aes(x = predictor, ymin = lower, ymax = upper)) +
-    theme(axis.text = element_text(angle = 45, hjust = 1),
-          panel.grid = element_blank()) +
-    ylab ("relative variance in annaul prob(survival) explained by predictor") +
-    facet_wrap( ~ SPCD, scales = "free_y")
-  
+  # ggplot(data = var_summary, aes(x = predictor, y = mean)) + geom_point() +
+  #   geom_errorbar(aes(x = predictor, ymin = lower, ymax = upper)) +
+  #   theme(axis.text = element_text(angle = 45, hjust = 1),
+  #         panel.grid = element_blank()) + facet_wrap( ~ SPCD, scales = "free_y")
+  # 
+  # ggplot(data = var_summary %>% filter(!predictor %in% "DIA_DIFF_scaled"),
+  #        aes(x = predictor, y = mean)) + geom_point() +
+  #   geom_errorbar(aes(x = predictor, ymin = lower, ymax = upper)) +
+  #   theme(axis.text = element_text(angle = 45, hjust = 1),
+  #         panel.grid = element_blank()) +
+  #   ylab ("relative variance in annaul prob(survival) explained by predictor") +
+  #   facet_wrap( ~ SPCD, scales = "free_y")
+  # 
+  # var_summary %>% filter(SPCD %in% 129)
+  # 
+  # ggplot(
+  #   data = var_summary %>% filter(!predictor %in% "DIA_DIFF_scaled" &
+  #                                   SPCD %in% 129),
+  #   aes(x = predictor, y = mean)
+  # ) + geom_point() +
+  #   geom_errorbar(aes(x = predictor, ymin = lower, ymax = upper)) +
+  #   theme(axis.text = element_text(angle = 45, hjust = 1),
+  #         panel.grid = element_blank()) +
+  #   ylab ("relative variance in annaul prob(survival) explained by predictor") +
+  #   facet_wrap( ~ SPCD, scales = "free_y")
+  # 
   main.preds <- unique(predictor_names)[1:12]
   inter.preds <- unique(predictor_names)[13:33]
   var_summary$Species <-
@@ -701,6 +701,7 @@ get_statewide_marginal_variances <- function(st) {
     coord_polar(theta = "y")+facet_wrap(~COMMON)
   ggsave(height = 6, width = 6, dpi = 350, paste0("SPCD_stanoutput_joint_v3/predicted_mort/state_",st,"/Prop_variance_state_",st,"_no_dia_diff_pie_spp.png"))
   
+  cat(paste("\n copying state", st, " outputs to cyverse output folder"))
   # copy to the data-store output
   system(paste(
     "cp -r",
