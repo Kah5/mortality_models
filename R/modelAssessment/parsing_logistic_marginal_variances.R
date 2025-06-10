@@ -228,8 +228,11 @@ df_meta$SPP <- mod.data.full$SPP
 
 # filter only trees in a given state:
 #st <- 36
-
+st.names.by.num <- plot.data.train %>% group_by(state) %>% summarise(n())%>% arrange(`n()`)
 get_statewide_marginal_variances <- function(st) {
+  
+  # create the state directory
+  dir.create(paste0("SPCD_stanoutput_joint_v3/predicted_mort/state_",st))
   
   # get the metadata for the state only
   df_meta_st <- df_meta %>% filter(state %in% st)
@@ -696,7 +699,8 @@ get_statewide_marginal_variances <- function(st) {
   
   
 }
-get_statewide_marginal_variances(st = 50)# 
+
+get_statewide_marginal_variances(st = st.names.by.num$state[1])#state_34 
 get_statewide_marginal_variances(st = 42)
 
 lapply(unique(plot.data.train$state), FUN = function(x){get_statewide_marginal_variances(st = x)} )
