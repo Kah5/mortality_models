@@ -12,6 +12,7 @@ library(maps)
 library(mapdata)
 library(ggrepel)
 library(tigris)
+library(ggalluvial)
 
 
 ################################################################################
@@ -65,30 +66,38 @@ cleaned.data$STNAME <- ref_statecd[match(cleaned.data$state, ref_statecd$VALUE),
 
 # set up custom colors for species
 # set the species order using the factors:
-SP.TRAITS <- read.csv("data/NinemetsSpeciesTraits.csv") %>% filter(COMMON_NAME %in% unique(nspp[1:17,]$COMMON))
+SP.TRAITS <- read.csv("data/NinemetsSpeciesTraits.csv") %>% filter(COMMON_NAME %in% c(unique(nspp[1:17,]$COMMON), "sweet birch", "Virginia pine"))
 # order the trait db by softwood-hardwood, then shade tolerance, then name (this puts all the oaks together b/c hickory and red oak have the same tolerance values)
 SP.TRAITS <- SP.TRAITS %>% group_by(SFTWD_HRDWD) %>% arrange(desc(SFTWD_HRDWD), desc(ShadeTol), desc(COMMON_NAME))
 
 SP.TRAITS$Color <- c(# softwoods
-  "#b2df8a",
-  "#003c30", 
-  "#b2182b", 
-  "#fee090", 
-  "#33a02c",
+  "#b2df8a", # balsam fir
+  "#003c30", # hemlock
+  "#b2182b", # red spruce
+  "#fee090", # n white cedar
+  "#33a02c", # eastern white pine
+  
+  # virginia pine
+  "#1a9850",
   
   
   # sugar  maples
   "#a6cee3",
-  "#1f78b4",
+  "#1f78b4",# american beech
   
   # red maple
   "#e31a1c",
   # yellow birch
   "#fdbf6f",
+  
+  
   # oaks
-  "#cab2d6",
-  "#8073ac",
-  "#6a3d9a",
+  "#54278f", # white oak
+  "#cab2d6", # chestnut oak
+  "#8073ac", # n red oak
+  "#6a3d9a",# black oak
+  # sweet birch
+  "#fccde5",
   
   # hickory
   "#7f3b08",
@@ -97,8 +106,9 @@ SP.TRAITS$Color <- c(# softwoods
   # black cherry
   "#4d4d4d",
   # yellow poplar
-  "#ff7f00",
-  "#fccde5"
+  "#ff7f00"
+  
+  
   
   
 )
@@ -107,8 +117,8 @@ SP.TRAITS$`Shade Tolerance`  <- ifelse(SP.TRAITS$ShadeTol >=4, "High",
                                        ifelse(SP.TRAITS$ShadeTol <=2.5, "Low", "Moderate"))
 
 
-sppColors <- c( "#f5f5f5", "#d9f0d3", SP.TRAITS$Color )
-names(sppColors) <- c("other hardwood", "other softwood", unique(SP.TRAITS$COMMON_NAME))
+sppColors <- c( "#f5f5f5", "#d9f0d3","darkgrey", SP.TRAITS$Color )
+names(sppColors) <- c("other hardwood", "other softwood","dead", unique(SP.TRAITS$COMMON_NAME))
 
 species_fill <- scale_fill_manual(values = sppColors)
 species_color <- scale_color_manual(values = sppColors)
@@ -150,7 +160,7 @@ TREE.data.all <- TREE.remeas %>%
                                 ifelse(DIA_DIFF == 0,"zero", "negative")))
 TREE.data.all$STNAME <- ref_statecd[match(TREE.data.all$state, ref_statecd$VALUE),]$MEANING
 TREE.data.all$SW_HW <- SP.TRAITS[match(TREE.data.all$SPCD, SP.TRAITS$SPCD),]$SFTWD_HRDWD
-
+TREE.data.all %>% filter(is.na(SW_HW))
 # get the top 17 species and make a table
 nspp <-  TREE.data.all %>% group_by(SPCD) %>% 
     summarise(n = n(), 
@@ -198,6 +208,23 @@ species.composition.nspp17 <- TREE.data.all %>% filter(SPCD %in% nspp[1:17,]$SPC
   mutate(`Percent Composition (Density)` = (Total.trees.sp/total.trees.st)*100, 
          `Percent Composition (BA)` = (Total.ba.sp_sq_m/total.ba.st_sq_m)*100)
 
+nspp %>% filter(COMMON %in% c("sweet birch", "Virginia pine")) 
+
+species.composition.nsppcored.mort.17 <- TREE.data.all %>% 
+  filter(SPCD %in% c(nspp[1:17,]$SPCD, 372,132))%>%
+  mutate(Top.Species = ifelse(SPCD %in% c(nspp[1:17,]$SPCD, 372,132), Species, 
+                              ifelse(SW_HW %in% "S", "other softwood","other hardwood"))) %>% # label for non-top species
+  mutate(dbhold.cm = dbhold*2.54) %>%
+  mutate(tree_ba_cm = (pi*dbhold.cm^2)/4, 
+         tree_ba_m = (pi*(dbhold.cm/100)^2)/4) %>% #select(dbhold, dbhold.cm, tree_ba_cm, tree_ba_m)
+  group_by(state, STNAME) %>% mutate(total.trees.st = n(), 
+                                     total.ba.st_sq_m = sum(tree_ba_m, na.rm =TRUE)) %>%
+  group_by(state, STNAME, Top.Species, total.trees.st, total.ba.st_sq_m) %>%
+  summarise(Total.trees.sp = n(), 
+            Total.ba.sp_sq_m = sum(tree_ba_m, na.rm =TRUE)) %>%
+  mutate(`Percent Composition (Density)` = (Total.trees.sp/total.trees.st)*100, 
+         `Percent Composition (BA)` = (Total.ba.sp_sq_m/total.ba.st_sq_m)*100)
+
 
 # order the species by shade tolerence
 species.composition$Top.Species <- factor(species.composition$Top.Species, levels = c("other softwood", "other hardwood",unique(SP.TRAITS$COMMON_NAME)) )
@@ -207,6 +234,12 @@ species.composition$STNAME <- factor(species.composition$STNAME, levels = c("Mai
 species.composition.nspp17$Top.Species <- factor(species.composition.nspp17$Top.Species, levels = c(unique(SP.TRAITS$COMMON_NAME)) )
 species.composition.nspp17$STNAME <- factor(species.composition.nspp17$STNAME, levels = c("Maine", "New Hampshire", "Vermont", "New York", 
                                                                             "Connecticut", "New Jersey", "Pennsylvania", "Ohio", "Maryland","West Virginia"))
+
+species.composition.nsppcored.mort.17$Top.Species <- factor(species.composition.nsppcored.mort.17$Top.Species, levels = c(unique(SP.TRAITS$COMMON_NAME)) )
+species.composition.nsppcored.mort.17$STNAME <- factor(species.composition.nsppcored.mort.17$STNAME, levels = c("Maine", "New Hampshire", "Vermont", "New York", 
+                                                                                          "Connecticut", "New Jersey", "Pennsylvania", "Ohio", "Maryland","West Virginia"))
+
+species.composition.nsppcored.mort.17
 
 # plot up compostion charts for all the trees, including other hardwood
 ggplot() + 
@@ -284,7 +317,7 @@ ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_composi
 
 
 species.mort.summary <- TREE.data.all %>%
-  mutate(Top.Species = ifelse(SPCD %in% nspp[1:17,]$SPCD, Species, 
+  mutate(Top.Species = ifelse(SPCD %in% c(nspp[1:17,]$SPCD, 372,132), Species, 
                               ifelse(SW_HW %in% "S", "other softwood","other hardwood"))) %>% # label for non-top species
   group_by(Top.Species, Tree.status) %>%
   mutate(
@@ -666,7 +699,8 @@ cowplot::plot_grid(cowplot::plot_grid(species.maps[[1]] + theme(legend.position 
                    species.maps[[14]]+ theme(legend.position = "none"), 
                    species.maps[[15]]+ theme(legend.position = "none"), 
                    species.maps[[16]]+ theme(legend.position = "none"), 
-                   species.maps[[17]]+ theme(legend.position = "none"), ncol = 4), 
+                   #species.maps[[17]]+ theme(legend.position = "none"), 
+                   ncol = 4), 
                   species.maps.legend, rel_widths = c(0.85, 0.1), ncol = 2)
 dev.off()
 ################################################################################
@@ -779,7 +813,7 @@ plt.spp <- plt.shp %>% filter(shp.code %in% "caryspp.")
   png(height = 15, width = 12, units = "in", res = 150, "images/species_comp/all_spp_mortality2.png")
   cowplot::plot_grid(cowplot::plot_grid(species.maps[[15]]+ theme(legend.position = "none")+ theme(axis.title = element_blank()),
                                         species.maps[[16]]+ theme(legend.position = "none")+ theme(axis.title = element_blank()),
-                                        species.maps[[17]]+ theme(legend.position = "none")+ theme(axis.title = element_blank()),
+                                        #species.maps[[17]]+ theme(legend.position = "none")+ theme(axis.title = element_blank()),
                                         species.maps[[14]]+ theme(legend.position = "none")+ theme(axis.title = element_blank()),
                                         species.maps[[5]]+ theme(legend.position = "none")+ theme(axis.title = element_blank()),
                                         species.maps[[1]] + theme(legend.position = "none") + theme(axis.title  = element_blank()), 
@@ -1063,18 +1097,18 @@ ggplot()+
                                       xmax = T2.all, 
                                       ymin = -Inf, 
                                       ymax = Inf), alpha = 0.25)+
-  geom_line(data = Ndep.total.remper, aes(x = year, y = Avg.Ndep, group = State, color = State), alpha = 0.9)+
+  geom_line(data = Ndep.total.remper, aes(x = year, y = Avg.Ndep, group = State, color = State))+
   scale_linewidth(range = c(0.1, 1))+
   #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
   theme_bw(base_size = 12)+ylab("Reduced N deposition (kg/ha/year)")+xlab("Year")+
   xlim(1935, 2038)+
   geom_label(data = state.locations.ndep, aes(label = State,
-                                              x = 1920,
+                                              x = 2025,
                                               y = Ndep.loc,
                                               color = State))+
   scale_color_manual(values = state.scales)+
   theme(legend.position = "none")
-ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_Ndep_time_series_1925_2030.png")
+ggsave(height = 5, width = 5, units = "in", dpi = 300, "images/all_state_Ndep_time_series_1925_2030.png")
 
 
 #### Plot pests and disturbances over time ----
@@ -1674,14 +1708,51 @@ ggsave(height = 5, width = 5, units = "in", dpi = 300, "images/all_state_HWA_tim
 
 
 # plot up the other drivers of veg change
-# make up state-level summarise of variables
-cleaned.data %>% group_by(SPCD) %>% 
-  summarise(elevation = mean(elev), 
-            damage = mean(damage), 
-            ba.mean = median(ba),
-            RD.mean = median(RD), 
-            BAL.mean = median(BAL),
-            n.dead = sum(M)) 
+# make up state-level summarise of variables, using all trees of focal species, including cut trees:
+dmg.causes <- data.frame(Tree.status = rep(c("cut", "dead", "live"),each = 10),
+                         damage = rep(c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90),3), 
+                         agent = rep(c("No damage/unknown cause", 
+                                   "Insect", 
+                                   "Disease", 
+                                   "Fire", 
+                                   "Animal", 
+                                   "Weather", 
+                                   "Suppression", 
+                                   "Miscellaneous", 
+                                   "Logging", 
+                                   "Form"), 3)) %>%
+  mutate(`Damage or Mortality` = ifelse(Tree.status %in% "cut", "Logging", 
+                                        ifelse(Tree.status %in% "dead" & agent %in% "No damage/unknown cause", "Unknown cause", 
+                                               ifelse(Tree.status %in% "live" & agent %in% "No damage/unknown cause", "No Damage", 
+                                                      ifelse(agent %in% "Miscellaneous", "Unknown cause", agent)))))
+
+
+TREE.dmg.all <- TREE.data.all %>%
+  mutate(Top.Species = ifelse(SPCD %in% c(nspp[1:17,]$SPCD, 372,132), Species, 
+                              ifelse(SW_HW %in% "S", "other softwood","other hardwood"))) %>% # label for non-top species
+  left_join(., dmg.causes)
+TREE.dmg.all%>%
+  group_by(Top.Species, Tree.status, `Damage or Mortality`) %>% summarise(n())
+
+damage.fill <- scale_fill_manual(values = c(
+   "Fire" = "#e41a1c",
+ "Suppression" =  "#377eb8",
+   "Insect" = "#4daf4a", 
+ "Disease" =  "#984ea3" ,
+  "Unknown cause" =  "#ff7f00" ,
+   "No Damage" = "#ffff33" ,
+  "Animal" =  "#a65628" ,
+ "Weather" =  "#f781bf" ,
+  "Logging" = "#999999" 
+))
+
+ggplot(TREE.dmg.all, aes(x = Tree.status, fill = `Damage or Mortality`))+
+  geom_bar()+theme_bw(base_size = 14)+
+  xlab("Tree Status")+ylab("# of trees") + damage.fill
+
+ggplot(TREE.dmg.all %>% filter(!`Damage or Mortality` %in% "No Damage"), aes(x = Tree.status, fill = `Damage or Mortality`))+
+  geom_bar()+theme_bw(base_size = 14)+
+  xlab("Tree Status")+ylab("# of trees") + damage.fill
 
 # read in historic damage data:
 damage.table <- readRDS("data/N.DAMAGE.table.RDS")
