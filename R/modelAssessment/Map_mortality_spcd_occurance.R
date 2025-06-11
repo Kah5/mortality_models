@@ -454,10 +454,11 @@ plt.shp$shp.code <- ifelse(plt.shp$SCIENTIFIC_NAME %in% "Pinus strobus", "pinust
 plt.shp$shp.code <- ifelse(plt.shp$SCIENTIFIC_NAME %in% "Acer saccharum", "acersacr", plt.shp$shp.code)
 
 
+output.dir <- "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
 
 
 ################################################################################
-# Function to create maps
+# MAPPING ---figure 1 and supplemental figures
 ################################################################################
 # get the states that we need:
 states <- map_data("state")
@@ -523,7 +524,7 @@ plt.pct.mortality <- plt.shp %>% group_by(state, county, pltnum, LAT_FIADB, LONG
 plt.pct.mortality %>% filter(pct.mortality > 100)
 hist(plt.pct.mortality$pct.mortality)
 ggplot(data = plt.pct.mortality, aes(x = pct.mortality))+geom_histogram()+theme_bw(base_size = 12)+xlab("% mortality on plot")
-ggsave(height = 2, width = 3, units = "in", here("images/species_comp/all_observed_pct_mortality_hist.png"))
+ggsave(height = 2, width = 3, units = "in", paste0(output.dir, "images/species_comp/all_observed_pct_mortality_hist.png"))
 
 nonzero <- plt.pct.mortality %>% filter(pct.mortality> 0)
 quantile(nonzero$pct.mortality)
@@ -564,23 +565,73 @@ large.size.font <- ggplot() +
 
 legend.large <- cowplot::get_legend(large.size.font)
 
-mortality_percent_map <- ggplot() +
+library(rnaturalearth)
+library(terra)
+
+nat.earth <- terra::rast(paste0(output.dir,"data/NaturalEarth/NE1_50M_SR_W/NE1_50M_SR_W/NE1_50M_SR_W.tif"))
+domain <- ext(-87, -65, 36, 48)
+
+nat.crop <- crop(nat.earth, y=domain)
+rast.table <- as.data.frame(nat.crop, xy = TRUE)
+
+
+raster_data <- as.data.frame(nat.crop, xy = TRUE) 
+
+# Combine relevant layers using rgb (you may need to adjust band indices)
+raster_data$rgb <- rgb(raster_data[, 3], raster_data[, 4], raster_data[, 5], maxColorValue = 255) # Assuming RGB bands
+
+
+lakes = ne_download(scale = 50, type = 'lakes', category = 'physical', returnclass = "sf")
+
+# Convert sf object to a data frame with geometry as coordinates
+lakes_df <- lakes %>%
+  st_as_sf() %>%
+  st_cast("POLYGON") %>% # Ensure geometry is in polygon format
+  st_coordinates() %>%
+  as.data.frame()
+
+# Add grouping variables for polygons
+lakes_df <- lakes_df %>%
+  rename(long = X, lat = Y) %>%
+  mutate(group = interaction(L1, L2)) # Grouping for polygons
+
+# Plot using geom_polygon
+ggplot(nc_df, aes(x = long, y = lat, group = group)) +
+  geom_polygon(fill = "lightblue", color = "black") +
+  theme_minimal()+coord_sf(xlim = c(-85.5, -67.5), ylim = c(37, 47.5))
+
+
+# create a basemap from natural earth raster:
+NE_basemap <- ggplot(data = raster_data, aes(x = x, y = y)) +
+  geom_tile(fill = raster_data$rgb, alpha = 0.75) +
+  #geom_sf(data = lakes, fill = "lightblue") + theme_bw()+
+  coord_sf(xlim = c(-85.5, -67.5), ylim = c(37, 47.5))+
+  theme_void() 
+
+
+mortality_percent_map <- NE_basemap + 
   geom_polygon(data = canada, 
                aes(x=long, y=lat, group = group), 
-               color = "black", fill = "white") +
-  geom_polygon(data = state_sub, 
-               aes(x=long, y=lat, group = group), 
-               color = "black", fill = "white") +
+               color = "black", fill = NA) +
+  geom_polygon(data = lakes_df, 
+               aes(x = long, y = lat, group = group), 
+               color = "black", fill = "lightblue") +
+ 
+  
   #geom_sf(alpha = 0.75, aes(fill = as.character(Distribution)))+
   #scale_fill_manual(values = c("Species Distribution" = "forestgreen", "Outside Distribution" = "white"))+
   geom_jitter(data = plt.pct.mortality, aes(x = LONG_FIADB, y = LAT_FIADB, color = Mort.quantiles), size = 0.5)+theme_bw()+
-  coord_sf(xlim = c(-84, -65), ylim = c(37, 47.5))+theme(panel.grid = element_blank(), panel.background = element_rect(fill = 'lightblue'), 
+  geom_polygon(data = state_sub, 
+               aes(x=long, y=lat, group = group), 
+               color = "black", fill = NA) +
+  coord_sf(xlim = c(-85, -67.5), ylim = c(37, 47.5))+theme(panel.grid = element_blank(), #panel.background = element_rect(fill = 'lightblue'), 
                                                        #legend.position = c(0.87, 0.25),
+                                                       axis.title  = element_blank(),
                                                        legend.title = element_blank(),
                                                        legend.background = element_rect(fill = "white", color = "black"), 
                                                        legend.position = "none")+
   scale_color_manual(values = c(
-    "[0,1]" ="lightgrey",
+    "[0,1]" ="darkgrey",
     "(1,2.5]" = "#fcc5c0", 
     "(2.5,5]" = "#fa9fb5", 
     "(5,10]" = "#feb24c", 
@@ -593,12 +644,19 @@ mortality_percent_map <- ggplot() +
 
   ))
 
-png(height = 5, width = 8.5, res = 300, units = "in", here("images/species_comp/all_observed_pct_mortality_map.png") )
+png(height = 5, width = 8.5, res = 350, units = "in", paste0(output.dir, "images/species_comp/all_observed_pct_mortality_map.png") )
 cowplot::plot_grid(legend.large, mortality_percent_map,  align = "v", rel_widths = c(0.15, 0.89))
 dev.off()
 
 
-# function to just map out the presence for the plots
+##########################################################################
+# Combine map, composition, and disturbance records -------
+##########################################################################
+
+
+
+##########################################################################
+# function to map out the species presence for the plots -------
 plot.cored.spp.distn <- function(spp){
   dir.path = "C:/Users/KellyHeilman/OneDrive - USDA/Documents/USTreeAtlas/shp/" # where the distribution shape files are
   
@@ -628,6 +686,11 @@ plot.cored.spp.distn <- function(spp){
     cat(paste0("no range map exists for ", spp))
   }
 }
+
+
+
+
+
 
 
 # color by % live and dead for that taxa
@@ -1748,26 +1811,35 @@ damage.fill <- scale_fill_manual(values = c(
 
 ggplot(TREE.dmg.all, aes(x = Tree.status, fill = `Damage or Mortality`))+
   geom_bar()+theme_bw(base_size = 14)+
-  xlab("Tree Status")+ylab("# of trees") + damage.fill
+  xlab("Tree Status")+ylab("# of trees") + damage.fill+
+  theme(panel.grid = element_blank())
+ggsave(height = 4, width = 4, dpi = 300, "images/all_live_dead_by_damage_cause.png")
 
 ggplot(TREE.dmg.all %>% filter(!`Damage or Mortality` %in% "No Damage"), aes(x = Tree.status, fill = `Damage or Mortality`))+
   geom_bar()+theme_bw(base_size = 14)+
-  xlab("Tree Status")+ylab("# of trees") + damage.fill
-
-# read in historic damage data:
-damage.table <- readRDS("data/N.DAMAGE.table.RDS")
-ggplot(data = damage.table %>% filter(! damage_agent %in% "None"), aes(x = damage_agent, y = n.by.damage))+geom_point()
+  xlab("Tree Status")+ylab("# of trees") + damage.fill+
+  theme(panel.grid = element_blank())
+ggsave(height = 4, width = 4, dpi = 300, "images/all_damaged_dead_by_cause.png")
 
 
+ggplot(data = TREE.dmg.all %>% filter(!Tree.status %in% "cut" & dbhold > 5))+
+  geom_density(aes(x = dbhold, fill = Tree.status), alpha = 0.5)
 
+ggplot(data = TREE.dmg.all %>% filter(!Tree.status %in% "cut" & dbhold > 5))+
+  geom_density(aes(x = elev, fill = Tree.status), alpha = 0.5)
+
+ggplot(data = TREE.dmg.all %>% filter(!Tree.status %in% "cut" & dbhold > 5))+
+  geom_density(aes(x = DIA_DIFF, fill = Tree.status), alpha = 0.5)
 
 
 #####################################################################################################state######################################################################################################################
-#Map out species-level model predicted probability of mortality for Figure 1 ----
+#Map out species-level model predicted probability of mortality for Figure 5 ----
 #by species, by plot----
 ######################################################################################################################
   SPCD.df <- data.frame(SPCD = nspp[1:17, ]$SPCD, 
                         Species = nspp[1:17, ]$COMMON)
+
+
 # loop to read in the predictions for pmort
   for(i in 1:17){# run for each of the 17 species
     common.name <- nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON)
@@ -1783,10 +1855,10 @@ ggplot(data = damage.table %>% filter(! damage_agent %in% "None"), aes(x = damag
         
       cat(paste("mapping out put from stan mortality model ",model.number, " for SPCD", SPCD.df[i,]$SPCD, common.name$COMMON, " remper correction", remper.correction))
     
-      fit.1 <- readRDS( paste0("SPCD_stanoutput_full/samples/model_",model.number,"_SPCD_",SPCD.id, "_remper_correction_", remper.correction, ".RDS"))
+      fit.1 <- readRDS( paste0(output.dir, "SPCD_stanoutput_full_standardized_v3/samples/model_",model.number,"_SPCD_",SPCD.id, "_remper_correction_", remper.correction, ".RDS"))
       
       # tload the data used to fit the model 
-      load(paste0("SPCD_standata_general_full/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.number, ".Rdata")) # load the species code data
+      load(paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id, "remper_correction_", remper.correction,"model_",model.number, ".Rdata")) # load the species code data
       
       
       species.table <- unique(train.data[,c("SPCD","SPP")])
@@ -1803,7 +1875,7 @@ ggplot(data = damage.table %>% filter(! damage_agent %in% "None"), aes(x = damag
                         ## out of sample predicted prob mor
                         paste0("psurv.hat[",1:mod.data$Nrep, "]"),
                         ## in sample predicted status
-                        paste0("log_lik[",1:mod.data$N, "]"),
+                        #paste0("log_lik[",1:mod.data$N, "]"),
                         "lp__")
       par.names = c("alpha_SPP", colnames(mod.data$xM)) #,
       
@@ -1829,7 +1901,7 @@ ggplot(data = damage.table %>% filter(! damage_agent %in% "None"), aes(x = damag
       psurv.quant$Mobs <- as.character(mod.data$y)
       psurv.quant$COMMON <- unique(species.table$COMMON)
       
-      train.data.attributes <- train.data %>% select(date, state, county, pltnum, point, tree, PLOT.ID, spp, dbhcur, dbhold, Species, LAT_FIADB, LONG_FIADB)
+      train.data.attributes <- train.data %>% select(state, county, pltnum, point, tree, PLOT.ID, spp, dbhcur, dbhold, Species, LAT_FIADB, LONG_FIADB)
       psurvival.train <- cbind(psurv.quant, train.data.attributes)
       
     
@@ -1847,7 +1919,7 @@ ggplot(data = damage.table %>% filter(! damage_agent %in% "None"), aes(x = damag
       psurv.hat.quant$Mobs <- as.character(mod.data$ytest)
       psurv.hat.quant$COMMON <- unique(species.table$COMMON)
       
-      test.data.attributes <- test.data %>% select(date, state, county, pltnum, point, tree, PLOT.ID, spp, dbhcur, dbhold, Species, LAT_FIADB, LONG_FIADB)
+      test.data.attributes <- test.data %>% select(state, county, pltnum, point, tree, PLOT.ID, spp, dbhcur, dbhold, Species, LAT_FIADB, LONG_FIADB)
       psurvival.test <- cbind(psurv.hat.quant, test.data.attributes)
       psurvival.test$dataset <- "held-out"
       psurvival.train$dataset <- "in-sample"
@@ -1856,7 +1928,7 @@ ggplot(data = damage.table %>% filter(! damage_agent %in% "None"), aes(x = damag
       
       
       # calculate mortality
-     pmort.summaries <-  psurvival.all %>% mutate(pmort.med = 1-median) %>% group_by(PLOT.ID, date, LAT_FIADB, LONG_FIADB, spp) %>% 
+     pmort.summaries <-  psurvival.all %>% mutate(pmort.med = 1-median) %>% group_by(PLOT.ID,LAT_FIADB, LONG_FIADB, spp) %>% 
         summarise(mean.pmort = median(pmort.med), 
                   pct.mortality = median(pmort.med)*100,
                   sum.pmort = sum(pmort.med))
@@ -1923,17 +1995,17 @@ ggplot(data = damage.table %>% filter(! damage_agent %in% "None"), aes(x = damag
     cowplot::plot_grid(legend.large, mortality_percent_map_spp,  align = "v", rel_widths = c(0.15, 0.89))+
        theme(panel.background = element_rect(fill = "white", colour = NA),
              plot.background = element_rect(fill = "white", colour = NA))
-     ggsave(height = 5, width = 8.5, units = "in", here(paste0("images/predicted_mortality/average_predicted_pmort_SPCD_",SPCD.df[i,]$SPCD,"_map.png") ))
+     ggsave(height = 5, width = 8.5, units = "in", paste0(output.dir, "SPCD_stanoutput_full_standardized_v3/images/predicted_mortality/average_predicted_pmort_SPCD_",SPCD.df[i,]$SPCD,"_map.png") )
      #dev.off()
      
      
-    saveRDS(psurvival.all, paste0("SPCD_stanoutput_full/pmort_LL_model_",model.number,"_SPCD_",SPCD.id, "_remper_correction_", remper.correction, ".RDS"))
+    saveRDS(psurvival.all, paste0(output.dir, "SPCD_stanoutput_full_standardized_v3/pmort_LL_model_",model.number,"_SPCD_",SPCD.id, "_remper_correction_", remper.correction, ".RDS"))
      
   }
   
 ### now read in all the species-level data frames and make one big plot level summary map:
   
-pmort.files <- paste0("SPCD_stanoutput_full/", list.files("SPCD_stanoutput_full/", "pmort_LL"))
+pmort.files <- paste0(output.dir, "SPCD_stanoutput_full_standardized_v3/", list.files(output.dir, "SPCD_stanoutput_full_standardized_v3/", "pmort_LL"))
 pmort.list <- lapply(pmort.files, readRDS) 
 pmort.df <- do.call(rbind, pmort.list)
 
@@ -2002,19 +2074,17 @@ mortality_percent_map_all <- ggplot() +
     
   ))#+ggtitle(paste0("Plot averaged predicted mortality probability predicted from species-level models"))
 
-# png(height = 5, width = 8.5, res = 300, units = "in", here(paste0("images/predicted_mortality/average_predicted_pmort_SPCD_",SPCD.df[i,]$SPCD,"_map.png") ))
 cowplot::plot_grid(legend.large, mortality_percent_map_all,  align = "v", rel_widths = c(0.15, 0.89))+
   theme(panel.background = element_rect(fill = "white", colour = NA),
         plot.background = element_rect(fill = "white", colour = NA))
-ggsave(height = 5, width = 8.5, units = "in", here(paste0("images/predicted_mortality/average_predicted_pmort_alltrees_map.png") ))
-#dev.off()
+ggsave(height = 5, width = 8.5, dpi = 350, paste0(output.dir, "SPCD_stanoutput_full_standardized_v3/images/predicted_mortality/average_predicted_pmort_alltrees_map.png") )
 
 
-# read in the psurvival predictions from the hierarchical models
-
-psurvival.train <- readRDS("SPCD_stanoutput_joint/ll.train.pmort.RDS")
-
-psurvival.test <- readRDS("SPCD_stanoutput_joint/ll.test.pmort.RDS")
+######################################################################
+# Map out probability of mortlaity from the hierarchical models ---- 
+# read in the psurvival predictions from the hierarchical models 
+psurvival.train <- readRDS(paste0(output.dir, "SPCD_stanoutput_joint/ll.train.pmort.RDS"))
+psurvival.test <- readRDS(paste0(output.dir, "SPCD_stanoutput_joint/ll.test.pmort.RDS"))
 psurvival.test$dataset <- "held-out"
 psurvival.train$dataset <- "in-sample"
 psurvival.all <-  rbind(psurvival.train, psurvival.test)
