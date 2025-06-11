@@ -250,13 +250,13 @@ ggplot() +
         panel.grid = element_blank(), legend.title = element_blank())+species_fill
 ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_composition_by_density.png")
 
-ggplot() + 
-  geom_bar(data = species.composition, aes(x = STNAME, y = `Percent Composition (BA)`, group = Top.Species, fill = Top.Species), position = "stack", stat = "identity")+
+st.comp.ba <- ggplot() + 
+  geom_bar(data = species.composition %>% filter(!is.na(Top.Species)), aes(x = STNAME, y = `Percent Composition (BA)`, group = Top.Species, fill = Top.Species), position = "stack", stat = "identity")+
   theme_bw(base_size = 14)+
   xlab("State")+
   theme(axis.text.x = element_text(angle = 60, hjust = 1), 
         panel.grid = element_blank(), legend.title = element_blank())+species_fill
-ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_composition_by_BA.png")
+ggsave(plot = st.comp.ba, height = 6, width = 8, units = "in", dpi = 300, paste0(output.dir, "images/all_state_composition_by_BA.png"))
 
 
 # make pie charts:
@@ -390,8 +390,8 @@ tree_alluvial_long <- to_lodes_form(tree_alluvial %>% ungroup()%>% select(T1, T3
 
 
 
-ggplot(
-  data =tree_alluvial_long,
+alluvial.plt <- ggplot(
+  data =tree_alluvial_long %>% filter(!is.na(T1)),
   aes(x = variable, stratum = value, alluvium = cohort, y = count)
 ) +
   geom_alluvium(aes(fill=T1), width = 1/12, curve_type = "sigmoid") +
@@ -414,7 +414,7 @@ ggplot(
         panel.grid = element_blank(), 
         legend.positon = "none")+
   guides(fill=guide_legend(title=NULL))
-ggsave(height = 10, width = 10, dpi = 350, "images/Compostion_sankey_percentages.png")
+ggsave(plot = alluvial.plt, height = 10, width = 10, dpi = 350, "images/Compostion_sankey_percentages.png")
 
 ############################################################################
 
@@ -549,7 +549,7 @@ large.size.font <- ggplot() +
                                                        legend.title = element_blank(),
                                                        legend.background = element_rect(fill = "white", color = "black"))+
   scale_color_manual(values = c(
-    "[0,1]" ="lightgrey",
+    "[0,1]" ="darkgrey",
     "(1,2.5]" = "#fcc5c0", 
     "(2.5,5]" = "#fa9fb5", 
     "(5,10]" = "#feb24c", 
@@ -560,7 +560,7 @@ large.size.font <- ggplot() +
     "(50,100]" = "#49006a" 
     
     
-  ))
+  ))+ guides(fill=guide_legend(title="% Mortality"))
 
 
 legend.large <- cowplot::get_legend(large.size.font)
@@ -629,7 +629,7 @@ mortality_percent_map <- NE_basemap +
                                                        axis.title  = element_blank(),
                                                        legend.title = element_blank(),
                                                        legend.background = element_rect(fill = "white", color = "black"), 
-                                                       legend.position = "none")+
+                                                       legend.position= "none")+
   scale_color_manual(values = c(
     "[0,1]" ="darkgrey",
     "(1,2.5]" = "#fcc5c0", 
@@ -649,9 +649,6 @@ cowplot::plot_grid(legend.large, mortality_percent_map,  align = "v", rel_widths
 dev.off()
 
 
-##########################################################################
-# Combine map, composition, and disturbance records -------
-##########################################################################
 
 
 
@@ -1018,7 +1015,7 @@ ggplot()+
 ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_Tmax_time_series.png")
 
 
-ggplot()+
+tave.ts.plt <- ggplot()+
   geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
                                       xmax = T2.all, 
                                       ymin = -Inf, 
@@ -1040,7 +1037,7 @@ ggplot()+
   
   xlim(1925, 2038)+ ylim (9,19)
 
-ggsave(height = 5, width = 5, units = "in", dpi = 300, "images/all_state_Tmax_time_series_1925_2030.png")
+ggsave(plot = tave.ts.plt, height = 5, width = 5, units = "in", dpi = 300, "images/all_state_Tmax_time_series_1925_2030.png")
 
 
 # do the same with precipitation
@@ -1069,7 +1066,7 @@ xlim(1900, 2038)+
 ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_PPT_time_series.png")
 
 
-ggplot()+
+ppt.ts.plt <- ggplot()+
   geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
                                       xmax = T2.all, 
                                       ymin = -Inf, 
@@ -1086,7 +1083,7 @@ ggplot()+
              direction = "y", box.padding = 100, min.segment.length = 2)+
   scale_color_manual(values = state.scales)+
   theme(legend.position = "none")
-ggsave(height = 5, width = 5, units = "in", dpi = 300, "images/all_state_PPT_time_series_1925_2030.png")
+ggsave(plot = ppt.ts.plt, height = 5, width = 5, units = "in", dpi = 300, "images/all_state_PPT_time_series_1925_2030.png")
 
 
 # get the N deposition data
@@ -1155,7 +1152,7 @@ ggplot()+
 ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_Ndep_time_series.png")
 
 
-ggplot()+
+ndep.ts.plt <- ggplot()+
   geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
                                       xmax = T2.all, 
                                       ymin = -Inf, 
@@ -1171,7 +1168,7 @@ ggplot()+
                                               color = State))+
   scale_color_manual(values = state.scales)+
   theme(legend.position = "none")
-ggsave(height = 5, width = 5, units = "in", dpi = 300, "images/all_state_Ndep_time_series_1925_2030.png")
+ggsave(plot = ndep.ts.plt, height = 5, width = 5, units = "in", dpi = 300, "images/all_state_Ndep_time_series_1925_2030.png")
 
 
 #### Plot pests and disturbances over time ----
@@ -1342,7 +1339,7 @@ ggplot()+
   theme(legend.position = "none")
 ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_Spongy_time_series.png")
 # plot up the total area defoliated:
-ggplot()+
+spongy.ts.plt <- ggplot()+
   geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
                                       xmax = T2.all, 
                                       ymin = -Inf, 
@@ -1368,7 +1365,7 @@ ggplot()+
   scale_fill_manual(values = state.scales.spongy)+
   scale_color_manual(values = state.scales.spongy)+
   theme(legend.position = "none")
-ggsave(height = 5, width = 5, units = "in", dpi = 300, 
+ggsave(plot = spongy.ts.plt, height = 5, width = 5, units = "in", dpi = 300, 
        "images/all_state_Spongy_time_series_1925_2030.png")
 
 
@@ -1484,7 +1481,7 @@ ggplot()+
 ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_budworm_time_series.png")
 
 # plot relativized acreage defoliated:
-ggplot()+
+budworm.ts.plt <- ggplot()+
   geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
                                       xmax = T2.all, 
                                       ymin = -Inf, 
@@ -1507,7 +1504,7 @@ ggplot()+
   scale_fill_manual(values = state.scales.spongy)+
   scale_color_manual(values = state.scales.spongy)+
   theme(legend.position = "none")
-ggsave(height = 5, width = 5, units = "in", dpi = 300, 
+ggsave(plot = budworm.ts.plt, height = 5, width = 5, units = "in", dpi = 300, 
        "images/all_state_budworm_time_series_1925_2030.png")
 
 
@@ -1618,7 +1615,7 @@ ggplot()+
   theme(legend.position = "none")
 ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_Beech_scale_time_series_Hectares_by_state.png")
 
-ggplot()+
+beech.scale.ts.plt <- ggplot()+
   geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
                                       xmax = T2.all, 
                                       ymin = -Inf, 
@@ -1641,7 +1638,7 @@ ggplot()+
   scale_fill_manual(values = state.scales.spongy)+
   scale_color_manual(values = state.scales.spongy)+
   theme(legend.position = "none")
-ggsave(height = 5, width = 5, units = "in", dpi = 300, "images/all_state_Beech_scale_time_series_Hectares_by_state_1925_2030.png")
+ggsave(plot = beech.scale.ts.plt, height = 5, width = 5, units = "in", dpi = 300, "images/all_state_Beech_scale_time_series_Hectares_by_state_1925_2030.png")
 
 
 ### Hemlock wooley adelgid disease spread ---
@@ -1718,7 +1715,7 @@ ggplot()+
   theme(legend.position = "none")+xlim(1900, 2030)
 ggsave(height = 5, width = 8, units = "in", dpi = 300, "images/all_state_HWA_time_series_alternate.png")
 
-ggplot()+
+hwa.ts.plt <- ggplot()+
   geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
                                       xmax = T2.all, 
                                       ymin = -Inf, 
@@ -1741,7 +1738,7 @@ ggplot()+
   #scale_fill_manual(values = state.scales.budworm)+
   scale_color_manual(values = state.scales.spongy)+
   theme(legend.position = "none")+xlim(1925, 2030)
-ggsave(height = 5, width = 5, units = "in", dpi = 300, "images/all_state_HWA_time_series_alternate_1925_2030.png")
+ggsave(plot = hwa.ts.plt, height = 5, width = 5, units = "in", dpi = 300, "images/all_state_HWA_time_series_alternate_1925_2030.png")
 
 ggplot()+
   geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
@@ -1815,11 +1812,25 @@ ggplot(TREE.dmg.all, aes(x = Tree.status, fill = `Damage or Mortality`))+
   theme(panel.grid = element_blank())
 ggsave(height = 4, width = 4, dpi = 300, "images/all_live_dead_by_damage_cause.png")
 
-ggplot(TREE.dmg.all %>% filter(!`Damage or Mortality` %in% "No Damage"), aes(x = Tree.status, fill = `Damage or Mortality`))+
+dmg.cause.plt <- ggplot(TREE.dmg.all %>% filter(!`Damage or Mortality` %in% "No Damage"), aes(x = Tree.status, fill = `Damage or Mortality`))+
   geom_bar()+theme_bw(base_size = 14)+
   xlab("Tree Status")+ylab("# of trees") + damage.fill+
   theme(panel.grid = element_blank())
-ggsave(height = 4, width = 4, dpi = 300, "images/all_damaged_dead_by_cause.png")
+ggsave(plot = dmg.cause.plt, height = 4, width = 4, dpi = 300, "images/all_damaged_dead_by_cause.png")
+
+
+TREE.dmg.all$STNAME <- factor(TREE.dmg.all$STNAME, levels = c("Maine", "New York", "Pennsylvania", "West Virginia", 
+                                                              "Ohio", "New Hampshire","Vermont", "Maryland", "Connecticut", "New Jersey" ))
+
+dmg.cause.plt.state <- ggplot(TREE.dmg.all %>% filter(!`Damage or Mortality` %in% "No Damage") %>% mutate(L.D.status = ifelse(Tree.status %in% "cut", "dead", 
+                                                                                                       Tree.status)), 
+       aes(x = STNAME, fill = `Damage or Mortality`))+
+  geom_bar()+theme_bw(base_size = 14)+
+  xlab("State")+ylab("# of trees") +  damage.fill+
+  theme(panel.grid = element_blank(), 
+        axis.text.x = element_text(angle = 45, hjust = 1))+facet_wrap(~L.D.status, scales = "free_y")
+ggsave(plot = dmg.cause.plt.state, height = 4, width = 8, dpi = 300, paste0(output.dir, "images/all_damaged_dead_by_cause_state.png"))
+
 
 
 ggplot(data = TREE.dmg.all %>% filter(!Tree.status %in% "cut" & dbhold > 5))+
@@ -1831,7 +1842,36 @@ ggplot(data = TREE.dmg.all %>% filter(!Tree.status %in% "cut" & dbhold > 5))+
 ggplot(data = TREE.dmg.all %>% filter(!Tree.status %in% "cut" & dbhold > 5))+
   geom_density(aes(x = DIA_DIFF, fill = Tree.status), alpha = 0.5)
 
+##########################################################################
+# Combine map, composition, and disturbance records in Figure 1-------
+##########################################################################
+library(cowplot)
 
+png(height = 12, 
+    width = 16, 
+    units = "in",
+    res = 350, 
+    paste0(output.dir, "images/Figure_1_option_1.png"))
+# arrage in a grid
+plot_grid(
+  plot_grid( ggdraw(mortality_percent_map) + 
+               draw_plot(legend.large, x = .75, y = .25, width = .25, height = .25, scale = 0.15),  labels = c("a)") , 
+             plot_grid( st.comp.ba, dmg.cause.plt, ncol = 2, labels = c("b)", "c)")),
+             ncol = 2,  rel_widths = c(0.9, 1), rel_heights = c(1, 0.8, 0.8)),# row 2
+  
+  
+  plot_grid(tave.ts.plt, ppt.ts.plt, ndep.ts.plt, ncol = 3, align = "hv", labels = c("d)", "e)", "f)")),# row 1
+
+
+
+
+
+plot_grid(spongy.ts.plt, hwa.ts.plt, budworm.ts.plt , ncol = 3, align = "hv", labels =c("h)", "i)", "j)")),# row 3
+ncol = 1, rel_heights = c(1, 0.6, 0.6))
+dev.off()
+
+
+  
 #####################################################################################################state######################################################################################################################
 #Map out species-level model predicted probability of mortality for Figure 5 ----
 #by species, by plot----
