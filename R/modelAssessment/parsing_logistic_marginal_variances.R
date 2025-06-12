@@ -720,8 +720,393 @@ lapply(unique(plot.data.train$state), FUN = function(x){get_statewide_marginal_v
 
 
 
-# save outputs to cyverse 
+state.files <- list.files(paste0(output.dir, "SPCD_stanoutput_joint_v3/predicted_mort/"), pattern = "*.csv")
+# Split strings and keep the last part
+last_parts <- sapply(strsplit(state.files, "_"), function(x) tail(x, 1))
+state.numbers <- sapply(strsplit(last_parts, ".csv"), function(x) tail(x, 1))
 
+######################################################################################
+# read in the total variance outputs for each state and species to get a regional summary for the species
+var.all.files <- list.files(paste0(output.dir, "SPCD_stanoutput_joint_v3/predicted_mort/"), pattern = "*.RDS", full.names = TRUE)
+var.all.list <- list()
+for(i in 1:length(state.files)){
+  
+  var.all.list[[i]] <- readRDS(var.all.files[i])%>% mutate(state = state.numbers[i])
+}
+var.all.df <- do.call(rbind, var.all.list)
+
+# get variance summaries by species:
+
+tot.var <- var.all.df %>% group_by(SPCD, draw, state) %>%
+  summarise(var_total = sum(var_k, na.rm =TRUE))
+
+var_summary <-
+  left_join(var.all.df, tot.var, by = c("SPCD", "draw", "state")) %>%
+  
+  #group_mean_total, by = c("draw", "SPCD")) %>%
+  mutate(rel_var = (var_k / var_total)) %>%
+  group_by(predictor, SPCD) %>%
+  summarize(
+    mean = mean(rel_var),
+    lower = quantile(rel_var, 0.05),
+    upper = quantile(rel_var, 0.95)
+  )
+
+
+covariate.names <- read.csv(paste0(output.dir, "data/covariate_names/model_covariate_types_v2.csv"))
+state.dataframe <- data.frame(state = as.character(c(9, 23, 24, 33, 34, 36, 39, 42, 50, 54)), 
+                              STNAME = c("Connecticut", "Maine", "Maryland", "New Hampshire", "New Jersey", "New York", 
+                                         "Ohio", "Pennsylvania", "Vermont", "West Virginia"))
+
+var_summary <- var_summary %>% 
+  rename("Covariate" = "predictor") %>% left_join(., covariate.names)
+
+var_summary$Predictor <-
+  factor(var_summary$Predictor, levels = covariate.names$Predictor)
+var_summary$COMMON <- FIESTA::ref_species[match(var_summary$SPCD, FIESTA::ref_species$SPCD),]$COMMON
+
+color.pred.class <- c(
+  "Size" = "darkgreen",
+  "Change in Size" = "#66a61e",
+  "Site x G & S"= "#fdbf6f",
+  "Competition x G & S"="#d95f02" ,
+  "Climate x G & S"="#7570b3" ,
+  "Climate"= "#e7298a" ,
+  "Growth x Size" =  "#1b9e77",
+  "Site Conditions" = "#e6ab02",
+  "Competition" = "#a6761d"
+)
+
+color.pred.class.2 <- c(
+  # main effects 
+  "Size" = "darkgreen",
+  "Change in Size" = "#66a61e",
+  "Climate"= "#e7298a" ,
+  "Site Conditions" = "#e6ab02",
+  "Competition" = "#a6761d",
+  "N deposition" = "red4", 
+  "% Damage" = "purple", 
+  "Growth x Size" =  "#1b9e77",
+  
+  "Site x G & S"= "yellow3",
+  "Competition x G & S"="#d95f02" ,
+  
+  "Ndep x G & S" = "red",
+  "Climate x G & S"="magenta" ,
+  "Damage x G & S" = "#7570b3" 
+ 
+  
+  
+)
+
+var.summary.region <- var_summary
+var.summary.region$COMMON <- factor(var.summary.region$COMMON, 
+                                    levels = rev(c("balsam fir", "red spruce", "northern white-cedar", 
+                                               "eastern hemlock", "American beech", 
+                                               "black oak", "chestnut oak", "northern red oak", "white oak", "yellow birch", "paper birch", 
+                                               "hickory spp.", "eastern white pine", "red maple", "sugar maple", 
+                                               "black cherry", "white ash", "yellow-poplar")))
+var.summary.region$predictor.class <- factor(var.summary.region$predictor.class, 
+                                      levels = c(
+                                        
+                                        "Change in Size",
+                                        "Size", 
+                                        "Growth x Size", 
+                                        "Competition",
+                                        "Climate",
+                                        "Site Conditions",
+                                        "Competition x G & S",
+                                        "Climate x G & S", 
+                                        "Site x G & S"
+                                        
+                                        
+                                      ))
+regional.var.plt <- ggplot(data = var.summary.region )+
+  geom_bar(aes(x = COMMON, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+  theme_minimal(base_size = 16)+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                    panel.background = element_blank())+
+  ylab("Across-tree variance in  \n p(survival) explained")+
+  scale_fill_manual(values = color.pred.class, name = "", 
+                    guide = guide_legend(direction = "horizontal", 
+                                         ncol = 9,nrow = 1,reverse = TRUE,
+                                         label.position="top", label.hjust = 0.5, 
+                                         label.vjust = 0.5,
+                                         label.theme = element_text(angle = 90)))+
+  coord_flip()+
+  xlab("")+
+  theme(panel.grid = element_blank(), 
+        legend.position = "top")
+
+ggsave(plot = regional.var.plt, height = 8, width = 6, units = "in", dpi = 300, 
+       paste0(output.dir, "SPCD_stanoutput_joint_v3/predicted_mort/regional_species_var_partitioning.png"))
+
+ggplot(data = var.summary.region)+
+  geom_bar(aes(x = COMMON, y = mean, fill = predictor.class2), stat = "identity", position = "stack", color = "grey")+
+  theme_minimal(base_size = 16)+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                                       panel.background = element_blank())+
+  ylab("Across-tree variance in  \n p(survival) explained")+
+  scale_fill_manual(values = color.pred.class.2, name = "",
+                    guide = guide_legend(direction = "horizontal",
+                                         ncol = 14,nrow = 1,reverse = TRUE,
+                                         label.position="top", label.hjust = 0.5,
+                                         label.vjust = 0.5,
+                                         label.theme = element_text(angle = 90)))+
+  coord_flip()+
+  xlab("")+
+  theme(panel.grid = element_blank(), 
+        legend.position = "top")
+
+#########################################################################################
+# read in the pre-summarised outputs for each state -----
+var.part.files <- list.files(paste0(output.dir, "SPCD_stanoutput_joint_v3/predicted_mort/"), pattern = "*.csv", full.names = TRUE)
+var.part.list <- list()
+for(i in 1:length(state.files)){
+ var.part.list[[i]] <- read.csv(var.part.files[i])%>% mutate(state = state.numbers[i])
+}
+var.part.df <- do.call(rbind, var.part.list)
+
+covariate.names <- read.csv(paste0(output.dir, "data/covariate_names/model_covariate_types_v2.csv"))
+state.dataframe <- data.frame(state = as.character(c(9, 23, 24, 33, 34, 36, 39, 42, 50, 54)), 
+                              STNAME = c("Connecticut", "Maine", "Maryland", "New Hampshire", "New Jersey", "New York", 
+                                         "Ohio", "Pennsylvania", "Vermont", "West Virginia"))
+
+var_summary <- var.part.df %>% 
+  rename("Covariate" = "predictor") %>% left_join(., covariate.names)%>%
+  left_join(., state.dataframe)
+
+var_summary$Predictor <-
+  factor(var_summary$Predictor, levels = covariate.names$Predictor)
+var_summary$COMMON <- FIESTA::ref_species[match(var_summary$SPCD, FIESTA::ref_species$SPCD),]$COMMON
+
+
+
+
+var_summary$predictor.class <- factor(var_summary$predictor.class, 
+                                      levels = c(
+                                       
+                                        "Change in Size",
+                                        "Size", 
+                                        "Growth x Size", 
+                                        "Competition",
+                                        "Climate",
+                                        "Site Conditions",
+                                        "Competition x G & S",
+                                        "Climate x G & S", 
+                                        "Site x G & S"
+                                        
+                                        
+                                      ))
+
+
+ggplot(data = var_summary )+
+  geom_bar(aes(x = COMMON, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+  theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                         panel.background = element_blank())+
+  ylab("Average proportion of across-tree \n p(survival) variance explained")+
+  xlab("Species")+scale_fill_manual(values = color.pred.class, name = "")+facet_wrap(~STNAME)
+
+
+
+
+# balsam fir and red spruce
+boreal.var.plt <- ggplot(data = var_summary %>% filter(COMMON %in% c("balsam fir", "red spruce", "northern white-cedar", "paper birch")))+
+  geom_bar(aes(x = STNAME, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+  theme_bw()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                         panel.background = element_blank())+
+  ylab("Across-tree variance in  \n p(survival) explained")+
+  scale_fill_manual(values = color.pred.class, name = "")+
+coord_flip()+facet_wrap(~COMMON, scales = "free_y", ncol = 1)+
+  xlab("")
+ggsave(plot = boreal.var.plt, height = 6, width = 5, units = "in", dpi = 300, 
+       paste0(output.dir, "SPCD_stanoutput_joint_v3/predicted_mort/subboreal_species_var_partitioning.png"))
+
+
+# white pine, sugar maple, red maple
+nmix.var.plt <- ggplot(data = var_summary %>% filter(COMMON %in% c("eastern white pine", "sugar maple", "red maple")))+
+  geom_bar(aes(x = STNAME, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+  theme_bw()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                    panel.background = element_blank())+
+  ylab("Across-tree variance in  \n p(survival) explained")+
+  scale_fill_manual(values = color.pred.class, name = "")+
+  coord_flip()+facet_wrap(~COMMON, scales = "free_y", ncol = 1)+
+  xlab("")
+ggsave(height = 6, width = 5, units = "in", dpi = 300, 
+       paste0(output.dir, "SPCD_stanoutput_joint_v3/predicted_mort/North_mixed_species_var_partitioning.png"))
+
+
+# Beech, hemlock, YB
+lsuccess.var.plt <- ggplot(data = var_summary %>% filter(COMMON %in% c("American beech", "eastern hemlock", "yellow birch")))+
+  geom_bar(aes(x = STNAME, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+  theme_bw()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                    panel.background = element_blank())+
+  ylab("Across-tree variance in  \n p(survival) explained")+
+  scale_fill_manual(values = color.pred.class, name = "")+
+  coord_flip()+facet_wrap(~COMMON, scales = "free_y", ncol = 1)+
+  xlab("")
+ggsave(plot = lsuccess.var.plt, height = 6, width = 6, units = "in", dpi = 300, 
+       paste0(output.dir, "SPCD_stanoutput_joint_v3/predicted_mort/North_late_successional_species_var_partitioning.png"))
+
+#oaks and hickories
+oak.hickory.var.plt <- ggplot(data = var_summary %>% filter(COMMON %in% c("chestnut oak", "white oak","northern red oak", "hickory spp.")))+
+  geom_bar(aes(x = STNAME, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+  theme_bw()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                    panel.background = element_blank())+
+  ylab("Across-tree variance in  \n p(survival) explained")+
+  scale_fill_manual(values = color.pred.class, name = "")+
+  coord_flip()+facet_wrap(~COMMON, scales = "free_y", ncol = 1)+
+  xlab("")
+ggsave(plot = oak.hickory.var.plt, height = 8, width = 6, units = "in", dpi = 300, 
+       paste0(output.dir, "SPCD_stanoutput_joint_v3/predicted_mort/Oak_hickory_species_var_partitioning.png"))
+
+# other taxa
+other.spp.var.plt <- ggplot(data = var_summary %>% filter(COMMON %in% c("black cherry", "white ash", "yellow-poplar")))+
+  geom_bar(aes(x = STNAME, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+  theme_bw()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                    panel.background = element_blank())+
+  ylab("Across-tree variance in  \n p(survival) explained")+
+  scale_fill_manual(values = color.pred.class, name = "")+
+  coord_flip()+facet_wrap(~COMMON, scales = "free_y", ncol = 1)
+ggsave(plot = other.spp.var.plt , height = 6, width = 6, units = "in", dpi = 300, 
+       paste0(output.dir, "SPCD_stanoutput_joint_v3/predicted_mort/Other_species_var_partitioning.png"))
+
+variance.legend <- get_legend(lsuccess.var.plt)
+
+
+forest.type.variance <- plot_grid(variance.legend, plot_grid(
+  nmix.var.plt+theme(legend.position = "none"), 
+  lsuccess.var.plt+theme(legend.position = "none"), 
+          oak.hickory.var.plt+theme(legend.position = "none"), 
+          other.spp.var.plt+theme(legend.position = "none"),
+          boreal.var.plt+theme(legend.position = "none"), ncol = 5, align = "hv" ),
+          rel_widths = c(0.25, 1))
+png(height = 7, width = 15, units = "in", res = 350, paste0(output.dir, "SPCD_stanoutput_joint_v3/predicted_mort/Forest_type_var_partitioning.png"))
+forest.type.variance
+dev.off()
+
+ggplot(data = var_summary)+ #%>% filter(COMMON %in% c("eastern white pine", "sugar maple", "red maple")))+
+  geom_bar(aes(x = STNAME, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+  theme_bw()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                    panel.background = element_blank())+
+  ylab("Average proportion of across-tree \n p(survival) variance explained")+
+  scale_fill_manual(values = color.pred.class, name = "")+
+  coord_flip()+facet_wrap(~COMMON)+
+  xlab("")
+
+
+
+# get the top species for each of the states:
+cleaned.data <- readRDS( "data/cleaned.data.mortality.TRplots.RDS")
+
+cleaned.data <- cleaned.data %>% filter(!is.na(ba) & !is.na(slope) & ! is.na(physio) & !is.na(aspect))%>% 
+  dplyr::select(state, county, pltnum, cndtn, point, tree, PLOT.ID, date,cycle, spp, dbhcur, dbhold, status, damage, Species, SPCD,
+                remper, LAT_FIADB, LONG_FIADB, elev, DIA_DIFF, annual.growth, M, relative.growth, si, physio:RD) %>% distinct()
+
+nspp <- cleaned.data %>% group_by(SPCD) %>% summarise(n = n(), 
+                                                      pct = n/nrow(cleaned.data)) %>% arrange (desc(`pct`))
+
+nspp$cumulative.pct <- cumsum(nspp$pct)
+
+
+
+# link up to the species table:
+nspp$COMMON <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$COMMON
+nspp$Species <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$GENUS, FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$SPECIES)
+
+#View(nspp)
+
+nspp[1:17,]$COMMON
+
+cleaned.data$SPGRPCD <- FIESTA::ref_species[match(cleaned.data$SPCD, FIESTA::ref_species$SPCD),]$E_SPGRPCD
+
+SPGRP.df <- FIESTA::ref_codes %>% filter(VARIABLE %in% "SPGRPCD") %>% filter(VALUE %in% unique(cleaned.data$SPGRPCD))
+cleaned.data$SPGRPNAME <- SPGRP.df[match(cleaned.data$SPGRPCD, SPGRP.df$VALUE),]$MEANING
+cleaned.data$STNAME <- ref_statecd[match(cleaned.data$state, ref_statecd$VALUE),]$MEANING
+
+
+# set up custom colors for species
+# set the species order using the factors:
+SP.TRAITS <- read.csv("data/NinemetsSpeciesTraits.csv") %>% filter(COMMON_NAME %in% c(unique(nspp[1:17,]$COMMON), "sweet birch", "Virginia pine"))
+# order the trait db by softwood-hardwood, then shade tolerance, then name (this puts all the oaks together b/c hickory and red oak have the same tolerance values)
+SP.TRAITS <- SP.TRAITS %>% group_by(SFTWD_HRDWD) %>% arrange(desc(SFTWD_HRDWD), desc(ShadeTol), desc(COMMON_NAME))
+n.species.state <- cleaned.data %>% rename("COMMON" = "Species")%>%
+  group_by(STNAME, SPCD, COMMON) %>% summarise(n())%>% 
+  arrange(STNAME, desc(`n()`)) 
+
+state.groups <- data.frame(state.regions = c(rep("Ohio Valley", 3), rep("Atlantic", 4), 
+                                             rep("North", 4)), 
+                          STNAME = c("Ohio", "Pennsylvania", "West Virginia", 
+                                     "New Jersey", "Maryland", "Massachusetts", "Connecticut", 
+                                     "Maine", "New Hampshire", "Vermont", "New York") )
+
+top.5.spp <- n.species.state %>% left_join(.,state.groups) %>% ungroup() %>% 
+  group_by(STNAME)%>% slice_head(n=5)%>%
+  mutate(species.ranking.st = "Top 5")
+
+top.5.region <- cleaned.data %>% rename("COMMON" = "Species")%>%
+  left_join(.,state.groups) %>%
+  group_by(state.regions, SPCD, COMMON) %>% summarise(n())%>% 
+  arrange(state.regions, desc(`n()`)) %>% ungroup() %>% 
+  group_by(state.regions) %>% slice_head(n=5)%>%
+  mutate(species.ranking.region = "Top 5")
+
+var_summary <- var_summary %>% left_join(.,top.5.spp %>% select(STNAME, COMMON, species.ranking.st))%>%
+  left_join(.,top.5.region %>% select(state.regions, COMMON, species.ranking.region))
+
+
+# group by far north states
+spp.north <- unique(var_summary %>% filter(STNAME %in% c("Maine", "New Hampshire", "Vermont")& !is.na(species.ranking.st))%>%select(COMMON))
+spp.ovr <- unique(var_summary %>% filter(STNAME %in% c("Ohio", "Pennsylvania", "West Virginia")& !is.na(species.ranking.st))%>%select(COMMON))
+spp.atl <- unique(var_summary %>% filter(STNAME %in% c("New Jersey", "Maryland", "Massachusetts", "Connecticut")& !is.na(species.ranking.st))%>%select(COMMON))
+
+var_summary$COMMON <- factor(var_summary$COMMON, levels = rev(SP.TRAITS$COMMON_NAME))
+
+north.st.plt <- ggplot(data = var_summary %>% filter(STNAME %in% c("Maine", "New Hampshire", "Vermont") & COMMON %in% spp.north$COMMON))+
+  geom_bar(aes(x = COMMON, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+  theme_bw()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                    panel.background = element_blank())+
+  ylab("Across-tree variance in \n p(survival) explained")+
+  scale_fill_manual(values = color.pred.class, name = "")+
+  coord_flip()+facet_wrap(~STNAME)+
+  xlab("")
+ggsave(plot = north.st.plt, height = 4, width = 8, units = "in", dpi = 300, 
+       paste0(output.dir, "SPCD_stanoutput_joint_v3/predicted_mort/Northern_state_var_partitioning.png"))
+
+
+# ohio valley
+ovr.var.plt <- ggplot(data = var_summary %>% filter(STNAME %in% c("Ohio", "Pennsylvania", "West Virginia")& COMMON %in% spp.ovr$COMMON))+
+  geom_bar(aes(x = COMMON, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+  theme_bw()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                    panel.background = element_blank())+
+  ylab("Across-tree variance in \n p(survival) explained")+
+  scale_fill_manual(values = color.pred.class, name = "")+
+  coord_flip()+facet_wrap(~STNAME)+
+  xlab("")
+ggsave(plot = ovr.var.plt, height = 4, width = 8, units = "in", dpi = 300, 
+       paste0(output.dir, "SPCD_stanoutput_joint_v3/predicted_mort/Ohio_valley_state_var_partitioning.png"))
+
+# coastal
+atlantic.var.plt <- ggplot(data = var_summary %>% filter(STNAME %in% c("New Jersey", "Maryland", "Massachusetts", "Connecticut")& COMMON %in% spp.atl$COMMON))+
+  geom_bar(aes(x = COMMON, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+  theme_bw()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                    panel.background = element_blank())+
+  ylab("Across-tree variance in \n p(survival) explained")+
+  scale_fill_manual(values = color.pred.class, name = "")+
+  coord_flip()+facet_wrap(~STNAME)+
+  xlab("")
+ggsave(height = 4, width = 8, units = "in", dpi = 300, 
+       paste0(output.dir, "SPCD_stanoutput_joint_v3/predicted_mort/Atlantic_state_var_partitioning.png"))
+
+
+
+state.region.variance <- plot_grid(variance.legend, plot_grid(
+ ovr.var.plt+theme(legend.position = "none"), 
+  atlantic.var.plt+theme(legend.position = "none"), 
+  north.st.plt+theme(legend.position = "none"), ncol = 3, align = "hv" ),
+  rel_widths = c(0.25, 2))
+
+png(height = 3.5, width = 15, units = "in", res = 350, paste0(output.dir, "SPCD_stanoutput_joint_v3/predicted_mort/region_var_partitioning.png"))
+state.region.variance
+dev.off()
 
 
 SP.Color <- c(# softwoods
