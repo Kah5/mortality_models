@@ -13,6 +13,7 @@ library(mapdata)
 library(ggrepel)
 library(tigris)
 library(ggalluvial)
+output.dir <- "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
 
 
 ################################################################################
@@ -256,7 +257,34 @@ st.comp.ba <- ggplot() +
   xlab("State")+
   theme(axis.text.x = element_text(angle = 60, hjust = 1), 
         panel.grid = element_blank(), legend.title = element_blank())+species_fill
-ggsave(plot = st.comp.ba, height = 6, width = 8, units = "in", dpi = 300, paste0(output.dir, "images/all_state_composition_by_BA.png"))
+ggsave(plot = st.comp.ba, height = 5.5, width = 8, units = "in", dpi = 300, paste0(output.dir, "images/all_state_composition_by_BA.png"))
+
+
+host.df <- data.frame(Top.Species = unique(species.composition$Top.Species), 
+           Hosts = c("Beech Bark Disease", "Spongy Moth Immune", 
+                     "Spongy Moth Host", "Spongy Moth Host", "Hemlock Wooley Adelgid", 
+                     "Spongy Moth Resistant", "Spongy Moth Occassional", "Spongy Moth Host", 
+                     "Other", "Spongy Moth Resistant", "Spongy Moth Resistant", "Spongy Moth Immune", 
+                     "Spongy Moth Host", "Spongy Moth Host", "Spongy Moth Immune", "Spruce Budworm Host", 
+                     "Spruce Budworm non-host", "Spruce Budworm Host", "Other"))
+Host.order <- c("Spruce Budworm Host", "Spruce Budworm non-host", "Hemlock Wooley Adelgid", "Beech Bark Disease", 
+                "Spongy Moth Resistant", "Spongy Moth Immune", "Spongy Moth Host")
+
+species.composition.hosts <- species.composition %>% filter(!is.na(Top.Species))%>% left_join(host.df)
+species.composition.hosts$Top.Species <- factor(species.composition.hosts$Top.Species, 
+                                                levels = c("balsam fir", "red spruce", "northern white-cedar", 
+                                                           "eastern hemlock", "American beech", 
+                                                           "black oak", "chestnut oak", "northern red oak", "white oak", "yellow birch", #"paper birch", 
+                                                           "hickory spp.", "eastern white pine", "red maple", "sugar maple", 
+                                                           "black cherry", "white ash", "yellow-poplar", "other hardwood", "other softwood"))
+
+st.comp.ba.host.order <- ggplot() + 
+  geom_bar(data = species.composition.hosts, aes(x = STNAME, y = `Percent Composition (BA)`, group = Top.Species, fill = Top.Species), position = "stack", stat = "identity")+
+  theme_bw(base_size = 14)+
+  xlab("State")+
+  theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+        panel.grid = element_blank(), legend.title = element_blank())+species_fill
+ggsave(plot = st.comp.ba.host.order, height = 6, width = 8, units = "in", dpi = 300, paste0(output.dir, "images/all_state_composition_by_BA_host_order.png"))
 
 
 # make pie charts:
@@ -454,7 +482,6 @@ plt.shp$shp.code <- ifelse(plt.shp$SCIENTIFIC_NAME %in% "Pinus strobus", "pinust
 plt.shp$shp.code <- ifelse(plt.shp$SCIENTIFIC_NAME %in% "Acer saccharum", "acersacr", plt.shp$shp.code)
 
 
-output.dir <- "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
 
 
 ################################################################################
@@ -596,7 +623,7 @@ lakes_df <- lakes_df %>%
   mutate(group = interaction(L1, L2)) # Grouping for polygons
 
 # Plot using geom_polygon
-ggplot(nc_df, aes(x = long, y = lat, group = group)) +
+ggplot(lakes_df, aes(x = long, y = lat, group = group)) +
   geom_polygon(fill = "lightblue", color = "black") +
   theme_minimal()+coord_sf(xlim = c(-85.5, -67.5), ylim = c(37, 47.5))
 
@@ -1765,6 +1792,70 @@ ggplot()+
   theme(legend.position = "none")+xlim(1925, 2030)
 ggsave(height = 5, width = 5, units = "in", dpi = 300, "images/all_state_HWA_time_series_land_area_1925_2030.png")
 
+# Summarise the disturbances by regions for the time period of the Remper of our surveys:
+
+HWA.infest %>% left_join(.,remper.vals)%>% filter(year >= T1 & year <=T2)%>%
+  group_by(State)%>% summarise(max(Percent.infested))
+
+HWA.remper <- HWA.cos  %>% distinct() %>% left_join(.,remper.vals)%>% filter(year_txt >= T1 & year_txt <=T2)
+HWA.state.nyears <- ggplot(HWA.remper, aes(x = totalyears, y = State))+
+  geom_boxplot()+xlab("Total Years of HWA county infestation\nduring periodic remeasurement interval")+
+  theme_bw()
+ggsave( HWA.state.nyears, filename = paste0(output.dir, "images/HWA_years_infestation.png"))
+
+# do the same for beech bark disease:
+beech.scale <- beech.bark.cos  %>% distinct() %>%
+  expand_grid(year = 1900:2020) %>% # expand the DF to include years 
+  mutate(BB.county = ifelse(SCALEYR <= year, "Beech Bark Present", "No observed Beech Bark"))%>%
+  mutate(totalyears = ifelse(SCALEYR <= year, NA,SCALEYR - year))%>%
+  left_join(., remper.vals)
+
+
+beech.state.nyears <- ggplot(beech.scale %>% filter(!is.na(totalyears)), aes(x = totalyears, y = State))+
+  geom_boxplot()+xlab("Total Years of Beech Scale county infestation\nduring periodic remeasurement interval")+
+  theme_bw()
+
+ggsave( beech.state.nyears, filename = paste0(output.dir, "images/BeechBark_years_infestation.png"))
+
+# spruce budworm acres defoliated:
+budworm.remper <- budworm %>% left_join(., remper.vals) %>% filter(!is.na(State))
+
+
+# spongy moth peak outbreak values
+
+spongy <- spongy %>% mutate(in.remper = ifelse(year>=T1 & year <= T2, "remper", "not in remper"))
+spongy %>% select(State, T1, T2, in.remper)%>% filter(in.remper %in% "remper")%>% distinct()
+spongy.ts.plt <- ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_area(data = spongy %>% filter(!is.na(State)), aes(x = year, y = HA.Defoliated, group = State, fill = State), alpha = 0.9, position = "stack")+
+  #geom_area(data = spongy %>% filter(!is.na(State) & in.remper %in% "not in remper"), aes(x = year, y = HA.Defoliated, group = State, fill = State), alpha = 0.5, position = "stack")+
+  
+   #scale_linewidth(range = c(0.1, 1))+
+  #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
+  theme_bw(base_size = 12)+ylab("Hectares Defoliated (Lymantria Dispar)")+xlab("Year")+
+  xlim(1925, 2038)+
+  # geom_label_repel(data = state.locations.spongy, aes(label = State.year,
+  #                                                     x = year,
+  #                                                     y = HA.Defoliated,
+  #                                                     color = State, 
+  #                                                     nudge_x = ifelse(year < 1990, year - 25, year + 15), 
+  #                                                     nudge_y = ifelse(State %in% c("Ohio", "Maine"),1500000, HA.Defoliated+200000)
+  # ), 
+  # box.padding = 3, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5, 
+  # 
+  # 
+  # direction = "y",
+  # 
+  # segment.color = "black")+
+  scale_fill_manual(values = state.scales.spongy)+
+  scale_color_manual(values = state.scales.spongy)
+ggsave(plot = spongy.ts.plt, height = 5, width = 5, units = "in", dpi = 300, 
+       "images/all_state_Spongy_time_series_1925_2030_remper.png")
+
+
 
 
 # plot up the other drivers of veg change
@@ -1869,6 +1960,10 @@ plot_grid(
 plot_grid(spongy.ts.plt, hwa.ts.plt, budworm.ts.plt , ncol = 3, align = "hv", labels =c("h)", "i)", "j)")),# row 3
 ncol = 1, rel_heights = c(1, 0.6, 0.6))
 dev.off()
+
+
+
+
 
 
   
