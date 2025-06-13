@@ -778,26 +778,28 @@ color.pred.class <- c(
 )
 
 color.pred.class.2 <- c(
-  # main effects 
+  
   "Size" = "darkgreen",
   "Change in Size" = "#66a61e",
-  "Climate"= "#e7298a" ,
+  "Growth x Size" = "#a1d99b" ,
+  
+  "Climate" = "#081d58",
+  "Climate x G & S" = "#1d91c0",
+  
+  "N deposition" = "#67000d" , 
+  "Ndep x G & S"= "#bd0026",
+  
+  "% Damage" = "#762a83", 
+  "Damage x G & S" = "#9970ab",
+  
+  
+  "Competition" = "#8c510a",
+  "Competition x G & S" = "#d95f02" ,
+  
   "Site Conditions" = "#e6ab02",
-  "Competition" = "#a6761d",
-  "N deposition" = "red4", 
-  "% Damage" = "purple", 
-  "Growth x Size" =  "#1b9e77",
+  "Site x G & S" = "yellow3")
   
-  "Site x G & S"= "yellow3",
-  "Competition x G & S"="#d95f02" ,
-  
-  "Ndep x G & S" = "red",
-  "Climate x G & S"="magenta" ,
-  "Damage x G & S" = "#7570b3" 
- 
-  
-  
-)
+
 
 var.summary.region <- var_summary
 var.summary.region$COMMON <- factor(var.summary.region$COMMON, 
@@ -809,52 +811,81 @@ var.summary.region$COMMON <- factor(var.summary.region$COMMON,
 var.summary.region$predictor.class <- factor(var.summary.region$predictor.class, 
                                       levels = c(
                                         
-                                        "Change in Size",
-                                        "Size", 
-                                        "Growth x Size", 
-                                        "Competition",
-                                        "Climate",
+                                        "Size" ,
+                                        "Change in Size" ,
+                                        "Climate" ,
                                         "Site Conditions",
-                                        "Competition x G & S",
-                                        "Climate x G & S", 
-                                        "Site x G & S"
+                                        "Competition",
+                                        "N deposition", 
+                                        "% Damage", 
+                                        "Growth x Size",
                                         
+                                        "Site x G & S",
+                                        "Competition x G & S" ,
                                         
-                                      ))
-regional.var.plt <- ggplot(data = var.summary.region )+
-  geom_bar(aes(x = COMMON, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
-  theme_minimal(base_size = 16)+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
-                    panel.background = element_blank())+
-  ylab("Across-tree variance in  \n p(survival) explained")+
-  scale_fill_manual(values = color.pred.class, name = "", 
-                    guide = guide_legend(direction = "horizontal", 
-                                         ncol = 9,nrow = 1,reverse = TRUE,
-                                         label.position="top", label.hjust = 0.5, 
-                                         label.vjust = 0.5,
-                                         label.theme = element_text(angle = 90)))+
-  coord_flip()+
-  xlab("")+
-  theme(panel.grid = element_blank(), 
-        legend.position = "top")
+                                        "Ndep x G & S",
+                                        "Climate x G & S",
+                                        "Damage x G & S"))
 
-ggsave(plot = regional.var.plt, height = 8, width = 6, units = "in", dpi = 300, 
-       paste0(output.dir, "SPCD_stanoutput_joint_v3/predicted_mort/regional_species_var_partitioning.png"))
 
-ggplot(data = var.summary.region)+
-  geom_bar(aes(x = COMMON, y = mean, fill = predictor.class2), stat = "identity", position = "stack", color = "grey")+
-  theme_minimal(base_size = 16)+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+var.summary.region$predictor.class2 <- factor(var.summary.region$predictor.class2, 
+                                             levels = c(
+                                               
+                                               "Size",
+                                               "Change in Size",
+                                               "Growth x Size" ,
+                                               
+                                               "Climate",
+                                               "Climate x G & S",
+                                               
+                                               "N deposition", 
+                                               "Ndep x G & S" ,
+                                               
+                                               "% Damage", 
+                                               "Damage x G & S",
+                                               
+                                               
+                                               "Competition",
+                                               "Competition x G & S",
+                                               
+                                               "Site Conditions",
+                                               "Site x G & S"
+                                               
+                                               
+                                             ))
+
+
+
+plt.regional.plt.all <- ggplot(data = var.summary.region)+
+  geom_bar(aes(x = COMMON, y = mean, fill = predictor.class2), stat = "identity", position = "stack")+
+  theme_bw(base_size = 16)+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
                                        panel.background = element_blank())+
   ylab("Across-tree variance in  \n p(survival) explained")+
   scale_fill_manual(values = color.pred.class.2, name = "",
+                    labels = c("Change in Size" = expression(Delta ~ "D" ), 
+                               "Growth x Size" = expression(Delta ~ "D x D"), 
+                               "Size" = "Diameter (D)", 
+                               "Climate x G & S" = expression("Climate x " ~Delta ~ "D or D"), 
+                              "Ndep x G & S" = expression("N dep. x " ~Delta ~ "D or D"),
+                              "Damage x G & S" = expression("Damage x " ~Delta ~ "D or D"), 
+                              "Competition x G & S" = expression("Compeition x " ~Delta ~ "D or D"),
+                              "Site x G & S" = expression("Site x " ~Delta ~ "D or D")
+                    ),
                     guide = guide_legend(direction = "horizontal",
                                          ncol = 14,nrow = 1,reverse = TRUE,
-                                         label.position="top", label.hjust = 0.5,
+                                         label.position="top", label.hjust = 0,
                                          label.vjust = 0.5,
                                          label.theme = element_text(angle = 90)))+
   coord_flip()+
   xlab("")+
   theme(panel.grid = element_blank(), 
-        legend.position = "top")
+        legend.position = "top", 
+        panel.border = element_blank(), 
+        axis.ticks.y = element_blank())
+
+ggsave(plot = plt.regional.plt.all, height = 8, width = 7.5, units = "in", dpi = 500, 
+       paste0(output.dir, "SPCD_stanoutput_joint_v3/predicted_mort/regional_species_var_partitioning.png"))
+
 
 #########################################################################################
 # read in the pre-summarised outputs for each state -----
@@ -898,23 +929,69 @@ var_summary$predictor.class <- factor(var_summary$predictor.class,
                                       ))
 
 
+var_summary$predictor.class2 <- factor(var_summary$predictor.class2, 
+                                              levels = c(
+                                                
+                                                "Size",
+                                                "Change in Size",
+                                                "Growth x Size" ,
+                                                
+                                                "Climate",
+                                                "Climate x G & S",
+                                                
+                                                "N deposition", 
+                                                "Ndep x G & S" ,
+                                                
+                                                "% Damage", 
+                                                "Damage x G & S",
+                                                
+                                                
+                                                "Competition",
+                                                "Competition x G & S",
+                                                
+                                                "Site Conditions",
+                                                "Site x G & S"
+                                                
+                                                
+                                              ))
+
+
+
 ggplot(data = var_summary )+
-  geom_bar(aes(x = COMMON, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+  geom_bar(aes(x = COMMON, y = mean, fill = predictor.class2), stat = "identity", position = "stack")+
   theme_minimal()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
                          panel.background = element_blank())+
   ylab("Average proportion of across-tree \n p(survival) variance explained")+
-  xlab("Species")+scale_fill_manual(values = color.pred.class, name = "")+facet_wrap(~STNAME)
+  xlab("Species")+scale_fill_manual(values = color.pred.class.2, name = "")+facet_wrap(~STNAME)
 
 
+var_summary$STNAME <- factor(var_summary$STNAME, levels = rev(c("Maine", "New Hampshire", "Vermont", "New York", 
+                                                            "Connecticut", "Maryland", "New Jersey",
+                                                          "Pennsylvania","Ohio", "West Virginia")))
 
+var_summary$COMMON <- factor(var_summary$COMMON, 
+                                    levels = c("balsam fir", "red spruce", "northern white-cedar", 
+                                                   "eastern hemlock", "American beech", 
+                                                   "black oak", "chestnut oak", "northern red oak", "white oak", "yellow birch", "paper birch", 
+                                                   "hickory spp.", "eastern white pine", "red maple", "sugar maple", 
+                                                   "black cherry", "white ash", "yellow-poplar"))
 
 # balsam fir and red spruce
 boreal.var.plt <- ggplot(data = var_summary %>% filter(COMMON %in% c("balsam fir", "red spruce", "northern white-cedar", "paper birch")))+
-  geom_bar(aes(x = STNAME, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+  geom_bar(aes(x = STNAME, y = mean, fill = predictor.class2), stat = "identity", position = "stack")+
   theme_bw()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
                          panel.background = element_blank())+
   ylab("Across-tree variance in  \n p(survival) explained")+
-  scale_fill_manual(values = color.pred.class, name = "")+
+  scale_fill_manual(values = color.pred.class.2, name = "", 
+                    labels = c("Change in Size" = expression(Delta ~ "D" ), 
+                               "Growth x Size" = expression(Delta ~ "D x D"), 
+                               "Size" = "Diameter (D)", 
+                               "Climate x G & S" = expression("Climate x " ~Delta ~ "D or D"), 
+                               "Ndep x G & S" = expression("N dep. x " ~Delta ~ "D or D"),
+                               "Damage x G & S" = expression("Damage x " ~Delta ~ "D or D"), 
+                               "Competition x G & S" = expression("Compeition x " ~Delta ~ "D or D"),
+                               "Site x G & S" = expression("Site x " ~Delta ~ "D or D")
+                    ))+
 coord_flip()+facet_wrap(~COMMON, scales = "free_y", ncol = 1)+
   xlab("")
 ggsave(plot = boreal.var.plt, height = 6, width = 5, units = "in", dpi = 300, 
@@ -923,11 +1000,20 @@ ggsave(plot = boreal.var.plt, height = 6, width = 5, units = "in", dpi = 300,
 
 # white pine, sugar maple, red maple
 nmix.var.plt <- ggplot(data = var_summary %>% filter(COMMON %in% c("eastern white pine", "sugar maple", "red maple")))+
-  geom_bar(aes(x = STNAME, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+  geom_bar(aes(x = STNAME, y = mean, fill = predictor.class2), stat = "identity", position = "stack")+
   theme_bw()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
                     panel.background = element_blank())+
   ylab("Across-tree variance in  \n p(survival) explained")+
-  scale_fill_manual(values = color.pred.class, name = "")+
+  scale_fill_manual(values = color.pred.class.2, name = "", 
+                    labels = c("Change in Size" = expression(Delta ~ "D" ), 
+                               "Growth x Size" = expression(Delta ~ "D x D"), 
+                               "Size" = "Diameter (D)", 
+                               "Climate x G & S" = expression("Climate x " ~Delta ~ "D or D"), 
+                               "Ndep x G & S" = expression("N dep. x " ~Delta ~ "D or D"),
+                               "Damage x G & S" = expression("Damage x " ~Delta ~ "D or D"), 
+                               "Competition x G & S" = expression("Compeition x " ~Delta ~ "D or D"),
+                               "Site x G & S" = expression("Site x " ~Delta ~ "D or D")
+                    ))+
   coord_flip()+facet_wrap(~COMMON, scales = "free_y", ncol = 1)+
   xlab("")
 ggsave(height = 6, width = 5, units = "in", dpi = 300, 
@@ -936,11 +1022,20 @@ ggsave(height = 6, width = 5, units = "in", dpi = 300,
 
 # Beech, hemlock, YB
 lsuccess.var.plt <- ggplot(data = var_summary %>% filter(COMMON %in% c("American beech", "eastern hemlock", "yellow birch")))+
-  geom_bar(aes(x = STNAME, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+  geom_bar(aes(x = STNAME, y = mean, fill = predictor.class2), stat = "identity", position = "stack")+
   theme_bw()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
                     panel.background = element_blank())+
   ylab("Across-tree variance in  \n p(survival) explained")+
-  scale_fill_manual(values = color.pred.class, name = "")+
+  scale_fill_manual(values = color.pred.class.2, name = "", 
+                    labels = c("Change in Size" = expression(Delta ~ "D" ), 
+                               "Growth x Size" = expression(Delta ~ "D x D"), 
+                               "Size" = "Diameter (D)", 
+                               "Climate x G & S" = expression("Climate x " ~Delta ~ "D or D"), 
+                               "Ndep x G & S" = expression("N dep. x " ~Delta ~ "D or D"),
+                               "Damage x G & S" = expression("Damage x " ~Delta ~ "D or D"), 
+                               "Competition x G & S" = expression("Compeition x " ~Delta ~ "D or D"),
+                               "Site x G & S" = expression("Site x " ~Delta ~ "D or D")
+                    ))+
   coord_flip()+facet_wrap(~COMMON, scales = "free_y", ncol = 1)+
   xlab("")
 ggsave(plot = lsuccess.var.plt, height = 6, width = 6, units = "in", dpi = 300, 
@@ -948,11 +1043,20 @@ ggsave(plot = lsuccess.var.plt, height = 6, width = 6, units = "in", dpi = 300,
 
 #oaks and hickories
 oak.hickory.var.plt <- ggplot(data = var_summary %>% filter(COMMON %in% c("chestnut oak", "white oak","northern red oak", "hickory spp.")))+
-  geom_bar(aes(x = STNAME, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+  geom_bar(aes(x = STNAME, y = mean, fill = predictor.class2), stat = "identity", position = "stack")+
   theme_bw()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
                     panel.background = element_blank())+
   ylab("Across-tree variance in  \n p(survival) explained")+
-  scale_fill_manual(values = color.pred.class, name = "")+
+  scale_fill_manual(values = color.pred.class.2, name = "", 
+                    labels = c("Change in Size" = expression(Delta ~ "D" ), 
+                               "Growth x Size" = expression(Delta ~ "D x D"), 
+                               "Size" = "Diameter (D)", 
+                               "Climate x G & S" = expression("Climate x " ~Delta ~ "D or D"), 
+                               "Ndep x G & S" = expression("N dep. x " ~Delta ~ "D or D"),
+                               "Damage x G & S" = expression("Damage x " ~Delta ~ "D or D"), 
+                               "Competition x G & S" = expression("Compeition x " ~Delta ~ "D or D"),
+                               "Site x G & S" = expression("Site x " ~Delta ~ "D or D")
+                    ))+
   coord_flip()+facet_wrap(~COMMON, scales = "free_y", ncol = 1)+
   xlab("")
 ggsave(plot = oak.hickory.var.plt, height = 8, width = 6, units = "in", dpi = 300, 
@@ -960,12 +1064,21 @@ ggsave(plot = oak.hickory.var.plt, height = 8, width = 6, units = "in", dpi = 30
 
 # other taxa
 other.spp.var.plt <- ggplot(data = var_summary %>% filter(COMMON %in% c("black cherry", "white ash", "yellow-poplar")))+
-  geom_bar(aes(x = STNAME, y = mean, fill = predictor.class), stat = "identity", position = "stack")+
+  geom_bar(aes(x = STNAME, y = mean, fill = predictor.class2), stat = "identity", position = "stack")+
   theme_bw()+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
                     panel.background = element_blank())+
   ylab("Across-tree variance in  \n p(survival) explained")+
-  scale_fill_manual(values = color.pred.class, name = "")+
-  coord_flip()+facet_wrap(~COMMON, scales = "free_y", ncol = 1)
+  scale_fill_manual(values = color.pred.class.2, name = "", 
+                    labels = c("Change in Size" = expression(Delta ~ "D" ), 
+                               "Growth x Size" = expression(Delta ~ "D x D"), 
+                               "Size" = "Diameter (D)", 
+                               "Climate x G & S" = expression("Climate x " ~Delta ~ "D or D"), 
+                               "Ndep x G & S" = expression("N dep. x " ~Delta ~ "D or D"),
+                               "Damage x G & S" = expression("Damage x " ~Delta ~ "D or D"), 
+                               "Competition x G & S" = expression("Compeition x " ~Delta ~ "D or D"),
+                               "Site x G & S" = expression("Site x " ~Delta ~ "D or D")
+                    ))+
+  coord_flip()+facet_wrap(~COMMON, scales = "free_y", ncol = 1)+xlab("")
 ggsave(plot = other.spp.var.plt , height = 6, width = 6, units = "in", dpi = 300, 
        paste0(output.dir, "SPCD_stanoutput_joint_v3/predicted_mort/Other_species_var_partitioning.png"))
 
@@ -973,12 +1086,15 @@ variance.legend <- get_legend(lsuccess.var.plt)
 
 
 forest.type.variance <- plot_grid(variance.legend, plot_grid(
-  nmix.var.plt+theme(legend.position = "none"), 
-  lsuccess.var.plt+theme(legend.position = "none"), 
-          oak.hickory.var.plt+theme(legend.position = "none"), 
-          other.spp.var.plt+theme(legend.position = "none"),
-          boreal.var.plt+theme(legend.position = "none"), ncol = 5, align = "hv" ),
-          rel_widths = c(0.25, 1))
+  boreal.var.plt+theme(legend.position = "none"), # spruce budworm
+  
+  lsuccess.var.plt+theme(legend.position = "none"), # late successional
+          oak.hickory.var.plt+theme(legend.position = "none"), # oakd hickory susceptible
+  nmix.var.plt+theme(legend.position = "none"), # resistant
+          other.spp.var.plt+theme(legend.position = "none") # immune
+         , ncol = 5, align = "hv", labels = c("a)", "b)", "c)", "d)", "e)")),
+          rel_widths = c(0.15, 1.25))
+
 png(height = 7, width = 15, units = "in", res = 350, paste0(output.dir, "SPCD_stanoutput_joint_v3/predicted_mort/Forest_type_var_partitioning.png"))
 forest.type.variance
 dev.off()
