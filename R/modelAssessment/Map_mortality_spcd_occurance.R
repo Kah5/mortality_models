@@ -1793,8 +1793,17 @@ ggplot()+
 ggsave(height = 5, width = 5, units = "in", dpi = 300, "images/all_state_HWA_time_series_land_area_1925_2030.png")
 
 # Summarise the disturbances by regions for the time period of the Remper of our surveys:
+HWA.detected <- counties %>% mutate(CNTYNAME = toupper(CONAME)) %>% 
+  rename("ST" = "STUSPS")%>% left_join(.,HWA %>% select(-X) %>% distinct() )%>%
+  filter(!is.na(YEARFIRST))%>%
+  group_by(State) %>% summarise(`Hemlock Wooley Adelgid Detected` = min(YEARFIRST, na.rm=TRUE))%>%
+  #expand_grid(year = 1900:2020) %>% # expand the DF to include years 
+  #mutate(BB.county = ifelse(SCALEYR <= year, "Beech Bark Present", "No observed Beech Bark"))%>%
+  #mutate(totalyears = ifelse(SCALEYR <= year, NA,SCALEYR - year))%>%
+  left_join(., remper.vals)# some duplicates in the data
 
-HWA.infest %>% left_join(.,remper.vals)%>% filter(year >= T1 & year <=T2)%>%
+
+HWA.infest %>% summarise() %>% left_join(.,remper.vals)%>% filter(year >= T1 & year <=T2)%>%
   group_by(State)%>% summarise(max(Percent.infested))
 
 HWA.remper <- HWA.cos  %>% distinct() %>% left_join(.,remper.vals)%>% filter(year_txt >= T1 & year_txt <=T2)
@@ -1815,7 +1824,57 @@ beech.state.nyears <- ggplot(beech.scale %>% filter(!is.na(totalyears)), aes(x =
   geom_boxplot()+xlab("Total Years of Beech Scale county infestation\nduring periodic remeasurement interval")+
   theme_bw()
 
+# get first year of beeck scale detected in each state:
+beech.scale.st.detect <- beech.bark.cos  %>% distinct() %>% filter(!is.na(SCALEYR))%>%
+  group_by(State) %>% summarise(`Beech Scale Detected` = min(SCALEYR, na.rm=TRUE))%>%
+  #expand_grid(year = 1900:2020) %>% # expand the DF to include years 
+  #mutate(BB.county = ifelse(SCALEYR <= year, "Beech Bark Present", "No observed Beech Bark"))%>%
+  #mutate(totalyears = ifelse(SCALEYR <= year, NA,SCALEYR - year))%>%
+  left_join(., remper.vals)
+
+
+beech.state.nyears <- ggplot(beech.scale %>% filter(!is.na(totalyears)), aes(x = totalyears, y = State))+
+  geom_boxplot()+xlab("Total Years of Beech Scale county infestation\nduring periodic remeasurement interval")+
+  theme_bw()
+
+
 ggsave( beech.state.nyears, filename = paste0(output.dir, "images/BeechBark_years_infestation.png"))
+
+# join beech and hemlock:
+beech.HWA.detect <- left_join(HWA.detected, beech.scale.st.detect)%>% filter(!is.na(statecd))
+beech.HWA.detect$State <- factor(beech.HWA.detect$State, levels  = c("Maine", "New Hampshire", "Vermont", "New York", 
+                                                                       "Connecticut", "Maryland", "New Jersey",
+                                                                       "Pennsylvania","Ohio", "West Virginia"))
+
+
+library(ggimage)
+beech.HWA.detect <- beech.HWA.detect %>%
+  mutate(HWA.image = "images/HWA_image.jpg", 
+         BEECH.image = "images/beech_neonectria_fruiting_bodies.jpg")
+
+ggplot(data = beech.HWA.detect)+
+  geom_segment( aes(x = State, y = T1, yend = T2, color = State),size = 5)+
+  geom_image(aes(x = State, y = `Beech Scale Detected`, image = BEECH.image), size = 0.05)+
+  geom_image(aes(x = State, y = `Hemlock Wooley Adelgid Detected`, image = HWA.image), size = 0.05)+
+  coord_flip()+
+  ylim(1950, 2010)+ylab("Year")+
+  theme_minimal(base_size = 14)+
+  theme(panel.grid = element_blank())+
+  scale_color_manual(values = state.scales.spongy)
+  
+HWA.beech.detect.plt <- ggplot(data = beech.HWA.detect)+
+  geom_segment( aes(x = State, y = T1, yend = T2, color = State),size = 5)+
+  geom_point(aes(x = State, y = `Beech Scale Detected`, shape = "Beech Scale"), size = 5)+
+  geom_point(aes(x = State, y = `Hemlock Wooley Adelgid Detected`, shape = "Hemlock Wooley Adelgid"), size = 4)+
+  coord_flip()+
+  ylim(1950, 2010)+ylab("Year")+xlab("")+
+  theme_bw(base_size = 14)+
+  theme(panel.grid = element_blank(), 
+        legend.position = "top")+
+  scale_color_manual(values = state.scales.spongy, guide = "none")+
+  scale_shape_manual(values = c("Beech Scale" = 13, 
+                                "Hemlock Wooley Adelgid" = 2), 
+                     name = " ")
 
 # spruce budworm acres defoliated:
 budworm.remper <- budworm %>% left_join(., remper.vals) %>% filter(!is.na(State))
@@ -1823,40 +1882,110 @@ budworm.remper <- budworm %>% left_join(., remper.vals) %>% filter(!is.na(State)
 
 # spongy moth peak outbreak values
 
-spongy <- spongy %>% mutate(in.remper = ifelse(year>=T1 & year <= T2, "remper", "not in remper"))
-spongy %>% select(State, T1, T2, in.remper)%>% filter(in.remper %in% "remper")%>% distinct()
-spongy.ts.plt <- ggplot()+
+spongy <- spongy %>% mutate(in.remper = ifelse(year>=T1 & year <= T2, "remper", "not in remper"))%>% filter(!is.na(T1))
+spongy$State <- factor(spongy$State, levels = c("Maine", "New Hampshire", "Vermont", "New York", 
+                                                "Connecticut", "Maryland", "New Jersey",
+                                                "Pennsylvania","Ohio", "West Virginia"))
+
+spongy.remper <- spongy %>% select(State, T1, T2, in.remper)%>% filter(in.remper %in% "remper")%>% distinct() %>% 
+  arrange(State)
+spongy.remper$level = seq(4500000,8500000,length.out = 10)
+spongy.remper <- left_join(spongy.remper, beech.HWA.detect)
+
+spongy.ts.fig1 <- ggplot()+
   geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
                                       xmax = T2.all, 
                                       ymin = -Inf, 
                                       ymax = Inf), alpha = 0.25)+
-  geom_area(data = spongy %>% filter(!is.na(State)), aes(x = year, y = HA.Defoliated, group = State, fill = State), alpha = 0.9, position = "stack")+
-  #geom_area(data = spongy %>% filter(!is.na(State) & in.remper %in% "not in remper"), aes(x = year, y = HA.Defoliated, group = State, fill = State), alpha = 0.5, position = "stack")+
   
-   #scale_linewidth(range = c(0.1, 1))+
-  #geom_line(data = region.summary, aes(x = year, y = mean_PPT_all), color = "black", linewidth = 1.1)+
-  theme_bw(base_size = 12)+ylab("Hectares Defoliated (Lymantria Dispar)")+xlab("Year")+
-  xlim(1925, 2038)+
-  # geom_label_repel(data = state.locations.spongy, aes(label = State.year,
-  #                                                     x = year,
-  #                                                     y = HA.Defoliated,
-  #                                                     color = State, 
-  #                                                     nudge_x = ifelse(year < 1990, year - 25, year + 15), 
-  #                                                     nudge_y = ifelse(State %in% c("Ohio", "Maine"),1500000, HA.Defoliated+200000)
-  # ), 
-  # box.padding = 3, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5, 
+  geom_rect(data = spongy.remper, aes(xmin = T1,
+                                      xmax = T2,
+                                      ymin = level,
+                                      ymax = level+100000, fill = State))+
+  geom_point(data = spongy.remper, aes(y = level+50000, x = `Beech Scale Detected`, shape = "Beech Scale", color = State), size = 5)+
+  geom_point(data = spongy.remper, aes(y = level+50000, x = `Hemlock Wooley Adelgid Detected`, shape = "Hemlock Wooley Adelgid", color = State), size = 4)+
+  
   # 
-  # 
-  # direction = "y",
-  # 
-  # segment.color = "black")+
+  geom_area(data = spongy %>% filter(!is.na(State) & State %in% unique(spongy.remper$State)), aes(x = year, y = HA.Defoliated, group = State, fill = State), alpha = 0.9, position = "stack")+
+  geom_text_repel(data = spongy.remper, aes(label = State,
+                                                          x = (T1+T2)/2,
+                                                          y = level+100000,
+                                                          color = State,
+                                                          # nudge_x = ifelse(State %in% c("Vermont", "Ohio"),2035,
+                                                          #                  ifelse(State %in% c("Maine", "New Hampshire"), year+10, year - 35)),
+                                                          # nudge_y = ifelse(State == "Ohio",12, Percent.infested)
+  ),
+ box.padding =0, max.overlaps = Inf, min.segment.length = 0, segment.size = 0.5,
+  direction = "y",
+  nudge_y = 15000,
+  #direction = "both",
+  segment.color = "black")+
+  theme_bw(base_size = 12)+ylab(expression(atop(italic("Lymantria Dispar"), " Defoliation (Hectares)")))+
+  xlab("Year")+
+  xlim(1950, 2010)+
+ # ylim(0, 7e+06)+
+  
+  scale_fill_manual(values = state.scales.spongy, guide = "none")+
+  scale_color_manual(values = state.scales.spongy, guide = "none")+
+  scale_shape_manual(values = c("Beech Scale" = 13, 
+                                "Hemlock Wooley Adelgid" = 2), 
+                     name = " ")+theme(legend.position = "top", legend.direction = "vertical")
+spongy.ts.fig1
+
+ggsave(plot = spongy.ts.fig1, height = 5, width = 5, units = "in", dpi = 300, 
+        "images/all_state_Spongy_ts_fig_1_remper.png")
+
+# summarise the spruce budworm timeseries:
+
+budworm.remper <- budworm %>% filter(!is.na(State) & ! State %in% "Total" & !is.na(State))%>% 
+  mutate(in.remper = ifelse(Year>=T1 & Year <= T2, "remper", "not in remper"))%>%
+  select(State, T1, T2, in.remper)%>% filter(in.remper %in% "remper")%>% distinct()
+budworm.remper$State <- factor(budworm.remper$State, levels = c("Maine", "New Hampshire", "Vermont", "New York", 
+                                                "Connecticut", "Maryland", "New Jersey",
+                                                "Pennsylvania","Ohio", "West Virginia"))
+budworm.remper <- budworm.remper %>% arrange(State)
+  
+budworm.remper$level = seq(3000000,4000000,length.out = 4)
+
+budworm.ts.fig1 <- ggplot()+
+  geom_rect(data = T1.T2periodic, aes(xmin = T1.all, 
+                                      xmax = T2.all, 
+                                      ymin = -Inf, 
+                                      ymax = Inf), alpha = 0.25)+
+  geom_area(data = budworm %>% filter(!is.na(State) & ! State %in% "Total" & !is.na(State)), aes(x = Year, y = HA.Defoliated, group = State, fill = State), alpha = 0.9, position = "stack")+
+  geom_rect(data = budworm.remper, aes(xmin = T1,
+                                      xmax = T2,
+                                      ymin = level,
+                                      ymax = level+50000, fill = State))+
+   geom_text_repel(data = budworm.remper, aes(label = State,
+                                                       x = (T1+T2)/2,
+                                                       y = level,
+                                                       color = State#,
+                                                       #nudge_x = ifelse(State == "Vermont", 1990, Year - 25)#,
+                                                       #nudge_y = Spruce.Budworm.Acres.Defoliated+95
+  ),
+  box.padding =0, max.overlaps = Inf, min.segment.length = 2, segment.size = 0.5,
+  direction = "y",
+  nudge_y = 150000,
+  segment.color = "black")+
+  theme_bw(base_size = 12)+ylab(expression(atop( italic("Choristoneura fumiferana"), "Defoliation (Hectares)")))+
+  xlab("Year")+
+  xlim(1950, 2010)+
+
   scale_fill_manual(values = state.scales.spongy)+
-  scale_color_manual(values = state.scales.spongy)
-ggsave(plot = spongy.ts.plt, height = 5, width = 5, units = "in", dpi = 300, 
-       "images/all_state_Spongy_time_series_1925_2030_remper.png")
+  scale_color_manual(values = state.scales.spongy)+
+  theme(legend.position = "none", panel.grid = element_blank())
+ggsave(plot = budworm.ts.fig1, height = 5, width = 5, units = "in", dpi = 300, 
+       "images/all_state_budworm_time_series_figure_1.png")
 
-
-
+bb.hwa.legend <- cowplot::get_legend(spongy.ts.fig1)
+png(height = 5, width  = 10, units = "in", res = 500, "images/figure1_disturbance_trends.png")
+plot_grid(
+          spongy.ts.fig1+theme(legend.position = "none", panel.grid = element_blank()),
+          budworm.ts.fig1, 
+          align = "hv",ncol = 2) 
+#)
+dev.off()
 
 # plot up the other drivers of veg change
 # make up state-level summarise of variables, using all trees of focal species, including cut trees:
