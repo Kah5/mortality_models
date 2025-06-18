@@ -1386,14 +1386,14 @@ if(model.no >=6){
                           "ba.scaled_growth.int")
   
   species <- "American beech"
-  covar <- "DIA_scaled"
+  covar <- "MATmax.scaled_growth.int"
   color.pred.class.2 <- c(
     
     "Size" = "darkgreen",
     "Change in Size" = "#66a61e",
     "Growth x Size" = "#a1d99b" ,
     
-    "Climate" = "#081d58",
+    "Climate" = "darkblue",
     "Climate x G & S" = "#1d91c0",
     
     "N deposition" = "#67000d" , 
@@ -1448,63 +1448,165 @@ if(model.no >=6){
   
   
   # function to plot out the case study species:
-  plot.main.effect <- function(species, covar, xmax = 0.05){
-    df.species <- marginal_response_df %>% filter(Species %in% species)%>%
-      filter(Covariate %in% covar)
+  plot.main.interaction.effect <- function(species, covar){
+    marge <- marginal_response_df %>% filter(Species %in% species)
+    inter <- interaction_response_df %>% filter(Species %in% species)
+    ymax.spp <- max(max(1-inter$ci.hi.90), 1- marge$ci.hi)
     
-    ggplot(df.species , aes(x = Value, y = 1-mean, color = predictor.class2)) +
-      geom_line(size = 1) +
-      geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = predictor.class2), alpha = 0.2, color = NA) +
-      facet_wrap(~Predictor) +
-      labs(
-        x = paste("Scaled", df.species$Predictor),
-        y = "Annual Probability of Mortality",
-        #title = "Effect of Predictors on Probability of Mortality"
-      ) +
-      var.part.fill + var.part.color+
-      theme_bw(base_size = 14)+theme(panel.grid = element_blank(), 
-                                     legend.key.size = unit(1, "cm"), 
-                                     legend.position = "none"
-      )+
-      ylim(0, xmax)
+    if(!covar %in% interaction_response_df$covariate){
+      df.species <- marginal_response_df %>% filter(Species %in% species)%>%
+        filter(Covariate %in% covar)
+      unique(df.species$predictor.class2)
+      strip.fill <- as.character(color.pred.class.2[unique(df.species$predictor.class2)])
+      
+      
+      p1 <-  ggplot(df.species , aes(x = Value, y = 1-mean, color = predictor.class2)) +
+        geom_line(size = 1) +
+        geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = predictor.class2), alpha = 0.2, color = NA) +
+        facet_wrap(~Predictor) +
+        labs(
+          x = paste("Scaled", df.species$Predictor),
+          y = "Annual Probability of Mortality",
+          #title = "Effect of Predictors on Probability of Mortality"
+        ) +
+        var.part.fill + var.part.color+
+        theme_bw(base_size = 14)+theme(panel.grid = element_blank(), 
+                                       legend.key.size = unit(1, "cm"), 
+                                       legend.position = "none", 
+                                       strip.background = element_rect(fill = strip.fill)
+        )+ylim(0, ymax.spp)
+    }else{
+      
+      
+      df.species <- interaction_response_df %>% filter(Species %in% species)%>%
+        filter(covariate %in% covar)
+      df.species$p2.rank <- factor(df.species$p2.rank, levels = c("high", "median", "low"))
+      strip.fill <- as.character(color.pred.class.2[unique(df.species$predictor.class2)])
+      pred.name <-  marginal_response_df %>% filter(Covariate %in% unique(df.species$Pred.1))%>% select(Predictor)%>% distinct()
+      
+      if(unique(df.species$Pred.2) %in% "DIA_DIFF_scaled"){
+        
+        p1 <-  ggplot(df.species, aes(x = p1.value, y = 1-mean, color = p2.rank)) +
+          geom_line(size = 1) +
+          geom_ribbon(aes(ymin = 1-ci.lo.10, ymax = 1-ci.hi.90, fill = p2.rank), alpha = 0.2, color = NA) +
+          #facet_grid(cols = vars(predictor.class2), rows = vars(Predictor)) +
+          facet_wrap(~Predictor)+
+          labs(
+            x = paste("Scaled", pred.name$Predictor),
+            y = "Annual Probability of Mortality",
+            #title = "Effect of Predictors on Probability of Mortality"
+          ) + scale_color_manual(values = c("low"="#a1dab4" ,
+                                            "median" = "#41b6c4",
+                                            "high"= "#225ea8" ), 
+                                 name = expression(Delta ~ "Diameter"))+
+          scale_fill_manual(values = c("low"="#a1dab4" ,
+                                       "median" = "#41b6c4",
+                                       "high"= "#225ea8" ), 
+                            name = expression(Delta ~ "Diameter"))+
+          
+          #species_fill + species_color + 
+          #named_species_linetype +
+          theme_bw(base_size = 14)+theme(panel.grid = element_blank(), 
+                                         legend.key.size = unit(1, "cm"), 
+                                         strip.background = element_rect(fill = strip.fill)
+          )+ylim(0, ymax.spp)
+      }else{
+        
+        p1 <-  ggplot(df.species, aes(x = p1.value, y = 1-mean, color = p2.rank)) +
+          geom_line(size = 1) +
+          geom_ribbon(aes(ymin = 1-ci.lo.10, ymax = 1-ci.hi.90, fill = p2.rank), alpha = 0.2, color = NA) +
+          #facet_grid(cols = vars(predictor.class2), rows = vars(Predictor)) +
+          facet_wrap(~Predictor)+
+          labs(
+            x = paste("Scaled", pred.name$Predictor),
+            y = "Annual Probability of Mortality",
+            #title = "Effect of Predictors on Probability of Mortality"
+          ) + scale_color_manual(values = c("low"="#fbb4b9" ,
+                                            "median" = "#f768a1",
+                                            "high"= "#ae017e" ), 
+                                 name =  "Diameter", 
+                                 labels = c("low" = "small", 
+                                            "median" = "medium", 
+                                            "high" = "large"))+
+          
+          
+          scale_fill_manual(values = c("low"="#fbb4b9" ,
+                                       "median" = "#f768a1",
+                                       "high"= "#ae017e" ), 
+                            name = "Diameter", 
+                            labels = c("low" = "small", 
+                                       "median" = "medium", 
+                                       "high" = "large"))+
+          
+          #species_fill + species_color + 
+          #named_species_linetype +
+          theme_bw(base_size = 14)+theme(panel.grid = element_blank(), 
+                                         legend.key.size = unit(1, "cm"),
+                                         strip.background = element_rect(fill = strip.fill)
+          )+ylim(0, ymax.spp)
+        
+        
+      }
+    }
     
-    
-    
+    return(p1)
   }
   
+  a <- plot.main.interaction.effect(species = "American beech", 
+                                    covar = "DIA_scaled")
+  b<- plot.main.interaction.effect(species = "American beech", 
+                                   covar = "DIA_DIFF_scaled")+
+    ylim(0, 0.035)
+  c<-plot.main.interaction.effect(species = "American beech", 
+                                  covar = "MATmax.scaled")+
+    ylim(0, 0.035)
   
-  ggplot(marginal_response_df %>% filter( Species %in% "American beech" & Covariate %in% beech.main), aes(x = Value, y = 1-mean, color = Species, linetype = Species)) +
-    geom_line(size = 1) +
-    geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
-    facet_wrap(~Predictor) +
-    labs(
-      x = "Predictor Value",
-      y = "Annual Probability of Mortality",
-      #title = "Effect of Predictors on Probability of Mortality"
-    ) +
-    species_fill + species_color + named_species_linetype +
-    theme_bw(base_size = 14)+theme(panel.grid = element_blank(), 
-                                   legend.key.size = unit(1, "cm")  
-    )
+  d<-plot.main.interaction.effect(species = "American beech", 
+                                  covar = "MATmax.scaled_growth.int")+
+    ylim(0, 0.03)
   
-  ggplot(interaction_response_df %>% 
-           filter( Species %in% "American beech" & Covariate %in% beech.interactions), aes(x = p1.value, y = 1-mean, color = p2.rank, linetype = Species)) +
-    geom_line(size = 1) +
-    geom_ribbon(aes(ymin = 1-ci.lo.10, ymax = 1-ci.hi.90, fill = p2.rank), alpha = 0.2, color = NA) +
-    #facet_grid(cols = vars(predictor.class2), rows = vars(Predictor)) +
-    facet_wrap(~Predictor)+
-    labs(
-      x = "Predictor Value",
-      y = "Annual Probability of Mortality",
-      #title = "Effect of Predictors on Probability of Mortality"
-    ) +
-    #species_fill + species_color + 
-    named_species_linetype +
-    theme_bw(base_size = 14)+theme(panel.grid = element_blank(), 
-                                   legend.key.size = unit(1, "cm")  
-    )
+  e<- plot.main.interaction.effect(species = "American beech", 
+                                   covar = "MATmax.scaled_DIA.int")+
+    ylim(0, 0.035)
+  
+  f<-plot.main.interaction.effect(species = "American beech", 
+                                  covar = "DIA_scaled_growth.int")+
+    ylim(0, 0.035)
   
   
+  beech.top <- plot_grid(a,b,f, c,d,e, ncol = 3, align = "hv")
+  save_plot(paste0(output.folder,"images/beech_top_conditionals.svg"), beech.top, base_width = 12, base_height = 6) 
+  save_plot(paste0(output.folder,"images/beech_top_conditionals.png"), beech.top, base_width = 12, base_height = 8) 
+  
+  # make plots of all the species inteacation terms:
+  unique(marginal_response_df$Covariate)
+  spec <- "balsam fir"
+  plt.all.spp.conditional <- function(spec){
+    spp.plt.list <- list()
+    for(h in 1:12){
+      spp.plt.list[[h]] <- plot.main.interaction.effect(species = spec, 
+                                                        covar = unique(marginal_response_df$Covariate)[h])
+    }
+    
+    
+    main.effects <- plot_grid(plotlist = spp.plt.list, align = "hv")
+    save_plot(paste0(output.folder,"images/",spec,"_main_effects_conditionals.png"), 
+              main.effects, base_width = 12, base_height = 12) 
+    
+    
+    spp.plt.int.list <- list()
+    for(h in 13:33){
+      spp.plt.int.list[[h-12]] <- plot.main.interaction.effect(species = spec, 
+                                                               covar = unique(marginal_response_df$Covariate)[h])
+    }
+    
+    
+    int.effects <- plot_grid(plotlist =spp.plt.list , align = "hv")
+    save_plot(paste0(output.folder,"images/",spec,"_interaction_conditionals.png"), 
+              int.effects, base_width = 12, base_height = 12) 
+  }
+  
+  lapply(unique(marginal_response_df$Species), plt.all.spp.conditional)  
 }
 #}
 
