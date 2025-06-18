@@ -1592,6 +1592,8 @@ if(model.no >=6){
     main.effects <- plot_grid(plotlist = spp.plt.list, align = "hv")
     save_plot(paste0(output.folder,"images/",spec,"_main_effects_conditionals.png"), 
               main.effects, base_width = 12, base_height = 12) 
+    save_plot(paste0(output.folder,"images/",spec,"_main_effects_conditionals.svg"), 
+              main.effects, base_width = 12, base_height = 12) 
     
     
     spp.plt.int.list <- list()
@@ -1601,12 +1603,20 @@ if(model.no >=6){
     }
     
     
-    int.effects <- plot_grid(plotlist =spp.plt.list , align = "hv")
+    int.effects <- plot_grid(plotlist =spp.plt.int.list , align = "hv")
     save_plot(paste0(output.folder,"images/",spec,"_interaction_conditionals.png"), 
-              int.effects, base_width = 12, base_height = 12) 
+              int.effects, base_width = 24, base_height = 24) 
+    
+    save_plot(paste0(output.folder,"images/",spec,"_interaction_conditionals.svg"), 
+              int.effects, base_width = 24, base_height = 24) 
   }
   
   lapply(unique(marginal_response_df$Species), plt.all.spp.conditional)  
+  
+  # now get the top responses for a few species:
+  
+  
+  
 }
 #}
 
