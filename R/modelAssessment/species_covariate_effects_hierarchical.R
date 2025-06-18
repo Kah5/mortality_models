@@ -32,6 +32,114 @@ model.no <- 6
 
 nspp[1:17,]$COMMON
 
+model.no <- 6
+
+cat(paste0("running model number ", model.no))
+
+xM.list <-
+  xMrep.list <-
+  y.list <-
+  y.test.list <-
+  nSPP.list <-
+  nSPP.rep.list <- remper.list <- remper.rep.list <-
+  test.data.list <- train.data.list <- list()
+
+for (i in 1:17) {
+  # SPCD.id
+  SPCD.id <- spp.table[i, ]$SPCD.id
+  load(
+    paste0(
+      "SPCD_standata_general_full_standardized_v3/SPCD_",
+      SPCD.id,
+      "remper_correction_0.5model_",
+      model.no,
+      ".Rdata"
+    )
+  ) # load the species code data
+  
+  
+  
+  xM.list[[i]] <- mod.data$xM
+  xMrep.list[[i]] <- mod.data$xMrep
+  y.list[[i]] <- mod.data$y
+  y.test.list[[i]] <- mod.data$ytest
+  nSPP.list[[i]] <- rep(i, length(mod.data$y))
+  nSPP.rep.list[[i]] <- rep(i, length(mod.data$ytest))
+  
+  remper.list[[i]] <- train.data$remper
+  remper.rep.list[[i]] <- test.data$remper
+  
+  
+  train.data.list[[i]] <- train.data
+  test.data.list[[i]] <- test.data
+}
+
+
+
+test.data <- do.call(rbind, test.data.list)
+train.data <- do.call(rbind, train.data.list)
+saveRDS (
+  train.data,
+  paste0(
+    output.folder,
+    "SPCD_stanoutput_joint_v3/train_data_all_SPCD_model_",
+    model.no,
+    ".RDS"
+  )
+)
+
+saveRDS (
+  test.data,
+  paste0(
+    output.folder,
+    "SPCD_stanoutput_joint_v3/test_data_all_SPCD_model_",
+    model.no,
+    ".RDS"
+  )
+)
+
+mod.data.full <-  list(
+  xM = do.call(rbind, xM.list),
+  xMrep = do.call(rbind, xMrep.list),
+  y = unlist(y.list),
+  ytest = unlist(y.test.list),
+  SPP = unlist(nSPP.list),
+  SPPrep = unlist(nSPP.rep.list),
+  Remper = unlist(remper.list),
+  Remperoos = unlist(remper.rep.list)
+)
+mod.data.full$K <- ncol(mod.data.full$xM)
+mod.data.full$N <- length(mod.data.full$y)
+
+mod.data.full$Nspp <- 17
+mod.data.full$Nrep <- length(mod.data.full$ytest)
+saveRDS (
+  mod.data.full,
+  paste0(
+    output.folder,
+    "SPCD_stanoutput_joint_v3/all_SPCD_model_",
+    model.no,
+    ".RDS"
+  )
+)
+mod.data.full <-
+  readRDS (
+    paste0(
+      output.folder,
+      "SPCD_stanoutput_joint_v3/all_SPCD_model_",
+      model.no,
+      ".RDS"
+    )
+  )
+
+
+
+
+
+saveRDS(spp.table,
+        paste0(output.folder, "SPCD_stanoutput_joint_v3/spp.table.rds"))
+spp.table <-
+  readRDS(paste0(output.folder, "SPCD_stanoutput_joint_v3/spp.table.rds"))
 
 
 # set the species order using the factors:
@@ -1451,7 +1559,7 @@ if(model.no >=6){
   plot.main.interaction.effect <- function(species, covar){
     marge <- marginal_response_df %>% filter(Species %in% species)
     inter <- interaction_response_df %>% filter(Species %in% species)
-    ymax.spp <- max(max(1-inter$ci.hi.90), 1- marge$ci.hi)
+    ymax.spp <- max(max(1-inter$ci.lo.10), 1- marge$ci.lo)#+max(max(1-inter$ci.lo.10), 1- marge$ci.lo)*0.1
     
     if(!covar %in% interaction_response_df$covariate){
       df.species <- marginal_response_df %>% filter(Species %in% species)%>%
@@ -1613,8 +1721,73 @@ if(model.no >=6){
   
   lapply(unique(marginal_response_df$Species), plt.all.spp.conditional)  
   
-  # now get the top responses for a few species:
+  # now get the top responses for all the species:
+  species <- spec
   
+  plot_top_6 <- function(spec){
+    marge <- marginal_response_df %>% filter(Species %in% species)%>%
+      filter(pred.type %in% "Main Effects")%>%
+      mutate(hi.mort = 1-ci.hi)%>%
+      select(Covariate, hi.mort)%>% arrange(hi.mort)
+    inter <- interaction_response_df %>% filter(Species %in% species)%>%
+      mutate(hi.mort = 1-ci.hi.90)%>%
+      select(covariate, hi.mort)%>% arrange(hi.mort)%>%
+      rename("Covariate" = "covariate")
+    df.highest <- rbind(marge, inter)%>% group_by(Covariate)%>% 
+      summarise(high = max(hi.mort))%>% arrange(desc(high))
+    
+    
+    # get the top six:
+    top.6 <- df.highest %>% slice(1:6)
+    # call function to create plots for each of the top 6
+    spp.plt.list <- list()
+    for(h in 1:6){
+      spp.plt.list[[h]] <- plot.main.interaction.effect(species = spec, 
+                                                        covar = top.6$Covariate[h])
+    }
+    
+    
+    main.effects <- plot_grid(plotlist = spp.plt.list, align = "hv")
+    save_plot(paste0(output.folder,"images/",spec,"_top_6_conditionals.png"), 
+              main.effects, base_width = 14, base_height = 8) 
+    save_plot(paste0(output.folder,"images/",spec,"_top_6_conditionals.svg"), 
+              main.effects, base_width = 14, base_height = 8) 
+    
+  }
+  lapply(unique(marginal_response_df$Species), plot_top_6)  
+  
+  
+  plot_top_9 <- function(spec){
+    marge <- marginal_response_df %>% filter(Species %in% species)%>%
+      filter(pred.type %in% "Main Effects")%>%
+      mutate(hi.mort = 1-ci.hi)%>%
+      select(Covariate, pred.type, hi.mort)%>% arrange(desc(hi.mort))
+    inter <- interaction_response_df %>% filter(Species %in% species)%>%
+      mutate(hi.mort = 1-ci.hi.90)%>%
+      select(covariate, pred.type, hi.mort)%>% arrange(desc(hi.mort))%>%
+      rename("Covariate" = "covariate")
+    df.highest <- rbind(marge, inter)%>% group_by(Covariate, pred.type)%>% 
+      summarise(high = max(hi.mort))%>% arrange(desc(high))
+    
+    
+    # get the top six:
+    top.6 <- df.highest %>% group_by(pred.type) %>% slice(1:3)
+    # call function to create plots for each of the top 6
+    spp.plt.list <- list()
+    for(h in 1:9){
+      spp.plt.list[[h]] <- plot.main.interaction.effect(species = spec, 
+                                                        covar = top.6$Covariate[h])
+    }
+    
+    
+    main.effects <- plot_grid(plotlist = spp.plt.list, align = "hv")
+    save_plot(paste0(output.folder,"images/",spec,"_top_8_conditionals.png"), 
+              main.effects, base_width = 14, base_height = 8) 
+    save_plot(paste0(output.folder,"images/",spec,"_top_8_conditionals.svg"), 
+              main.effects, base_width = 14, base_height = 8) 
+    
+  }
+  lapply(unique(marginal_response_df$Species), plot_top_9)  
   
   
 }
