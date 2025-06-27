@@ -4,6 +4,7 @@
 library(rstan)
 library(tidyverse)
 library(posterior)
+library(cowplot)
 ################################################################################
 # Read in mortality data for 17 species
 ################################################################################
@@ -1791,8 +1792,720 @@ if(model.no >=6){
   
   
 }
-#}
 
+
+
+### Plotting marginal responses by the species groups----
+# set up the output directory to read the marginal responses from
+output.dir <- "SPCD_stanoutput_joint_v3/"
+all_marginal_response_df <- readRDS(paste0(output.dir, "all_marginal_responses.RDS"))
+interaction_response_df <-readRDS(paste0(output.dir, "interaction_responses.RDS"))
+
+
+# set up groups of species to look at:
+spruce.fir <- c("balsam fir", "red spruce",  "northern white-cedar")
+mixed <- c("American beech", "eastern hemlock", "yellow birch")
+spongy.susceptible <- c("chestnut oak", "white oak", "hickory", "northern red oak", "paper birch")
+spongy.immune <- c("white ash", "yellow-poplar", "black cherry")
+spongy.resist <- c("sugar maple", "red maple", "eastern white pine")
+
+
+#ymax.spp <- 0.05
+
+
+# covar = unique(marginal_response_df$Covariate)[32]
+# interaction.terms <- unique(interaction_response_df$Covariate)
+# species.group <- spruce.fir
+
+plot_main_region_effects<- function(species.group, covar, ymax.spp){
+  
+  
+  
+  if(! covar %in% interaction.terms){  
+    
+    df.species <- all_marginal_response_df %>% filter(Species %in%  species.group & Covariate %in% covar)
+    strip.fill <- as.character(color.pred.class.2[unique(df.species$predictor.class2)])
+    
+    
+    
+    p1 <-  ggplot(df.species , aes(x = Value, y = 1-mean, color = Species)) +
+      geom_line(size = 1) +
+      geom_ribbon(aes(ymin = 1-ci.lo, ymax = 1-ci.hi, fill = Species), alpha = 0.2, color = NA) +
+      facet_wrap(~Predictor) +
+      labs(
+        x = paste("Scaled", df.species$predictor.class2),
+        y = "Annual Probability of Mortality",
+        #title = "Effect of Predictors on Probability of Mortality"
+      ) +
+      species_color + species_fill+
+      #var.part.fill + var.part.color+
+      theme_bw(base_size = 14)+theme(panel.grid = element_blank(), 
+                                     legend.key.size = unit(1, "cm"), 
+                                     legend.position = "none", 
+                                     strip.background = element_rect(fill = strip.fill), 
+                                     strip.text = element_text(color = "white")
+      )+coord_cartesian(ylim = c(0, ymax.spp))
+    
+    
+  }else{
+    
+    df.species <- interaction_response_df %>% filter(Species %in%  species.group & Covariate %in% covar)
+    
+    
+    df.species$p2.rank <- factor(df.species$p2.rank, levels = c("high", "median", "low"))
+    strip.fill <- as.character(color.pred.class.2[unique(df.species$predictor.class2)])
+    pred.name <-  marginal_response_df %>% filter(Covariate %in% unique(df.species$Pred.1))%>% select(Predictor)%>% distinct()
+    
+    if(unique(df.species$Pred.2) %in% "DIA_DIFF_scaled"){
+      
+      p1 <-  ggplot(data = df.species) +
+        geom_line(aes(x = p1.value, y = 1-mean, color = Species, group = interaction(Species, p2.rank), linetype = p2.rank), size = 1) +
+        geom_ribbon(aes(x = p1.value, ymin = 1-ci.lo.10, ymax = 1-ci.hi.90, fill = Species, group = interaction(Species, p2.rank)), color = NA, alpha = 0.25) +
+        #facet_grid(cols = vars(predictor.class2), rows = vars(Predictor)) +
+        facet_wrap(~Predictor)+
+        labs(
+          x = paste("Scaled", pred.name$Predictor),
+          y = "Annual Probability of Mortality",
+          #title = "Effect of Predictors on Probability of Mortality"
+        ) + scale_linetype_manual(values = c("low"= "dotted" ,
+                                             "median" = "dashed",
+                                             "high"= "solid" ), 
+                                  name = expression(Delta ~ "Diameter"))+
+        species_color + species_fill+
+        # scale_fill_manual(values = c("low"="#a1dab4" ,
+        #                              "median" = "#41b6c4",
+        #                              "high"= "#225ea8" ), 
+        #                   name = expression(Delta ~ "Diameter"))+
+        
+        #species_fill + species_color + 
+        #named_species_linetype +
+        theme_bw(base_size = 14)+theme(panel.grid = element_blank(), 
+                                       legend.key.size = unit(1, "cm"), 
+                                       strip.background = element_rect(fill = strip.fill)
+        )+coord_cartesian(ylim = c(0, ymax.spp))
+      
+      
+    }else{
+      
+      p1 <-  ggplot(data = df.species) +
+        geom_line(aes(x = p1.value, y = 1-mean, color = Species, group = interaction(Species, p2.rank), linetype = p2.rank, size = p2.rank)) +
+        geom_ribbon(aes(x = p1.value, ymin = 1-ci.lo.10, ymax = 1-ci.hi.90, fill = Species, group = interaction(Species, p2.rank)), color = NA, alpha = 0.25) +
+        #facet_grid(cols = vars(predictor.class2), rows = vars(Predictor)) +
+        facet_wrap(~Predictor)+
+        labs(
+          x = paste("Scaled", pred.name$Predictor),
+          y = "Annual Probability of Mortality",
+          #title = "Effect of Predictors on Probability of Mortality"
+        ) + 
+        species_color + species_fill+
+        scale_size_manual(values = c("low"=0.25 ,
+                                     "median" = 1.2,
+                                     "high"= 2.2 ), 
+                          name = "Diameter", 
+                          labels = c("low" = "small", 
+                                     "median" = "medium", 
+                                     "high" = "large"))+
+        scale_linetype_manual(values = c("low"="solid" ,
+                                         "median" = "dashed",
+                                         "high"= "longdash" ), 
+                              name = "Diameter", 
+                              labels = c("low" = "small", 
+                                         "median" = "medium", 
+                                         "high" = "large"))+
+        
+        
+        theme_bw(base_size = 14)+theme(panel.grid = element_blank(), 
+                                       legend.key.size = unit(1, "cm"), 
+                                       strip.background = element_rect(fill = strip.fill)
+        )+coord_cartesian(ylim = c(0, ymax.spp))
+      
+      
+      
+      
+      
+      
+    }
+  }
+  return(p1)
+}
+
+
+
+
+plot_main_region_effects(species.group = spruce.fir, covar = unique(marginal_response_df$Covariate)[32] , ymax.spp = 0.05)
+region.plt.list <-list()
+for(h in 1:12){
+  region.plt.list[[h]] <- plot_main_region_effects(species.group = spruce.fir, 
+                                                   covar = unique(marginal_response_df$Covariate)[h], 
+                                                   ymax.spp = 0.05)
+}
+
+
+main.effects.spruce.fir <- plot_grid(plotlist = region.plt.list, align = "hv")
+save_plot(paste0(output.folder,"images/spruce.fir_main_effects_conditionals.png"), 
+          main.effects.spruce.fir, base_width = 12, base_height = 12) 
+save_plot(paste0(output.folder,"images/spruce.fir_main_effects_conditionals.svg"), 
+          main.effects.spruce.fir, base_width = 12, base_height = 12) 
+
+# interaction effects:
+spp.plt.int.list <- list()
+for(h in 13:33){
+  spp.plt.int.list[[h-12]] <- plot_main_region_effects(species.group = spruce.fir, 
+                                                       covar = unique(marginal_response_df$Covariate)[h], 
+                                                       ymax.spp = 0.05)
+}
+
+
+int.effects <- plot_grid(plotlist =spp.plt.int.list , align = "hv")
+save_plot(paste0(output.folder,"images/spruce.fir_interaction_conditionals.png"), 
+          int.effects, base_width = 24, base_height = 24) 
+
+save_plot(paste0(output.folder,"images/spruce.fir_interaction_conditionals.svg"), 
+          int.effects, base_width = 24, base_height = 24) 
+
+
+# make a combined good figure for spruce fir with the key variables:
+unique(all_marginal_response_df$Covariate)[1]
+
+spruce.fir.covar <- c("DIA_DIFF_scaled", 
+                      "DIA_scaled", 
+                      "BAL.scaled", 
+                      
+                      "damage.scaled",
+                      "MATmax.scaled",
+                      "Ndep.scaled", 
+                      "DIA_scaled_growth.int",
+                      "BAL.scaled_growth.int",
+                      
+                      "Ndep.scaled_DIA.int",
+                      "damage.scaled_DIA.int",
+                      
+                      "tmax.anom_DIA.int", 
+                      "MATmax.scaled_DIA.int"
+)
+
+
+#important spruce fir effects
+spp.plt.int.list <- list()
+for(h in 1:length(spruce.fir.covar)){
+  spp.plt.int.list[[h]] <- plot_main_region_effects(species.group = spruce.fir, 
+                                                    covar = spruce.fir.covar[h], 
+                                                    ymax.spp = 0.05)
+}
+
+
+# make separate legends
+dia.diff.legend <- get_legend(spp.plt.int.list[[7]]+scale_color_discrete(guide = "none")+scale_fill_discrete(guide = "none")+theme_bw(base_size = 18)+ theme(legend.key.width = unit(2,"cm")))
+diameter.legend <- get_legend(spp.plt.int.list[[10]]+scale_color_discrete(guide = "none")+scale_fill_discrete(guide = "none")+theme_bw(base_size = 18)+ theme(legend.key.width = unit(2,"cm")))
+species.legend <- get_legend(spp.plt.int.list[[7]]+scale_linetype_discrete(guide = "none")+scale_size_discrete(guide = "none")+theme_bw(base_size = 18)+ theme(legend.key.width = unit(2,"cm")))
+
+
+
+
+int.effects <- plot_grid(plot_grid(spp.plt.int.list[[1]],
+                                   spp.plt.int.list[[2]],
+                                   spp.plt.int.list[[3]],
+                                   spp.plt.int.list[[4]],
+                                   spp.plt.int.list[[5]], 
+                                   spp.plt.int.list[[6]], ncol = 6), 
+                         plot_grid(spp.plt.int.list[[7]]+theme(legend.position = "none"),
+                                   spp.plt.int.list[[8]]+theme(legend.position = "none"),
+                                   spp.plt.int.list[[9]]+theme(legend.position = "none"),
+                                   spp.plt.int.list[[10]]+theme(legend.position = "none"),
+                                   spp.plt.int.list[[11]]+theme(legend.position = "none"), 
+                                   spp.plt.int.list[[12]]+theme(legend.position = "none"), align = "hv", ncol = 6),
+                         plot_grid(species.legend, dia.diff.legend, diameter.legend, ncol = 3),
+                         rel_heights = c(1,1,0.3),
+                         nrow = 3)
+
+
+save_plot(paste0(output.folder,"images/spruce.fir_dominant_marginal_variance_effects.png"), 
+          int.effects, base_width = 16, base_height = 10) 
+
+save_plot(paste0(output.folder,"images/spruce.fir_dominant_marginal_variance_effects.svg"), 
+          int.effects, base_width = 24, base_height = 24) 
+
+# plot up the spongymonth susceptible:
+region.plt.list <-list()
+for(h in 1:12){
+  region.plt.list[[h]] <- plot_main_region_effects(species.group = spongy.susceptible, 
+                                                   covar = unique(marginal_response_df$Covariate)[h], 
+                                                   ymax.spp = 0.01)
+}
+
+
+main.effects.spongy.susceptible <- plot_grid(plotlist = region.plt.list, align = "hv")
+save_plot(paste0(output.folder,"images/spongy.susceptible_main_effects_conditionals.png"), 
+          main.effects.spongy.susceptible, base_width = 12, base_height = 12) 
+save_plot(paste0(output.folder,"images/spongy.susceptible_main_effects_conditionals.svg"), 
+          main.effects.spongy.susceptible, base_width = 12, base_height = 12) 
+
+spp.plt.int.list <- list()
+for(h in 13:33){
+  spp.plt.int.list[[h-12]] <- plot_main_region_effects(species.group = spongy.susceptible, 
+                                                       covar = unique(marginal_response_df$Covariate)[h], 
+                                                       ymax.spp = 0.025)
+}
+
+
+int.effects <- plot_grid(plotlist =spp.plt.int.list , align = "hv")
+save_plot(paste0(output.folder,"images/spongy.susceptible_interaction_conditionals.png"), 
+          int.effects, base_width = 24, base_height = 24) 
+
+save_plot(paste0(output.folder,"images/spongy.susceptible_interaction_conditionals.svg"), 
+          int.effects, base_width = 24, base_height = 24) 
+
+
+
+# make a combined good figure for spongy moth susceptible with the key variables:
+unique(all_marginal_response_df$Covariate)
+
+# list of importatn covariates base on lookeing at the plots
+spongy.susceptible.covar <- c(
+  "DIA_DIFF_scaled", 
+  "DIA_scaled", 
+  
+  "ba.scaled", 
+  "damage.scaled",
+  "slope.scaled",
+  
+  "tmax.anom",
+  "MATmax.scaled",
+  "MAP.scaled",
+  
+  "Ndep.scaled", 
+  "DIA_scaled_growth.int",
+  
+  "ba.scaled_growth.int",
+  "damage.scaled_growth.int",
+  "MATmax.scaled_growth.int",
+  
+  "Ndep.scaled_growth.int",
+  "ba.scaled_DIA.int"
+  
+  
+  
+  
+)
+
+
+#important spruce fir effects
+spp.plt.int.list <- list()
+for(h in 1:length(spongy.susceptible.covar)){
+  spp.plt.int.list[[h]] <- plot_main_region_effects(species.group = spongy.susceptible, 
+                                                    covar = spongy.susceptible.covar[h], 
+                                                    ymax.spp = 0.015)
+}
+
+
+# make separate legends
+dia.diff.legend <- get_legend(spp.plt.int.list[[10]]+scale_color_discrete(guide = "none")+scale_fill_discrete(guide = "none")+theme_bw(base_size = 18)+ theme(legend.key.width = unit(2,"cm")))
+diameter.legend <- get_legend(spp.plt.int.list[[15]]+scale_color_discrete(guide = "none")+scale_fill_discrete(guide = "none")+theme_bw(base_size = 18)+ theme(legend.key.width = unit(2,"cm")))
+species.legend <- get_legend(spp.plt.int.list[[7]]+scale_linetype_discrete(guide = "none")+scale_size_discrete(guide = "none")+theme_bw(base_size = 18)+ theme(legend.key.width = unit(2,"cm")))
+
+
+
+
+int.effects <- plot_grid(
+  plot_grid(spp.plt.int.list[[1]]+theme(legend.position = "none"),
+            spp.plt.int.list[[2]]+theme(legend.position = "none"),
+            spp.plt.int.list[[3]]+theme(legend.position = "none"),
+            spp.plt.int.list[[4]]+theme(legend.position = "none"),
+            spp.plt.int.list[[5]]+theme(legend.position = "none"),
+            ncol = 5, align = "hv"),
+  
+  plot_grid(spp.plt.int.list[[6]]+theme(legend.position = "none"),
+            spp.plt.int.list[[7]]+theme(legend.position = "none"),
+            spp.plt.int.list[[8]]+theme(legend.position = "none"),
+            spp.plt.int.list[[9]]+theme(legend.position = "none"),
+            spp.plt.int.list[[10]]+theme(legend.position = "none"),
+            ncol = 5, align = "hv"),
+  
+  plot_grid(
+    spp.plt.int.list[[11]]+theme(legend.position = "none"),
+    spp.plt.int.list[[12]]+theme(legend.position = "none"), 
+    spp.plt.int.list[[13]]+theme(legend.position = "none"), 
+    spp.plt.int.list[[14]]+theme(legend.position = "none"),
+    spp.plt.int.list[[15]]+theme(legend.position = "none"),
+    ncol = 5, align = "hv"),
+  
+  plot_grid(species.legend, dia.diff.legend, diameter.legend, ncol = 3),
+  rel_heights = c(1,1,1,0.3),
+  nrow = 4)
+
+
+save_plot(paste0(output.folder,"images/spongy.susceptible_dominant_marginal_variance_effects.png"), 
+          int.effects, base_width = 16, base_height = 15) 
+
+save_plot(paste0(output.folder,"images/spongy.susceptible_dominant_marginal_variance_effects.svg"), 
+          int.effects,  base_width = 14, base_height = 15) 
+
+
+
+# plot up the spongy immune
+region.plt.list <-list()
+for(h in 1:12){
+  region.plt.list[[h]] <- plot_main_region_effects(species.group = spongy.immune, 
+                                                   covar = unique(marginal_response_df$Covariate)[h], 
+                                                   ymax.spp = 0.005)
+}
+
+
+main.effects.spongy.immune <- plot_grid(plotlist = region.plt.list, align = "hv")
+save_plot(paste0(output.folder,"images/spongy.immune_main_effects_conditionals.png"), 
+          main.effects.spongy.immune, base_width = 12, base_height = 12) 
+save_plot(paste0(output.folder,"images/spongy.immune_main_effects_conditionals.svg"), 
+          main.effects.spongy.immune, base_width = 12, base_height = 12) 
+
+spp.plt.int.list <- list()
+for(h in 13:33){
+  spp.plt.int.list[[h-12]] <- plot_main_region_effects(species.group = spongy.immune, 
+                                                       covar = unique(marginal_response_df$Covariate)[h], 
+                                                       ymax.spp = 0.005)
+}
+
+
+int.effects <- plot_grid(plotlist =spp.plt.int.list , align = "hv")
+save_plot(paste0(output.folder,"images/spongy.immune_interaction_conditionals.png"), 
+          int.effects, base_width = 24, base_height = 24) 
+
+save_plot(paste0(output.folder,"images/spongy.immune_interaction_conditionals.svg"), 
+          int.effects, base_width = 24, base_height = 24) 
+
+
+# make a combined good figure for spongy moth immune with the key variables:
+unique(all_marginal_response_df$Covariate)
+
+# list of importatn covariates base on lookeing at the plots
+spongy.immune.covar <- c(
+  "DIA_DIFF_scaled", 
+  "DIA_scaled", 
+  
+  "ba.scaled", 
+  #"damage.scaled",
+  #"slope.scaled",
+  
+  #"tmax.anom",
+  "MATmax.scaled",
+  #"MAP.scaled",
+  
+  "Ndep.scaled", 
+  
+  "DIA_scaled_growth.int",
+  
+  "ba.scaled_growth.int",
+  "damage.scaled_growth.int",
+  "MATmax.scaled_growth.int",
+  "tmax.anom_growth.int",
+  "MAP.scaled_growth.int", 
+  #"ppt.anom_growth.int",
+  
+  "Ndep.scaled_growth.int"
+  
+  
+  
+  
+)
+
+
+#important spruce fir effects
+spp.plt.int.list <- list()
+for(h in 1:length(spongy.immune.covar)){
+  spp.plt.int.list[[h]] <- plot_main_region_effects(species.group = spongy.immune, 
+                                                    covar = spongy.immune.covar[h], 
+                                                    ymax.spp = 0.005)
+}
+
+
+# make separate legends
+dia.diff.legend <- get_legend(spp.plt.int.list[[10]]+scale_color_discrete(guide = "none")+scale_fill_discrete(guide = "none")+theme_bw(base_size = 18)+ theme(legend.key.width = unit(2,"cm")))
+#diameter.legend <- get_legend(spp.plt.int.list[[15]]+scale_color_discrete(guide = "none")+scale_fill_discrete(guide = "none")+theme_bw(base_size = 18)+ theme(legend.key.width = unit(2,"cm")))
+species.legend <- get_legend(spp.plt.int.list[[7]]+scale_linetype_discrete(guide = "none")+scale_size_discrete(guide = "none")+theme_bw(base_size = 18)+ theme(legend.key.width = unit(2,"cm")))
+
+
+
+
+int.effects <- plot_grid(
+  plot_grid(spp.plt.int.list[[1]]+theme(legend.position = "none"),
+            spp.plt.int.list[[2]]+theme(legend.position = "none"),
+            spp.plt.int.list[[3]]+theme(legend.position = "none"),
+            spp.plt.int.list[[4]]+theme(legend.position = "none"),
+            #spp.plt.int.list[[5]]+theme(legend.position = "none"),
+            ncol = 4, align = "hv"),
+  
+  plot_grid(spp.plt.int.list[[5]]+theme(legend.position = "none"),
+            spp.plt.int.list[[6]]+theme(legend.position = "none"),
+            spp.plt.int.list[[7]]+theme(legend.position = "none"),
+            spp.plt.int.list[[8]]+theme(legend.position = "none"),
+            #spp.plt.int.list[[10]]+theme(legend.position = "none"),
+            ncol = 4, align = "hv"),
+  
+  plot_grid(
+    spp.plt.int.list[[9]]+theme(legend.position = "none"),
+    spp.plt.int.list[[10]]+theme(legend.position = "none"), 
+    spp.plt.int.list[[11]]+theme(legend.position = "none"), 
+    spp.plt.int.list[[12]]+theme(legend.position = "none"),
+    #spp.plt.int.list[[15]]+theme(legend.position = "none"),
+    ncol = 4, align = "hv"),
+  
+  plot_grid(species.legend, dia.diff.legend, ncol = 2),
+  #diameter.legend, ncol = 3),
+  rel_heights = c(1,1,1,0.3),
+  nrow = 4)
+
+
+save_plot(paste0(output.folder,"images/spongy.immune_dominant_marginal_variance_effects.png"), 
+          int.effects, base_width = 14, base_height = 15) 
+
+save_plot(paste0(output.folder,"images/spongy.immune_dominant_marginal_variance_effects.svg"), 
+          int.effects,  base_width = 14, base_height = 15) 
+
+
+
+
+# plot up the spongy resistant
+region.plt.list <-list()
+for(h in 1:12){
+  region.plt.list[[h]] <- plot_main_region_effects(species.group = spongy.resist, 
+                                                   covar = unique(marginal_response_df$Covariate)[h], 
+                                                   ymax.spp = 0.005)
+}
+
+
+main.effects.spongy.resist <- plot_grid(plotlist = region.plt.list, align = "hv")
+save_plot(paste0(output.folder,"images/spongy.resist_main_effects_conditionals.png"), 
+          main.effects.spongy.resist, base_width = 12, base_height = 12) 
+save_plot(paste0(output.folder,"images/spongy.resist_main_effects_conditionals.svg"), 
+          main.effects.spongy.resist, base_width = 12, base_height = 12) 
+
+
+spp.plt.int.list <- list()
+for(h in 13:33){
+  spp.plt.int.list[[h-12]] <- plot_main_region_effects(species.group = spongy.resist, 
+                                                       covar = unique(marginal_response_df$Covariate)[h], 
+                                                       ymax.spp = 0.005)
+}
+
+
+int.effects <- plot_grid(plotlist =spp.plt.int.list , align = "hv")
+save_plot(paste0(output.folder,"images/spongy.resist_interaction_conditionals.png"), 
+          int.effects, base_width = 24, base_height = 24) 
+
+save_plot(paste0(output.folder,"images/spongy.resist_interaction_conditionals.svg"), 
+          int.effects, base_width = 24, base_height = 24) 
+
+
+# make a combined good figure for spongy moth immune with the key variables:
+unique(all_marginal_response_df$Covariate)
+
+# list of importatn covariates base on lookeing at the plots
+spongy.resist.covar <- c(
+  "DIA_DIFF_scaled", 
+  "DIA_scaled", 
+  
+  "ba.scaled", 
+  "damage.scaled",
+  
+  "MATmax.scaled",
+  "tmax.anom",
+  
+  #"Ndep.scaled", 
+  
+  "DIA_scaled_growth.int",
+  "ba.scaled_growth.int",
+  
+  "damage.scaled_growth.int",
+  "MATmax.scaled_growth.int",
+  
+  "tmax.anom_growth.int",
+  "MAP.scaled_growth.int", 
+  
+  "Ndep.scaled_growth.int", 
+  "slope.scaled_growth.int"
+  
+  
+  
+  
+)
+
+
+#important spruce fir effects
+spp.plt.int.list <- list()
+for(h in 1:length(spongy.resist.covar)){
+  spp.plt.int.list[[h]] <- plot_main_region_effects(species.group = spongy.resist, 
+                                                    covar = spongy.resist.covar[h], 
+                                                    ymax.spp = 0.005)
+}
+
+
+# make separate legends
+dia.diff.legend <- get_legend(spp.plt.int.list[[10]]+scale_color_discrete(guide = "none")+scale_fill_discrete(guide = "none")+theme_bw(base_size = 18)+ theme(legend.key.width = unit(2,"cm")))
+#diameter.legend <- get_legend(spp.plt.int.list[[15]]+scale_color_discrete(guide = "none")+scale_fill_discrete(guide = "none")+theme_bw(base_size = 18)+ theme(legend.key.width = unit(2,"cm")))
+species.legend <- get_legend(spp.plt.int.list[[7]]+scale_linetype_discrete(guide = "none")+scale_size_discrete(guide = "none")+theme_bw(base_size = 18)+ theme(legend.key.width = unit(2,"cm")))
+
+
+
+
+int.effects <- plot_grid(
+  plot_grid(spp.plt.int.list[[1]]+theme(legend.position = "none"),
+            spp.plt.int.list[[2]]+theme(legend.position = "none"),
+            spp.plt.int.list[[3]]+theme(legend.position = "none"),
+            spp.plt.int.list[[4]]+theme(legend.position = "none"),
+            #spp.plt.int.list[[5]]+theme(legend.position = "none"),
+            ncol = 4, align = "hv"),
+  
+  plot_grid(spp.plt.int.list[[5]]+theme(legend.position = "none"),
+            spp.plt.int.list[[6]]+theme(legend.position = "none"),
+            spp.plt.int.list[[7]]+theme(legend.position = "none"),
+            spp.plt.int.list[[8]]+theme(legend.position = "none"),
+            #spp.plt.int.list[[10]]+theme(legend.position = "none"),
+            ncol = 4, align = "hv"),
+  
+  plot_grid(
+    spp.plt.int.list[[9]]+theme(legend.position = "none"),
+    spp.plt.int.list[[10]]+theme(legend.position = "none"), 
+    spp.plt.int.list[[11]]+theme(legend.position = "none"), 
+    spp.plt.int.list[[12]]+theme(legend.position = "none"),
+    #spp.plt.int.list[[15]]+theme(legend.position = "none"),
+    ncol = 4, align = "hv"),
+  
+  plot_grid(species.legend, dia.diff.legend, ncol = 2),
+  #diameter.legend, ncol = 3),
+  rel_heights = c(1,1,1,0.3),
+  nrow = 4)
+
+
+save_plot(paste0(output.folder,"images/spongy.resist_dominant_marginal_variance_effects.png"), 
+          int.effects, base_width = 14, base_height = 15) 
+
+save_plot(paste0(output.folder,"images/spongy.resist_dominant_marginal_variance_effects.svg"), 
+          int.effects,  base_width = 14, base_height = 15) 
+
+
+
+# plot up the mixed
+region.plt.list <-list()
+for(h in 1:12){
+  region.plt.list[[h]] <- plot_main_region_effects(species.group = mixed, 
+                                                   covar = unique(marginal_response_df$Covariate)[h], 
+                                                   ymax.spp = 0.01)
+}
+
+
+main.effects.mixed <- plot_grid(plotlist = region.plt.list, align = "hv")
+save_plot(paste0(output.folder,"images/mixed_main_effects_conditionals.png"), 
+          main.effects.mixed, base_width = 12, base_height = 12) 
+save_plot(paste0(output.folder,"images/mixed_main_effects_conditionals.svg"), 
+          main.effects.mixed, base_width = 12, base_height = 12) 
+
+spp.plt.int.list <- list()
+for(h in 13:33){
+  spp.plt.int.list[[h-12]] <- plot_main_region_effects(species.group = mixed, 
+                                                       covar = unique(marginal_response_df$Covariate)[h], 
+                                                       ymax.spp = 0.01)
+}
+
+
+int.effects <- plot_grid(plotlist =spp.plt.int.list , align = "hv")
+save_plot(paste0(output.folder,"images/mixed_interaction_conditionals.png"), 
+          int.effects, base_width = 24, base_height = 24) 
+
+save_plot(paste0(output.folder,"images/mixed_interaction_conditionals.svg"), 
+          int.effects, base_width = 24, base_height = 24) 
+
+
+
+# make a combined good figure for beech, hemlock, and yellow birch with the key variables:
+unique(all_marginal_response_df$Covariate)
+# list of important covariates base on looking at the plots
+mixed.covar <- c(
+  "DIA_DIFF_scaled", 
+  "DIA_scaled", 
+  
+  "ba.scaled", 
+  "damage.scaled",
+  
+  "MATmax.scaled",
+  "tmax.anom",
+  
+  #"Ndep.scaled", 
+  
+  "DIA_scaled_growth.int",
+  "ba.scaled_growth.int",
+  
+  "damage.scaled_growth.int",
+  "MATmax.scaled_growth.int",
+  
+  "tmax.anom_growth.int",
+  "Ndep.scaled_growth.int", 
+  "slope.scaled_growth.int",
+  
+  "ba.scaled_DIA.int",
+  "MATmax.scaled_DIA.int"
+  
+  
+  
+  
+  
+  
+)
+
+
+#important mixed species
+spp.plt.int.list <- list()
+for(h in 1:length(mixed.covar)){
+  spp.plt.int.list[[h]] <- plot_main_region_effects(species.group = mixed, 
+                                                    covar = mixed.covar[h], 
+                                                    ymax.spp = 0.025)
+}
+
+
+# make separate legends
+dia.diff.legend <- get_legend(spp.plt.int.list[[10]]+scale_color_discrete(guide = "none")+scale_fill_discrete(guide = "none")+theme_bw(base_size = 18)+ theme(legend.key.width = unit(2,"cm")))
+diameter.legend <- get_legend(spp.plt.int.list[[15]]+scale_color_discrete(guide = "none")+scale_fill_discrete(guide = "none")+theme_bw(base_size = 18)+ theme(legend.key.width = unit(2,"cm")))
+species.legend <- get_legend(spp.plt.int.list[[7]]+scale_linetype_discrete(guide = "none")+scale_size_discrete(guide = "none")+theme_bw(base_size = 18)+ theme(legend.key.width = unit(2,"cm")))
+
+
+
+
+int.effects <- plot_grid(
+  plot_grid(spp.plt.int.list[[1]]+theme(legend.position = "none"),
+            spp.plt.int.list[[2]]+theme(legend.position = "none"),
+            spp.plt.int.list[[3]]+theme(legend.position = "none"),
+            spp.plt.int.list[[4]]+theme(legend.position = "none"),
+            spp.plt.int.list[[5]]+theme(legend.position = "none"),
+            ncol = 5, align = "hv"),
+  
+  plot_grid(spp.plt.int.list[[6]]+theme(legend.position = "none"),
+            spp.plt.int.list[[7]]+theme(legend.position = "none"),
+            spp.plt.int.list[[8]]+theme(legend.position = "none"),
+            spp.plt.int.list[[9]]+theme(legend.position = "none"),
+            spp.plt.int.list[[10]]+theme(legend.position = "none"),
+            ncol = 5, align = "hv"),
+  
+  plot_grid(
+    spp.plt.int.list[[11]]+theme(legend.position = "none"),
+    spp.plt.int.list[[12]]+theme(legend.position = "none"), 
+    spp.plt.int.list[[13]]+theme(legend.position = "none"), 
+    spp.plt.int.list[[14]]+theme(legend.position = "none"),
+    spp.plt.int.list[[15]]+theme(legend.position = "none"),
+    ncol = 5, align = "hv"),
+  
+  plot_grid(species.legend, dia.diff.legend, 
+            diameter.legend, ncol = 3),
+  rel_heights = c(1,1,1,0.3),
+  nrow = 4)
+
+
+save_plot(paste0(output.folder,"images/mixed_dominant_marginal_variance_effects.png"), 
+          int.effects, base_width = 16, base_height = 15) 
+
+save_plot(paste0(output.folder,"images/mixed_dominant_marginal_variance_effects.svg"), 
+          int.effects,  base_width = 16, base_height = 15) 
+
+
+
+#### AUC scores ----
 # read in all of the AUC outputs for each model and make one big plot and one big summary file:
 AUC.oos.list <- AUC.is.list <- list()
 for(model.no in 1:9){
@@ -1975,8 +2688,3 @@ system(paste(
 ))
 
 
-# file.rename(
-#   "joint_model_summary_v3",
-#   "SPCD_stanoutput_joint_v3"
-#   
-# )
