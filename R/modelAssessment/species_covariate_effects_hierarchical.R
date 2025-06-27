@@ -1974,10 +1974,15 @@ spruce.fir.covar <- c("DIA_DIFF_scaled",
                       "damage.scaled",
                       "MATmax.scaled",
                       "Ndep.scaled", 
+                      
                       "DIA_scaled_growth.int",
                       "BAL.scaled_growth.int",
+                      "MATmax.scaled_growth.int",
                       
+                      "damage.scaled_growth.int",
+                      "Ndep.scaled_growth.int",
                       "Ndep.scaled_DIA.int",
+                      
                       "damage.scaled_DIA.int",
                       
                       "tmax.anom_DIA.int", 
@@ -1990,40 +1995,51 @@ spp.plt.int.list <- list()
 for(h in 1:length(spruce.fir.covar)){
   spp.plt.int.list[[h]] <- plot_main_region_effects(species.group = spruce.fir, 
                                                     covar = spruce.fir.covar[h], 
-                                                    ymax.spp = 0.05)
+                                                    ymax.spp = 0.006)
 }
 
 
 # make separate legends
 dia.diff.legend <- get_legend(spp.plt.int.list[[7]]+scale_color_discrete(guide = "none")+scale_fill_discrete(guide = "none")+theme_bw(base_size = 18)+ theme(legend.key.width = unit(2,"cm")))
-diameter.legend <- get_legend(spp.plt.int.list[[10]]+scale_color_discrete(guide = "none")+scale_fill_discrete(guide = "none")+theme_bw(base_size = 18)+ theme(legend.key.width = unit(2,"cm")))
+diameter.legend <- get_legend(spp.plt.int.list[[15]]+scale_color_discrete(guide = "none")+scale_fill_discrete(guide = "none")+theme_bw(base_size = 18)+ theme(legend.key.width = unit(2,"cm")))
 species.legend <- get_legend(spp.plt.int.list[[7]]+scale_linetype_discrete(guide = "none")+scale_size_discrete(guide = "none")+theme_bw(base_size = 18)+ theme(legend.key.width = unit(2,"cm")))
 
 
 
 
-int.effects <- plot_grid(plot_grid(spp.plt.int.list[[1]],
-                                   spp.plt.int.list[[2]],
-                                   spp.plt.int.list[[3]],
-                                   spp.plt.int.list[[4]],
-                                   spp.plt.int.list[[5]], 
-                                   spp.plt.int.list[[6]], ncol = 6), 
-                         plot_grid(spp.plt.int.list[[7]]+theme(legend.position = "none"),
-                                   spp.plt.int.list[[8]]+theme(legend.position = "none"),
-                                   spp.plt.int.list[[9]]+theme(legend.position = "none"),
-                                   spp.plt.int.list[[10]]+theme(legend.position = "none"),
-                                   spp.plt.int.list[[11]]+theme(legend.position = "none"), 
-                                   spp.plt.int.list[[12]]+theme(legend.position = "none"), align = "hv", ncol = 6),
-                         plot_grid(species.legend, dia.diff.legend, diameter.legend, ncol = 3),
-                         rel_heights = c(1,1,0.3),
-                         nrow = 3)
+int.effects <- plot_grid(
+  plot_grid(spp.plt.int.list[[1]]+theme(legend.position = "none"),
+            spp.plt.int.list[[2]]+theme(legend.position = "none"),
+            spp.plt.int.list[[3]]+theme(legend.position = "none"),
+            spp.plt.int.list[[4]]+theme(legend.position = "none"),
+            spp.plt.int.list[[5]]+theme(legend.position = "none"),
+            ncol = 5, align = "hv"),
+  
+  plot_grid(spp.plt.int.list[[6]]+theme(legend.position = "none"),
+            spp.plt.int.list[[7]]+theme(legend.position = "none"),
+            spp.plt.int.list[[8]]+theme(legend.position = "none"),
+            spp.plt.int.list[[9]]+theme(legend.position = "none"),
+            spp.plt.int.list[[10]]+theme(legend.position = "none"),
+            ncol = 5, align = "hv"),
+  
+  plot_grid(
+    spp.plt.int.list[[11]]+theme(legend.position = "none"),
+    spp.plt.int.list[[12]]+theme(legend.position = "none"), 
+    spp.plt.int.list[[13]]+theme(legend.position = "none"), 
+    spp.plt.int.list[[14]]+theme(legend.position = "none"),
+    spp.plt.int.list[[15]]+theme(legend.position = "none"),
+    ncol = 5, align = "hv"),
+  
+  plot_grid(species.legend, dia.diff.legend, diameter.legend, ncol = 3),
+  rel_heights = c(1,1,1,0.3),
+  nrow = 4)
 
 
 save_plot(paste0(output.folder,"images/spruce.fir_dominant_marginal_variance_effects.png"), 
-          int.effects, base_width = 16, base_height = 10) 
+          int.effects, base_width = 16, base_height = 15) 
 
 save_plot(paste0(output.folder,"images/spruce.fir_dominant_marginal_variance_effects.svg"), 
-          int.effects, base_width = 24, base_height = 24) 
+          int.effects, base_width = 16, base_height = 15) 
 
 # plot up the spongymonth susceptible:
 region.plt.list <-list()
