@@ -13,6 +13,8 @@ options(mc.cores = parallel::detectCores())
 
 cleaned.data <- readRDS( "data/cleaned.data.mortality.TRplots.RDS")
 
+box.dir <- "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models"
+
 # get summary of damages for later use:
 N.DAMAGE <- cleaned.data %>% group_by(SPCD, damage) %>% summarise(n.by.damage = n())
 N.DAMAGE$SPECIES <- ref_species[match(N.DAMAGE$SPCD, ref_species$SPCD),]$COMMON
@@ -32,7 +34,7 @@ nspp$cumulative.pct <- cumsum(nspp$pct)
 # link up to the species table:
 nspp$COMMON <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$COMMON
 nspp$Species <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$COMMON
-View(nspp)
+
 
 nspp[1:17,]$COMMON
 
@@ -54,9 +56,21 @@ SPGRP.df <- FIESTA::ref_codes %>% filter(VARIABLE %in% "SPGRPCD") %>% filter(VAL
 cleaned.data$SPGRPNAME <- SPGRP.df[match(cleaned.data$SPGRPCD, SPGRP.df$VALUE),]$MEANING
 
 
-View(cleaned.data %>% filter(SPCD %in% unique(nspp[1:17,]$SPCD))%>% group_by( SPGRPNAME, SPCD) %>% summarise(n()))
+#View(cleaned.data %>% filter(SPCD %in% unique(nspp[1:17,]$SPCD))%>% group_by( SPGRPNAME, SPCD) %>% summarise(n()))
 # next to 97 (red spruce), 241 (white ceder), 531 (fagus grandifolia), 
 # select species 318--red maple
+hist(cleaned.data$MAP)
+hist(cleaned.data$MATmax)
+hist(cleaned.data$BAL_old)
+hist(cleaned.data$plt_ba_sq_ft_cur)
+hist(cleaned.data$plt_ba_sq_ft_old)
+hist(cleaned.data$Ndep.remper.avg)
+hist(cleaned.data$Ndep.remper.rel.1950)
+hist(cleaned.data$Differece_per_yr)
+hist(cleaned.data$remper)
+hist(cleaned.data$ppt.anom)
+all.monthly <- readRDS("C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/data/PRISM_monthly_NE_periodic.RDS" )
+all.monthly
 
 # center and scale the covariate data
 # for covariates at the plot level, scale by the unique plots so the # of trees on the plot doesnt affect the mean and sd values:
@@ -99,12 +113,12 @@ length(unique(cleaned.data$SPCD))
 
 nspp[1:17,]$COMMON
 # save these as .RDA files so we can just load, run the model, and 
-SPCD.id <- 316#unique(cleaned.data$SPCD)[25]
+SPCD.id <- 316
 set.seed(22)
 remper.correction <- 0.5
 stan2glm.data <- function(SPCD.id, remper.correction){
   
-  load( paste0("SPCD_standata_general_full_standardized_v2/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_9.Rdata"))
+  load( paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_9.Rdata"))
   
   mod.data <- list(N = nrow(train.data), 
                    Nspp = length(unique(train.data$SPCD)),
@@ -162,7 +176,7 @@ stan2glm.data <- function(SPCD.id, remper.correction){
   
   model.name <- paste0("simple_logistic_SPCD_", SPCD.id, "remper_",remper.correction)
   
-  save(train.data, test.data, mod.data, model.name, file = paste0("SPCD_GLM_standata/SPCD_",SPCD.id,"remper_correction_",remper.correction, ".Rdata"))
+  save(train.data, test.data, mod.data, model.name, file = paste0(box.dir,"/SPCD_GLM_standata/SPCD_",SPCD.id,"remper_correction_",remper.correction, ".Rdata"))
 }
 
 # write the data for all 17 different species:
@@ -193,7 +207,7 @@ for(i in 1:length(SPCD.df$SPCD)){
     cat(paste("running glm mortality model for SPCD", SPCD.df[i,]$SPCD, common.name$COMMON, " remper correction", remper.cor.vector[j]))
     
     remper.correction <- remper.cor.vector[j]
-    load(paste0("SPCD_GLM_standata/SPCD_", SPCD.id, "remper_correction_", remper.correction, ".Rdata")) # load the species code data
+    load(paste0(box.dir,"/SPCD_GLM_standata/SPCD_", SPCD.id, "remper_correction_", remper.correction, ".Rdata")) # load the species code data
     covariate.data <- data.frame(M = mod.data$y, 
                                  annual.growth = mod.data$annual_growth, 
                                  dia.diff = mod.data$DIA.diff,
@@ -1599,8 +1613,8 @@ for(i in 1:length(SPCD.df$SPCD)){
     plot(model.diag$model.no, model.diag$AUC)
     plot(model.diag$model.no, model.diag$McFadden.Rsq)
     
-    saveRDS(model.diag, paste0("SPCD_glm_output/GLM_model_diag_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".RDS") )
-    saveRDS(Var.importance.list, paste0("SPCD_glm_output/GLM_variable_importance_list_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".RDS") )
+    saveRDS(model.diag, paste0(box.dir,"/SPCD_glm_output/GLM_model_diag_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".RDS") )
+    saveRDS(Var.importance.list, paste0(box.dir,"/SPCD_glm_output/GLM_variable_importance_list_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".RDS") )
     
     
     #--------------------------------------------------------------------------------------
@@ -1618,7 +1632,7 @@ for(i in 1:length(SPCD.df$SPCD)){
       theme(axis.text.x = element_text(angle = 45, hjust = 1))+
       ylab("Variable Importance")+xlab("")+
       ggtitle(paste0("Variable Importance, ", nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON) , " model ", AIC.best$model.no))
-    ggsave(filename = paste0("SPCD_glm_output/GLM_AIC_best_VARIMP_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 5, width = 12)
+    ggsave(filename = paste0(box.dir,"/SPCD_glm_output/GLM_AIC_best_VARIMP_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 5, width = 12)
     
     
     AIC.best$model.no
@@ -1635,7 +1649,7 @@ for(i in 1:length(SPCD.df$SPCD)){
       theme(axis.text.x = element_text(angle = 45, hjust = 1))+
       ylab("Variable Importance")+xlab("")+
       ggtitle(paste0("Variable Importance, ", nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON) , " model ", AUC.best$model.no))
-    ggsave(filename = paste0("SPCD_glm_output/GLM_AUC_best_VARIMP_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 5, width = 12)
+    ggsave(filename = paste0(box.dir,"/SPCD_glm_output/GLM_AUC_best_VARIMP_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 5, width = 12)
     
     
     
@@ -1651,7 +1665,7 @@ for(i in 1:length(SPCD.df$SPCD)){
       theme(axis.text.x = element_text(angle = 45, hjust = 1))+
       ylab("Variable Importance")+xlab("")+
       ggtitle(paste0("Variable Importance, ", nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON) , " model ", Rsq.best$model.no))
-    ggsave(filename = paste0("SPCD_glm_output/GLM_Rsq_best_VARIMP_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 5, width = 12)
+    ggsave(filename = paste0(box.dir, "/SPCD_glm_output/GLM_Rsq_best_VARIMP_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 5, width = 12)
     
     ########################################################################
     # VIF for the species covariates
@@ -1670,8 +1684,8 @@ for(i in 1:length(SPCD.df$SPCD)){
     # generate correlation plots here:
     ggcorrplot(corr, hc.order = TRUE, type = "lower",
                lab = TRUE)
-    ggsave(filename = paste0("SPCD_glm_output/GLM_Correlation_matrix", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 12, width = 12)
-    saveRDS(corr, paste0("SPCD_glm_output/GLM_Correlation_matrix_SPCD_",SPCD.id,"_predictors.rds") )
+    ggsave(filename = paste0(box.dir,"/SPCD_glm_output/GLM_Correlation_matrix", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 12, width = 12)
+    saveRDS(corr, paste0(box.dir,"/SPCD_glm_output/GLM_Correlation_matrix_SPCD_",SPCD.id,"_predictors.rds") )
   }
 }
 
@@ -1689,22 +1703,22 @@ model.diag <- do.call(rbind, model.diags)
 model.diag %>% group_by(SPCD, COMMON)|> gt()
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AUC, fill = COMMON, group = model.no))+geom_bar(stat= "identity",position = position_dodge2())#+position_dodge()
-ggsave("SPCD_glm_output/GLM_all_species_AUC.png", height = 5, width = 8)
+ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_AUC.png", height = 5, width = 8)
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = McFadden.Rsq))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
-ggsave("SPCD_glm_output/GLM_all_species_McFaddenRsq.png", height = 5, width = 8)
+ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_McFaddenRsq.png", height = 5, width = 8)
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AUC))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
-ggsave("SPCD_glm_output/GLM_all_species_AUC.png", height = 5, width = 8)
+ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_AUC.png", height = 5, width = 8)
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AIC))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
-ggsave("SPCD_glm_output/GLM_all_species_AIC.png", height = 5, width = 8)
+ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_AIC.png", height = 5, width = 8)
 
 ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, AIC,  label = as.character(model.no)))+geom_text()+facet_wrap(~SPCD, scales = "free_y")
-ggsave("SPCD_glm_output/GLM_all_species_AIC_AUC.png", height = 5, width = 8)
+ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_AIC_AUC.png", height = 5, width = 8)
 
 ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, McFadden.Rsq,  label = as.character(model.no)))+geom_text(size = 2)+facet_wrap(~SPCD, scales = "free_y")
-ggsave("SPCD_glm_output/GLM_all_species_AUC_Rsq.png", height = 5, width = 8)
+ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_AUC_Rsq.png", height = 5, width = 8)
 
 # make a table explaining the models:
 
@@ -1795,30 +1809,30 @@ glm.model.table <- data.frame(model.no = 1:length(list.mods),
 model.diag <- left_join(model.diag, glm.model.table)
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AUC, fill = COMMON, group = model.no))+geom_bar(stat= "identity",position = position_dodge2())#+position_dodge()
-ggsave("SPCD_glm_output/GLM_all_species_AUC.png", height = 5, width = 8)
+ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_AUC.png", height = 5, width = 8)
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = McFadden.Rsq, fill = model.type))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
-ggsave("SPCD_glm_output/GLM_all_species_McFaddenRsq.png", height = 5, width = 8)
+ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_McFaddenRsq.png", height = 5, width = 8)
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AUC, fill = model.type))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
-ggsave("SPCD_glm_output/GLM_all_species_AUC.png", height = 5, width = 8)
+ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_AUC.png", height = 5, width = 8)
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AIC, fill = model.type))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
-ggsave("SPCD_glm_output/GLM_all_species_AIC.png", height = 5, width = 8)
+ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_AIC.png", height = 5, width = 8)
 
 ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, AIC,  label = as.character(model.no)))+geom_text()+facet_wrap(~SPCD, scales = "free_y")
-ggsave("SPCD_glm_output/GLM_all_species_AIC_AUC.png", height = 5, width = 8)
+ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_AIC_AUC.png", height = 5, width = 8)
 
 ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, McFadden.Rsq,  label = as.character(model.no)))+geom_text(size = 2)+facet_wrap(~SPCD, scales = "free_y")
-ggsave("SPCD_glm_output/GLM_all_species_AUC_Rsq.png", height = 5, width = 8)
+ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_AUC_Rsq.png", height = 5, width = 8)
 
-write.csv(glm.model.table, "GLM_table.csv", quote = TRUE)
+write.csv(glm.model.table, box.dir, "/SPCD_glm_output/GLM_table.csv", quote = TRUE)
 
 # get all of the correlated variables for all species--are there common ones that we should eliminate
 inter.cov.corrs <- list()
 for (i in 1:17){
   #read in correlation matrix
-  spcd.correlations <- readRDS(paste0("SPCD_glm_output/GLM_Correlation_matrix_SPCD_",nspp[i,]$SPCD,"_predictors.rds"))
+  spcd.correlations <- readRDS(paste0(box.dir, "/SPCD_glm_output/GLM_Correlation_matrix_SPCD_",nspp[i,]$SPCD,"_predictors.rds"))
   spcd.correlations[lower.tri(spcd.correlations)] <- NA # set the lower triangle to NA to filter out
   
   cor_df <- reshape2::melt(spcd.correlations, varnames = c("Variable1", "Variable2"), value.name = "Correlation") %>% 
@@ -1857,7 +1871,7 @@ for(i in 1:length(SPCD.df$SPCD)){
 
     
     remper.correction <- 0.5
-    load(paste0("SPCD_GLM_standata/SPCD_", SPCD.id, "remper_correction_", remper.correction, ".Rdata")) # load the species code data
+    load(paste0(box.dir, "/SPCD_GLM_standata/SPCD_", SPCD.id, "remper_correction_", remper.correction, ".Rdata")) # load the species code data
     covariate.data <- data.frame(M = mod.data$y, 
                                  SPCD = SPCD.id,
                                  annual.growth = mod.data$annual_growth, 
@@ -1867,21 +1881,21 @@ for(i in 1:length(SPCD.df$SPCD)){
                                  slope = mod.data$slope, 
                                  aspect = mod.data$aspect, 
                                  MATmax = mod.data$MATmax, 
-                                 MATmin= mod.data$MATmin, 
+                                 #MATmin= mod.data$MATmin, 
                                  MAP = mod.data$MAP, 
                                  BAL = mod.data$BAL, 
                                  damage = mod.data$damage, 
                                  MAPanom = mod.data$MAPanom, 
                                  MATmaxanom = mod.data$MATmaxanom, 
-                                 MATminanom = mod.data$MATminanom, 
-                                 PHYSIO = mod.data$PHYSIO, 
+                                 #MATminanom = mod.data$MATminanom, 
+                                 #PHYSIO = mod.data$PHYSIO, 
                                  BA = mod.data$BA, 
-                                 RD = mod.data$RD, 
+                                 #RD = mod.data$RD, 
                                  elev = mod.data$elev, 
                                  Ndep = mod.data$Ndep, 
                                  SPCD.BA = mod.data$SPCD.BA,
-                                 non_SPCD.BA = mod.data$non_SPCD.BA.scaled,
-                                 prop.focal.ba = mod.data$prop.focal.ba.scaled 
+                                 non_SPCD.BA = mod.data$non_SPCD.BA.scaled#,
+                                 #prop.focal.ba = mod.data$prop.focal.ba.scaled 
     )
     
     test.covariate.data <- data.frame(M = test.data$M,
@@ -1893,21 +1907,21 @@ for(i in 1:length(SPCD.df$SPCD)){
                                       slope = mod.data$slope_test, 
                                       aspect = mod.data$aspect_test, 
                                       MATmax = mod.data$MATmax_test, 
-                                      MATmin= mod.data$MATmin_test, 
+                                      #MATmin= mod.data$MATmin_test, 
                                       MAP = mod.data$MAP_test, 
                                       BAL = mod.data$BAL_test, 
                                       damage = mod.data$damage_test, 
                                       MAPanom = mod.data$MAPanom_test, 
                                       MATmaxanom = mod.data$MATmaxanom_test, 
-                                      MATminanom = mod.data$MATminanom_test, 
-                                      PHYSIO = mod.data$PHYSIO_test, 
+                                     # MATminanom = mod.data$MATminanom_test, 
+                                     # PHYSIO = mod.data$PHYSIO_test, 
                                       BA = mod.data$PHYSIO_test, 
-                                      RD = mod.data$RD_test, 
+                                      #RD = mod.data$RD_test, 
                                       elev = mod.data$elev_test, 
                                       Ndep = mod.data$Ndep_test, 
                                       SPCD.BA = mod.data$SPCD.BA_test,
-                                      non_SPCD.BA = mod.data$non_SPCD.BA.scaled_test,
-                                      prop.focal.ba = mod.data$prop.focal.ba.scaled_test )
+                                      non_SPCD.BA = mod.data$non_SPCD.BA.scaled_test)#,
+                                      #prop.focal.ba = mod.data$prop.focal.ba.scaled_test )
     
     covariate.all[[i]] <- covariate.data
     test.covariate.all[[i]] <- test.covariate.data
@@ -1923,8 +1937,8 @@ all.correlations <- round(cor(covariate.all.df[,4:ncol(covariate.all.df)]), 1)
 # generate correlation plots here:
 ggcorrplot(all.correlations, hc.order = TRUE, type = "lower",
            lab = TRUE)
-ggsave(filename = paste0("SPCD_glm_output/GLM_Correlation_matrix_allspecies_remp_", remper.cor.vector[j], ".png"), height = 12, width = 12)
-saveRDS(all.correlations, paste0("SPCD_glm_output/GLM_Correlation_matrix_SPCD_all_species_predictors.rds") )
+ggsave(filename = paste0(box.dir,"/SPCD_glm_output/GLM_Correlation_matrix_allspecies_remp_", remper.cor.vector[j], ".png"), height = 12, width = 12)
+saveRDS(all.correlations, paste0(box.dir,"/SPCD_glm_output/GLM_Correlation_matrix_SPCD_all_species_predictors.rds") )
 
 
 # find covariate combinations for all the species that could be problematic:
@@ -1952,9 +1966,9 @@ inter.cov.corrs.comb %>% filter(high.corr.F == "High")  %>% group_by(Variable1) 
 inter.cov.corrs.comb %>% filter(high.corr.F == "High")  %>% group_by(Variable2) %>% summarise(n()) %>% arrange(desc(`n()`))
 
 #####################################################################################
-# redo corrations with out the problem variables
+# redo correlations with out the problem variables
 #####################################################################################
-covariate.reduced.df <- covariate.all.df %>% select(-MATmin, -MATminanom, -RD, -SPCD.BA)
+covariate.reduced.df <- covariate.all.df %>% dplyr::select(-MATmin, -MATminanom, -RD, -SPCD.BA)
 # Creating a correlation matrix
 reduced.correlations <- round(cor(covariate.reduced.df[,4:ncol(covariate.reduced.df)]), 1)
 
@@ -1964,8 +1978,8 @@ cor_matrix <- Hmisc::rcorr(as.matrix(covariate.reduced.df[,4:ncol(covariate.redu
 
 # generate correlation plots here:
 ggcorrplot(reduced.correlations, hc.order = TRUE, type = "lower",lab = TRUE)
-ggsave(filename = paste0("SPCD_glm_output/GLM_reduced_Correlation_matrix_allspecies_remp_", remper.cor.vector[j], ".png"), height = 12, width = 12)
-saveRDS(all.correlations, paste0("SPCD_glm_output/GLM_reduced_Correlation_matrix_SPCD_all_species_predictors.rds") )
+ggsave(filename = paste0(box.dir,"/SPCD_glm_output/GLM_reduced_Correlation_matrix_allspecies_remp_", remper.cor.vector[j], ".png"), height = 12, width = 12)
+saveRDS(all.correlations, paste0(box.dir,"/SPCD_glm_output/GLM_reduced_Correlation_matrix_SPCD_all_species_predictors.rds") )
 
 
 # find covariate combinations for all the species that could be problematic:
@@ -2011,7 +2025,7 @@ for(i in 1:length(SPCD.df$SPCD)){
     cat(paste("running glm mortality model for SPCD", SPCD.df[i,]$SPCD, common.name$COMMON, " remper correction", remper.cor.vector[j]))
     
     remper.correction <- remper.cor.vector[j]
-    load(paste0("SPCD_GLM_standata/SPCD_", SPCD.id, "remper_correction_", remper.correction, ".Rdata")) # load the species code data
+    load(paste0(box.dir,"/SPCD_GLM_standata/SPCD_", SPCD.id, "remper_correction_", remper.correction, ".Rdata")) # load the species code data
     covariate.data <- data.frame(M = mod.data$y, 
                                  annual.growth = mod.data$annual_growth, 
                                  dia.diff = mod.data$DIA.diff,
@@ -2020,22 +2034,22 @@ for(i in 1:length(SPCD.df$SPCD)){
                                  slope = mod.data$slope, 
                                  aspect = mod.data$aspect, 
                                  MATmax = mod.data$MATmax, 
-                                 MATmin= mod.data$MATmin, 
+                                 #MATmin= mod.data$MATmin, 
                                  MAP = mod.data$MAP, 
                                  BAL = mod.data$BAL, 
                                  damage = mod.data$damage, 
                                  MAPanom = mod.data$MAPanom, 
                                  MATmaxanom = mod.data$MATmaxanom, 
-                                 MATminanom = mod.data$MATminanom, 
+                                 #MATminanom = mod.data$MATminanom, 
                                  PHYSIO = mod.data$PHYSIO, 
                                  BA = mod.data$BA, 
                                  RD = mod.data$RD, 
                                  elev = mod.data$elev, 
                                  Ndep = mod.data$Ndep, 
                                  SPCD.BA = mod.data$SPCD.BA,
-                                 non_SPCD.BA = mod.data$non_SPCD.BA.scaled,
-                                 prop.focal.ba = mod.data$prop.focal.ba.scaled 
-    ) %>% select(!problem.variables.corr.species)
+                                 non_SPCD.BA = mod.data$non_SPCD.BA.scaled#,
+                                # prop.focal.ba = mod.data$prop.focal.ba.scaled 
+    ) #%>% select(!problem.variables.corr.species)
     
     test.covariate.data <- data.frame(M = test.data$M,
                                       annual.growth = mod.data$annual_growth_test, 
@@ -2045,22 +2059,22 @@ for(i in 1:length(SPCD.df$SPCD)){
                                       slope = mod.data$slope_test, 
                                       aspect = mod.data$aspect_test, 
                                       MATmax = mod.data$MATmax_test, 
-                                      MATmin= mod.data$MATmin_test, 
+                                      #MATmin= mod.data$MATmin_test, 
                                       MAP = mod.data$MAP_test, 
                                       BAL = mod.data$BAL_test, 
                                       damage = mod.data$damage_test, 
                                       MAPanom = mod.data$MAPanom_test, 
                                       MATmaxanom = mod.data$MATmaxanom_test, 
-                                      MATminanom = mod.data$MATminanom_test, 
+                                      #MATminanom = mod.data$MATminanom_test, 
                                       PHYSIO = mod.data$PHYSIO_test, 
                                       BA = mod.data$PHYSIO_test, 
                                       RD = mod.data$RD_test, 
                                       elev = mod.data$elev_test, 
                                       Ndep = mod.data$Ndep_test, 
                                       SPCD.BA = mod.data$SPCD.BA_test,
-                                      non_SPCD.BA = mod.data$non_SPCD.BA.scaled_test,
-                                      prop.focal.ba = mod.data$prop.focal.ba.scaled_test )%>% 
-      select(!problem.variables.corr.species)
+                                      non_SPCD.BA = mod.data$non_SPCD.BA.scaled_test)#,
+                                      #prop.focal.ba = mod.data$prop.focal.ba.scaled_test )#%>% 
+      #select(!problem.variables.corr.species)
     
     
     glm.A1 <-  glm(M ~ DIA, data = covariate.data, family = "binomial")
@@ -2640,18 +2654,16 @@ for(i in 1:length(SPCD.df$SPCD)){
                              McFadden.Rsq = McFadden.rsq.df[,1], 
                              AIC = aics.df[,1], 
                              converged = convergence.df[,1])
-    plot(model.diag$model.no, model.diag$AUC)
-    plot(model.diag$model.no, model.diag$McFadden.Rsq)
     
-    saveRDS(model.diag, paste0("SPCD_glm_output/GLM_reduced_model_diag_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".RDS") )
-    saveRDS(Var.importance.list, paste0("SPCD_glm_output/GLM_reduced_variable_importance_list_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".RDS") )
+    saveRDS(model.diag, paste0(box.dir,"/SPCD_glm_output/GLM_reduced_model_diag_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".RDS") )
+    saveRDS(Var.importance.list, paste0(box.dir,"/SPCD_glm_output/GLM_reduced_variable_importance_list_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".RDS") )
     
     
     #--------------------------------------------------------------------------------------
     # PLOT UP VARIABLE IMPORTANCE FOR THE BEST FIT MODEL 
     #--------------------------------------------------------------------------------------
     AIC.best <- model.diag %>% filter(converged == TRUE)%>% mutate(minAIC = min(AIC))%>%  filter(AIC == minAIC)
-    AIC.best$model.no
+    #AIC.best$model.no
     
     AIC.best.varimp <- Var.importance.list[[AIC.best$model.no]]
     AIC.best.varimp$VARS <- rownames(AIC.best.varimp)
@@ -2662,7 +2674,7 @@ for(i in 1:length(SPCD.df$SPCD)){
       theme(axis.text.x = element_text(angle = 45, hjust = 1))+
       ylab("Variable Importance")+xlab("")+
       ggtitle(paste0("Variable Importance, ", nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON) , " model ", AIC.best$model.no))
-    ggsave(filename = paste0("SPCD_glm_output/GLM_reduced_AIC_best_VARIMP_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 5, width = 12)
+    ggsave(filename = paste0(box.dir,"/SPCD_glm_output/GLM_reduced_AIC_best_VARIMP_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 5, width = 12)
     
     
     AIC.best$model.no
@@ -2682,7 +2694,7 @@ for(i in 1:length(SPCD.df$SPCD)){
       theme(axis.text.x = element_text(angle = 45, hjust = 1))+
       ylab("Variable Importance")+xlab("")+
       ggtitle(paste0("Variable Importance, ", nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON) , " model ", AUC.best$model.no))
-    ggsave(filename = paste0("SPCD_glm_output/GLM_reduced_AUC_best_VARIMP_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 5, width = 12)
+    ggsave(filename = paste0(box.dir,"/SPCD_glm_output/GLM_reduced_AUC_best_VARIMP_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 5, width = 12)
     
     
     
@@ -2698,7 +2710,7 @@ for(i in 1:length(SPCD.df$SPCD)){
       theme(axis.text.x = element_text(angle = 45, hjust = 1))+
       ylab("Variable Importance")+xlab("")+
       ggtitle(paste0("Variable Importance, ", nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON) , " model ", Rsq.best$model.no))
-    ggsave(filename = paste0("SPCD_glm_output/GLM_reduced_Rsq_best_VARIMP_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 5, width = 12)
+    ggsave(filename = paste0(box.dir,"/SPCD_glm_output/GLM_reduced_Rsq_best_VARIMP_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 5, width = 12)
     
     ########################################################################
     # VIF for the species covariates
@@ -2717,8 +2729,8 @@ for(i in 1:length(SPCD.df$SPCD)){
     # generate correlation plots here:
     ggcorrplot(corr, hc.order = TRUE, type = "lower",
                lab = TRUE)
-    ggsave(filename = paste0("SPCD_glm_output/GLM_reduced_Correlation_matrix", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 12, width = 12)
-    saveRDS(corr, paste0("SPCD_glm_output/GLM_reduced_Correlation_matrix_SPCD_",SPCD.id,"_predictors.rds") )
+    ggsave(filename = paste0(box.dir,"/SPCD_glm_output/GLM_reduced_Correlation_matrix", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".png"), height = 12, width = 12)
+    saveRDS(corr, paste0(box.dir,"/SPCD_glm_output/GLM_reduced_Correlation_matrix_SPCD_",SPCD.id,"_predictors.rds") )
   }
 }
 
@@ -2727,29 +2739,29 @@ model.diags <- list()
 for(i in 1:length(SPCD.df[,]$SPCD)){
   SPCD.id <- SPCD.df[i,]$SPCD
   # if(SPCD.id == 621){}else{
-  model.diags[[i]] <- readRDS(paste0("SPCD_glm_output/GLM_reduced_model_diag_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".RDS") )
+  model.diags[[i]] <- readRDS(paste0(box.dir,"/SPCD_glm_output/GLM_reduced_model_diag_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".RDS") )
   #}
 }
 model.diag <- do.call(rbind, model.diags)
 model.diag %>% group_by(SPCD, COMMON)|> gt()
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AUC, fill = COMMON, group = model.no))+geom_bar(stat= "identity",position = position_dodge2())#+position_dodge()
-ggsave("SPCD_glm_output/GLM_reduced_all_species_AUC.png", height = 5, width = 8)
+ggsave(paste0(box.dir,"/SPCD_glm_output/GLM_reduced_all_species_AUC.png"), height = 5, width = 12)
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = McFadden.Rsq))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
-ggsave("SPCD_glm_output/GLM_reduced_all_species_McFaddenRsq.png", height = 5, width = 8)
+ggsave(paste0(box.dir,"/SPCD_glm_output/GLM_reduced_all_species_McFaddenRsq.png"), height = 5, width = 12)
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AUC))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
-ggsave("SPCD_glm_output/GLM_reduced_all_species_AUC.png", height = 5, width = 8)
+ggsave(paste0(box.dir,"/SPCD_glm_output/GLM_reduced_all_species_AUC.png"), height = 5, width = 12)
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AIC))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
-ggsave("SPCD_glm_output/GLM_reduced_all_species_AIC.png", height = 5, width = 8)
+ggsave(paste0(box.dir,"/SPCD_glm_output/GLM_reduced_all_species_AIC.png"), height = 5, width = 12)
 
 ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, AIC,  label = as.character(model.no)))+geom_text()+facet_wrap(~SPCD, scales = "free_y")
-ggsave("SPCD_glm_output/GLM_reduced_all_species_AIC_AUC.png", height = 5, width = 8)
+ggsave(paste0(box.dir,"/SPCD_glm_output/GLM_reduced_all_species_AIC_AUC.png"), height = 5, width = 12)
 
 ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, McFadden.Rsq,  label = as.character(model.no)))+geom_text(size = 2)+facet_wrap(~SPCD, scales = "free_y")
-ggsave("SPCD_glm_output/GLM_reduced_all_species_AUC_Rsq.png", height = 5, width = 8)
+ggsave(paste0(box.dir,"/SPCD_glm_output/GLM_reduced_all_species_AUC_Rsq.png"), height = 5, width = 12)
 
 # make a table explaining the models:
 
@@ -2825,31 +2837,31 @@ glm.model.table <- data.frame(model.no = 1:length(list.mods),
 model.diag <- left_join(model.diag, glm.model.table)
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AUC, fill = COMMON, group = model.no))+geom_bar(stat= "identity",position = position_dodge2())#+position_dodge()
-ggsave("SPCD_glm_output/GLM_reduced_all_species_AUC.png", height = 5, width = 8)
+ggsave(paste0(box.dir,"/SPCD_glm_output/GLM_reduced_all_species_AUC.png"), height = 5, width = 10)
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = McFadden.Rsq, fill = model.type))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
-ggsave("SPCD_glm_output/GLM_reduced_all_species_McFaddenRsq.png", height = 5, width = 8)
+ggsave(paste0(box.dir,"/SPCD_glm_output/GLM_reduced_all_species_McFaddenRsq.png"), height = 5, width = 12)
 
-ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AUC, fill = model.type))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
-ggsave("SPCD_glm_output/GLM_reduced_all_species_AUC.png", height = 5, width = 8)
+ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AUC, fill = model.type))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")+xlab("GLM Model Number")
+ggsave(paste0(box.dir,"/SPCD_glm_output/GLM_reduced_all_species_AUC.png"), height = 5, width = 12)
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AIC, fill = model.type))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
-ggsave("SPCD_glm_output/GLM_reduced_all_species_AIC.png", height = 5, width = 8)
+ggsave(paste0(box.dir,"/SPCD_glm_output/GLM_reduced_all_species_AIC.png"), height = 5, width = 12)
 
 ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, AIC,  label = as.character(model.no)))+geom_text()+facet_wrap(~SPCD, scales = "free_y")
-ggsave("SPCD_glm_output/GLM_reduced_all_species_AIC_AUC.png", height = 5, width = 8)
+ggsave(paste0(box.dir,"/SPCD_glm_output/GLM_reduced_all_species_AIC_AUC.png"), height = 5, width = 12)
 
 ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, McFadden.Rsq,  label = as.character(model.no)))+geom_text(size = 2)+facet_wrap(~SPCD, scales = "free_y")
-ggsave("SPCD_glm_output/GLM_reduced_all_species_AUC_Rsq.png", height = 5, width = 8)
+ggsave(paste0(box.dir,"/SPCD_glm_output/GLM_reduced_all_species_AUC_Rsq.png"), height = 5, width = 12)
 
-write.csv(glm.model.table, "GLM_reduced_table.csv", quote = TRUE)
+write.csv(glm.model.table, paste0(box.dir,"/SPCD_glm_output/GLM_reduced_table.csv"), quote = TRUE)
 
 
 #####################################################################################################################################################
 # Look at Random forest approach and see if we get similar answers for the covariates that are important
 #####################################################################################################################################################
 library(randomForest)
-covariate.data.RF <- covariate.all.df %>% select(-annual.growth, -SPCD)
+covariate.data.RF <- covariate.all.df %>% dplyr::select(-prop.focal.ba)
 covariate.data.RF$PHYSIO <- as.factor(covariate.data.RF$PHYSIO)
 covariate.data.RF$M <- as.factor(covariate.data.RF$M)
 all.cov.model <- randomForest(
