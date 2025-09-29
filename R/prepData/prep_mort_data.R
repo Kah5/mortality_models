@@ -287,7 +287,9 @@ TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0) %>%
                                             ifelse(status == 4, "dead (salvagable)", "snag")))))%>%
   
   group_by(Species, SPCD, mort.status, DIAMETER_diff) %>% summarise(n()) %>% ungroup() %>% 
-  group_by(Species, SPCD) %>% spread(mort.status, `n()`) %>% select(Species, DIAMETER_diff, live, `dead (salvagable)`, `dead (not salvagable)`, cut, snag )%>% ungroup() |> gt() |> 
+  group_by(Species, SPCD) %>% 
+  spread(mort.status, `n()`) %>% 
+  dplyr::select(Species, DIAMETER_diff, live, `dead (salvagable)`, `dead (not salvagable)`, cut, snag )%>% ungroup() |> gt() |> 
   gtsave("images/filtering_exploration/DIA_DIFF_by_spcd_status.png")
 
 # save a table of diameter differences by type of mortality
@@ -308,7 +310,7 @@ TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0) %>%
                                             ifelse(status == 4, "dead (salvagable)", "snag")))))%>%
   
   group_by( mort.status, DIAMETER_diff) %>% summarise(n()) %>% ungroup() %>% 
-  spread(mort.status, `n()`) %>% select(DIAMETER_diff, live, `dead (salvagable)`, `dead (not salvagable)`, cut, snag )%>% ungroup() |> gt() |> 
+  spread(mort.status, `n()`) %>% dplyr::select(DIAMETER_diff, live, `dead (salvagable)`, `dead (not salvagable)`, cut, snag )%>% ungroup() |> gt() |> 
   gtsave("images/filtering_exploration/DIA_DIFF_by_status.png")
 
 
@@ -560,10 +562,10 @@ TREE_growth.mort %>% ungroup()%>% group_by(stname) %>%
   mutate(maxINVYR = max(date, na.rm = TRUE))%>%
   summarise(n())
 
-TREE_growth.mort %>% filter(stname %in% "NY") %>% select(date) %>% distinct()
-TREE_growth.mort %>% filter(stname %in% "NH") %>% select(date) %>% distinct()
-TREE_growth.mort %>% filter(stname %in% "VT") %>% select(date) %>% distinct()
-TREE_growth.mort %>% filter(stname %in% "ME") %>% select(date) %>% distinct()
+TREE_growth.mort %>% filter(stname %in% "NY") %>% dplyr::select(date) %>% distinct()
+TREE_growth.mort %>% filter(stname %in% "NH") %>% dplyr::select(date) %>% distinct()
+TREE_growth.mort %>% filter(stname %in% "VT") %>% dplyr::select(date) %>% distinct()
+TREE_growth.mort %>% filter(stname %in% "ME") %>% dplyr::select(date) %>% distinct()
 
 hist(TREE_growth.mort$annual.growth)
 head(TREE_growth.mort$spp)
@@ -598,7 +600,8 @@ unique.PLOT.cov <- unique(PLOT %>% dplyr::select(PLOT.ID, cndtn, physio, ba, slo
 TREE_growth.cov <- left_join(TREE_growth.mort, unique.PLOT.cov)
 
 # calculate the % damaged trees on the plot
-pct.damages <- TREE.remeas %>% group_by(PLOT.ID) %>% mutate(n.tree = n()) %>% ungroup() %>% group_by(PLOT.ID, damage)%>%
+pct.damages <- TREE.remeas %>% group_by(PLOT.ID) %>% mutate(n.tree = n()) %>% 
+  ungroup() %>% group_by(PLOT.ID, damage)%>%
   mutate(n.damage = n(), 
          pct.damage.by.cd = (n.damage/n.tree)*100) %>% ungroup()%>% dplyr::select(PLOT.ID,damage, pct.damage.by.cd) %>% 
   group_by(PLOT.ID) %>% distinct() %>% spread(damage, pct.damage.by.cd, fill = 0)
@@ -609,7 +612,7 @@ colnames(pct.damages)[2:10] <- paste0("damage.",colnames(pct.damages)[2:10])
 
 TREE_growth.cov <- left_join(TREE_growth.cov, pct.damages)
 
-ggplot(TREE_growth.cov, aes(M, 100-damage.0, group = M))+geom_violin()
+ggplot(TREE_growth.cov, aes(M, 100-damage.7, group = M))+geom_violin()
 TREE_growth.cov <- TREE_growth.cov %>% mutate(damage.total = 100-damage.0)
 
 
@@ -705,31 +708,51 @@ rm(MAP, MATmax, MATmin, annual.ppt.anom, annual.ppt.remp, occurance.number, PRIS
 
 # calculate BAL basal area larger than
 TREE.remeas.BAL <- TREE.remeas %>%
-  mutate(ba_sq_ft = ((dbhcur^2))*0.005454) %>% 
+  mutate(ba_sq_ft = ((dbhcur^2))*0.005454, 
+         ba_sq_ft_old = ((dbhold^2))*0.005454) %>% 
   group_by(PLOT.ID, point, date, cndtn) %>% 
-  mutate(BAL = sitreeE::PBAL(ba_sq_ft*volfac)) %>% select(state, county, pltnum, cndtn, point, tree, SPCD, status, 
-                                                   dbhcur, dbhold, PLOT.ID, BAL, ba_sq_ft, volfac, cycle)
+  # using volfac to scale
+  mutate(BAL = sitreeE::PBAL(ba_sq_ft*volfac), 
+         BAL_old = sitreeE::PBAL(ba_sq_ft_old*volfac)) %>% 
+  dplyr::select(state, county, pltnum, cndtn, point, tree, SPCD, status, 
+                dbhcur, dbhold, PLOT.ID, BAL, ba_sq_ft, BAL_old, ba_sq_ft_old, volfac, cycle) %>% 
+  distinct()
 
-TREE_growth.cov <- left_join(TREE_growth.cov, TREE.remeas.BAL) %>% distinct()
+TREE_growth.cov <- left_join(TREE_growth.cov %>% distinct(), TREE.remeas.BAL) 
 
 # calculate species-level BA for like species and non-like species for each tree
 PLOT.remeas.BAL <- TREE.remeas %>%
-  mutate(ba_sq_ft = ((dbhcur^2))*0.005454) %>% 
+  mutate(ba_sq_ft = ((dbhcur^2))*0.005454, 
+         ba_sq_ft_old = ((dbhold^2))*0.005454) %>% 
   group_by(PLOT.ID, point, date, cndtn, SPCD) %>%
+  # spcd and total caluclated using volfacs
   mutate(SPCD_BA = sum(ba_sq_ft*volfac, na.rm =TRUE), 
+         SPCD_BA_old = sum(ba_sq_ft_old*volfac, na.rm =TRUE),
          SPCD_density = sum(volfac, na.rm = TRUE)) %>% ungroup() %>%
   group_by(PLOT.ID, point, date, cndtn) %>%
-  mutate(BA_total = sum(SPCD, na.rm =TRUE), 
-         density_total = sum(volfac, na.rm = TRUE)) %>%
+  
+  # also sum up the total BA without using per acre expansions
+  mutate(BA_total = sum(SPCD_BA, na.rm =TRUE), 
+         BA_total_old = sum(SPCD_BA_old, na.rm =TRUE), 
+         density_total = sum(volfac, na.rm = TRUE), 
+         plt_ba_sq_ft_cur = sum(ba_sq_ft, na.rm =TRUE), 
+         plt_ba_sq_ft_old = sum(ba_sq_ft_old, na.rm =TRUE)) %>%
+  
   mutate(non_SPCD_BA = BA_total - SPCD_BA, 
          non_SPCD_density = density_total - SPCD_density) %>%  
-  select(PLOT.ID, point, date, cndtn, SPCD, SPCD_BA, BA_total, non_SPCD_BA, SPCD_density, density_total, non_SPCD_density)
+  
+  dplyr::select(PLOT.ID, point, date, cndtn, SPCD, SPCD_BA, BA_total, 
+         non_SPCD_BA, SPCD_density, density_total, non_SPCD_density, 
+         plt_ba_sq_ft_cur, plt_ba_sq_ft_old) %>% distinct()
 
 TREE_growth.cov <- left_join(TREE_growth.cov, PLOT.remeas.BAL) %>% distinct()
 
-cleaned.data <- TREE_growth.cov %>% filter(!is.na(annual.growth) & !is.na(status) & DIA_DIFF >=0 & !is.na(elev))%>% distinct()
+cleaned.data <- TREE_growth.cov %>% 
+  filter(!is.na(annual.growth) & !is.na(status) & DIA_DIFF >=0 & !is.na(elev)) %>% distinct()
 
-# ggplot(cleaned.data, aes(non_SPCD_BAL, M))+geom_point()+facet_wrap(~SPCD)
+ggplot(cleaned.data, aes(x = M, y = plt_ba_sq_ft_cur, group = M))+geom_boxplot()+facet_wrap(~SPCD, scales = "free_y")
+ggplot(cleaned.data, aes(x = M, y = plt_ba_sq_ft_old, group = M))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+
 # ggplot(cleaned.data, aes(elev, M))+geom_point()+facet_wrap(~SPCD)
 # ggplot(cleaned.data, aes(BAL, M))+geom_point()+facet_wrap(~SPCD)
 # ggplot(cleaned.data, aes(DIA_DIFF, M))+geom_point()+facet_wrap(~SPCD)
@@ -746,7 +769,7 @@ saveRDS(cleaned.data, "data/cleaned.data.mortality.TRplots_noN.RDS")
 
 #----------------------------------------------------------------------
 # Get the N deposition data for all the plots
-# N deposition timeseries/spatial variation from...
+# N deposition timeseries/spatial variation from: https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2020GB006626
 # the time series go from 1930-2017 by state and county...so it should be simple to match up 
 N.oxidized <- read_delim(paste0(boxdir,"data/Ndep/Atmospheric_Oxidized.txt"))
 N.oxidized$county <- as.numeric(N.oxidized$CountyFIPS)
@@ -767,17 +790,44 @@ Ndep.plot.df <- left_join(cleaned.data %>% ungroup() %>% dplyr::select(PLOT.ID, 
 Ndep.melt <- reshape2::melt(Ndep.plot.df,id.vars = c( "date", "PLOT.ID", "cycle", "remper", "county", "state") )
 Ndep.melt$year <- substring(Ndep.melt$variable, 2)
 
-Ndep.remper <- Ndep.melt %>% group_by(PLOT.ID, cycle) %>% mutate(prev.date = date - remper) %>% group_by(PLOT.ID, cycle)%>%
+# mean N deposition
+Ndep.remper <- Ndep.melt %>% group_by(PLOT.ID, cycle) %>% 
+                          mutate(prev.date = date - remper) %>% group_by(PLOT.ID, cycle)%>%
                               filter(year >= prev.date & year <= date) %>% group_by(PLOT.ID, cycle, county, state) %>% 
                               mutate(Ndep.remper.avg = mean(value, na.rm =TRUE), 
                                      Nyears = n())
-#View(Ndep.remper)
+
+# difference in N depostion over the remper:
+Ndep.remper.trend <- Ndep.melt %>% group_by(PLOT.ID, cycle) %>% 
+  mutate(prev.date = date - remper) %>% group_by(PLOT.ID, cycle) %>% 
+  filter(year == prev.date | year == date) %>%
+  mutate(year.id = ifelse(year == prev.date, "T1", "T2"))%>%
+  group_by(PLOT.ID, cycle, county, state,remper, year.id) %>% 
+  summarise(Ndep.start = mean(value, na.rm =TRUE)) %>% spread(year.id, Ndep.start) %>%
+  mutate(Difference = T1 - T2, 
+         Difference_per_yr = (T1 - T2)/remper)
+
+# N deposition relative to 1931:1950 year mean
+Ndep.1931.1950.yr.means <- Ndep.melt %>% group_by(PLOT.ID, cycle) %>%
+  filter(year >= 1931 & year <= 1950) %>% group_by(PLOT.ID, cycle, county, state) %>% 
+  mutate(Ndep.1931.1950 = mean(value, na.rm =TRUE))%>% dplyr::select(PLOT.ID, cycle, county, state, Ndep.1931.1950)%>% distinct()
+
+Ndep.remper.rel.1950 <- Ndep.melt %>% left_join(., Ndep.1931.1950.yr.means) %>% group_by(PLOT.ID, cycle) %>% 
+  mutate(prev.date = date - remper) %>% group_by(PLOT.ID, cycle)%>%
+  filter(year >= prev.date & year <= date) %>% group_by(PLOT.ID, cycle, county, state) %>% 
+  mutate(Ndep.remper.avg = mean(value, na.rm =TRUE), 
+         Ndep.remper.rel.1950 = mean(value, na.rm =TRUE)/Ndep.1931.1950,
+         Nyears = n())
+
+Ndep.remper <- left_join(Ndep.remper.rel.1950, Ndep.remper.trend)
 
 rm(test, plots.clim)
 # save Ndep average for the remper
 saveRDS(Ndep.remper, "data/Ndep.average.remper.NE.periodic.RDS")
 
-Ndep.remper <- Ndep.remper %>% dplyr::select(date, PLOT.ID, cycle, remper, county, state, Ndep.remper.avg) %>% distinct()
+Ndep.remper <- Ndep.remper %>% 
+  dplyr::select(date, PLOT.ID, cycle, remper, county, state, Ndep.1931.1950,
+                Ndep.remper.avg, Ndep.remper.rel.1950, Difference, Difference_per_yr) %>% distinct()
 # join up to cleaned data
 cleaned.data <- left_join(cleaned.data, Ndep.remper)
 colnames(cleaned.data)
@@ -792,13 +842,17 @@ png(height = 6, width = 10, units = "in", res = 150, "images/Ndep_map_trees_NE_F
 map.ndep.trees
 dev.off()
 
+map.ndep.trees <- ggplot(cleaned.data, aes(x = LONG_FIADB, y = LAT_FIADB, color = Difference_per_yr))+geom_point()
+map.ndep.trees <- ggplot(cleaned.data, aes(x = LONG_FIADB, y = LAT_FIADB, color = Ndep.remper.rel.1950))+geom_point()
+
+
 saveRDS(cleaned.data, "data/cleaned.data.mortality.TRplots_N.RDS")
 
 
 #----------------------------------------------------------------
 # get all the plot and tree information for the whole NE:
 
-TREE <- read_delim("data/formatted_older_matching_plts_TREE.txt")
+TREE <- read_delim(paste0(boxdir,"data/formatted_older_matching_plts_TREE.txt"))
 TREE$dbhcur <- as.numeric(TREE$dbhcur)
 TREE$dbhold <- as.numeric(TREE$dbhold)
 
@@ -817,7 +871,8 @@ colnames(PLOT)
 summary(PLOT$ba)
 PLOT$typcur
 
-TPA <- TREE %>% group_by(state, county, pltnum, SPCD) %>% summarise(TPA = sum(volfac, na.rm =TRUE))
+TPA <- TREE %>% group_by(state, county, pltnum, SPCD) %>% 
+  summarise(TPA = sum(volfac, na.rm =TRUE))
 
 # Get TPA and BA for each plot and put on the log scale
 
@@ -828,7 +883,7 @@ PLOT.tpa.all <- PLOT.tpa %>% dplyr::select(state, county, pltnum,SPCD, typcur, b
 unique(PLOT.tpa.all$typcur)
 
 #cleaned.data <- readRDS( "data/cleaned.data.mortality.TRplots.RDS")
-test.m <- left_join(cleaned.data, PLOT[, c("state", "county", "pltnum", "typcur")])
+test.m <- left_join(cleaned.data %>% distinct(), PLOT[, c("state", "county", "pltnum", "typcur")] %>% distinct())
 
 
 PLOT.tpa.all.5 <- PLOT.tpa.all %>% group_by( SPCD ) %>% summarise(n()) %>% filter(`n()` >5 )
@@ -876,11 +931,11 @@ summary(RD.by.plot$RD)
 saveRDS (RD.by.plot, "data/Relative_periodic_plot_densities.rds")
 cleaned.data2 <- left_join(cleaned.data, RD.by.plot)
 cleaned.data2 <- cleaned.data2  %>% ungroup() %>% 
-  mutate(BAL.ratio = SPCD_BA/BA_total, 
-         density.ratio = SPCD_density/total_density)
+  mutate(BAL.ratio = SPCD_BA/BA_total)#, 
+        # density.ratio = SPCD_density/total_density)
 
 saveRDS(cleaned.data2, "data/cleaned.data.mortality.TRplots.RDS")
-ggplot(cleaned.data2, aes(x = LONG_FIADB, y = LAT_FIADB))+geom_point()
+
 
 
 
@@ -899,14 +954,23 @@ rm(RD.by.plot, annual.ppt.anom, annual)
 # ------------------------------------------------------------------------------
 mort.17 <- cleaned.data2 %>% filter(SPCD %in% c(12, 97, 129, 241, 261, 316, 318, 371, 400, 531, 541, 621, 762, 802, 832, 833, 837))
 
+ggplot(mort.17, aes(x= as.character(M), y = Ndep.remper.rel.1950))+geom_boxplot()+facet_wrap(~SPCD, scales = "free_y")
+ggplot(mort.17, aes(x= as.character(M), y = Ndep.remper.rel.1950))+geom_boxplot()+facet_wrap(~SPCD, scales = "free_y")
 
-ggplot(mort.17, aes(x= as.character(M), y = non_SPCD_BA))+geom_violin()+facet_wrap(~SPCD)
+# Ndep trends over remper period: difference per year 
+ggplot(mort.17, aes(x= as.character(M), y = Difference_per_yr))+geom_boxplot()+facet_wrap(~SPCD, scales = "free_y")
+
+ggplot(mort.17, aes(x= as.character(M), y = plt_ba_sq_ft_cur))+geom_boxplot()+facet_wrap(~SPCD, scales = "free_y")
+ggplot(mort.17, aes(x= as.character(M), y = plt_ba_sq_ft_old))+geom_boxplot()+facet_wrap(~SPCD, scales = "free_y")
+
+
+ggplot(mort.17, aes(x= as.character(M), y = non_SPCD_BA))+geom_violgeom_violin()ggplot(mort.17, aes(x= as.character(M), y = non_SPCD_BA))+geom_violin()+facet_wrap(~SPCD)
 ggplot(mort.17, aes(x= as.character(M), y = SPCD_BA))+geom_violin()+facet_wrap(~SPCD)
 ggplot(mort.17, aes(x= as.character(M), y = BAL.ratio))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
-ggplot(mort.17, aes(x= as.character(M), y = density.ratio))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+#ggplot(mort.17, aes(x= as.character(M), y = density.ratio))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
 ggplot(mort.17, aes(x= as.character(M), y = RD))+geom_boxplot()+facet_wrap(~SPCD)
 ggplot(mort.17, aes(x= as.character(M), y = BAL))+geom_boxplot()+facet_wrap(~SPCD)
-ggplot(mort.17, aes(x= as.character(M), y = damage.total))+geom_boxplot()+facet_wrap(~SPCD)
+ggplot(mort.17, aes(x= as.character(M), y = damage.total))+geom_boxplot()+facet_wrap(~SPCD, scales = "free_y")
 ggplot(mort.17, aes(x= as.character(M), y = ba))+geom_boxplot()+facet_wrap(~SPCD)
 ggplot(mort.17, aes(x= as.character(M), y = elev))+geom_boxplot()+facet_wrap(~SPCD)
 ggplot(mort.17, aes(x= as.character(M), y = annual.growth))+geom_boxplot()+facet_wrap(~SPCD)
@@ -922,7 +986,7 @@ g +
 
 nspp[1:20,]$spp
 # filter to just get the target species
-cleaned.data.spp <- cleaned.data2 %>% filter(SPCD %in% nspp[1:17,]$SPCD)
+cleaned.data.spp <- cleaned.data2 %>% filter(SPCD %in% nspp[1:17,]$spp)
 
 # get common names
 cleaned.data.spp$COMMON <- FIESTA::ref_species[match(cleaned.data.spp$SPCD, FIESTA::ref_species$SPCD),]$COMMON
@@ -995,8 +1059,8 @@ histogram.ppt.plt <- ggplot(cleaned.data.spp, aes(x = forcats::fct_rev(`Tree Sta
   facet_wrap(~COMMON)+
   theme_flip
 
-histogram.ppt.plt
-ggsave(height = 12, width = 12, units = "in", "images/PPT_Mortality_plot.png")
+
+ggsave(histogram.ppt.plt,height = 12, width = 12, units = "in", filename = "images/PPT_Mortality_plot.png")
 
 
 histogram.growth.plt <- ggplot(cleaned.data.spp, aes(x = forcats::fct_rev(`Tree Status`), y = annual.growth, 

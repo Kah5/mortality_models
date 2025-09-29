@@ -1,15 +1,15 @@
 SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   cleaned.data <- cleaned.data.full %>% filter(SPCD %in% SPCD.id) %>% 
-                                        filter(dbhold > 5 & ! dbhcur-dbhold == 0)
+                                        filter(dbhold >= 5 & ! dbhcur-dbhold == 0)
   
   cleaned.data_old <- cleaned.data.full %>% filter(SPCD %in% SPCD.id)
   
   cleaned.data %>% group_by(M) %>% summarise(n())
   
-  cleaned.data_old %>% group_by(M, dbhcur-dbhold == 0) %>% summarise(n())
+  cleaned.data %>% group_by(M, (dbhcur-dbhold) == 0) %>% summarise(n())
   
   
-  View(cleaned.data_old %>% select(M))
+  #View(cleaned.data_old %>% select(M))
  
 if(remper.correction == "random"){
   # uniform sample across the board for the remper year correction
@@ -66,6 +66,19 @@ if(remper.correction == "random"){
                                                             DIA.DIFF.sd = sd(DIA_DIFF, na.rm =TRUE),
                                                             BAL.median = median(BAL, na.rm=TRUE),
                                                             BAL.sd = sd(BAL, na.rm = TRUE),
+                                                            
+                                                            plt_ba_sq_ft_cur.median = median(plt_ba_sq_ft_cur, na.rm = TRUE),
+                                                            plt_ba_sq_ft_cur.sd = sd(plt_ba_sq_ft_cur, na.rm = TRUE),
+                                                            
+                                                            plt_ba_sq_ft_old.median = median(plt_ba_sq_ft_old, na.rm =TRUE),
+                                                            plt_ba_sq_ft_old.sd = sd(plt_ba_sq_ft_old, na.rm =TRUE),
+                                                            
+                                                            Ndep_Diff_per_yr.median = median(Difference_per_yr, na.rm = TRUE),
+                                                            Ndep_Diff_per_yr.sd = sd(Difference_per_yr, na.rm = TRUE),
+                                                            
+                                                            Ndep.remper.rel.1950.median = median(Ndep.remper.rel.1950, na.rm = TRUE),
+                                                            Ndep.remper.rel.1950.sd = sd(Ndep.remper.rel.1950, na.rm = TRUE),
+                                                            
                                                             RD.median = median(RD, na.rm=TRUE), 
                                                             RD.sd = sd(RD, na.rm =TRUE),
                                                             nonSPCD_BA_tot.sd = sd(non_SPCD_BA, na.rm = TRUE),
@@ -90,6 +103,16 @@ if(remper.correction == "random"){
                            SPCD.BA.scaled = (SPCD_BA - SPCD_BA.median)/SPCD_BA.sd,
                            non_SPCD.BA.scaled = (non_SPCD_BA - nonSPCD_BA_tot.median)/nonSPCD_BA_tot.sd,
                            prop.focal.ba.scaled = ((SPCD_BA/BA_total) - prop.focal.ba.median)/prop.focal.ba.sd, 
+                           
+                           plt_ba_sq_ft_cur.scaled = (plt_ba_sq_ft_cur-plt_ba_sq_ft_cur.median)/plt_ba_sq_ft_cur.sd,
+                           plt_ba_sq_ft_old.scaled = (plt_ba_sq_ft_old - plt_ba_sq_ft_old.median)/plt_ba_sq_ft_old.sd,
+                           Ndep_Diff_per_yr.scaled = (Difference_per_yr - Ndep_Diff_per_yr.median)/Ndep_Diff_per_yr.sd,
+                           Ndep.remper.rel.1950.scaled = (Ndep.remper.rel.1950 - Ndep.remper.rel.1950.median)/Ndep.remper.rel.1950.sd, 
+                           
+                           
+                      
+                           
+                           
                            si.scaled = (si - plot.medians$si.median)/plot.medians$si.sd,
                            ba.scaled = (ba - plot.medians$ba.median)/plot.medians$ba.sd,
                            aspect.scaled = (aspect - plot.medians$aspect.median)/plot.medians$aspect.sd,
@@ -140,6 +163,11 @@ if(remper.correction == "random"){
   cleaned.data<- left_join(cleaned.data, SPP.df) 
   cleaned.data <- cleaned.data %>%  filter(!is.na(si) & !is.na(dbhcur)& !is.na(M) & 
                                              !is.na(annual.growth.scaled) & !is.na(ppt.anom))# & !is.na(prop.focal.ba) & !is.na(prop.focal.density))
+  
+  # try replacing these variables
+  cleaned.data <- cleaned.data %>% mutate(ba.scaled = plt_ba_sq_ft_cur.scaled, 
+                          Ndep.scaled = Ndep_Diff_per_yr.scaled)
+
   #summary(cleaned.data$BAL.scaled)
   cleaned.data$S <- ifelse(cleaned.data$M == 1, 0, 1)
   
@@ -156,7 +184,11 @@ if(remper.correction == "random"){
   
   ggplot(test.data, aes(x= as.character(M), y = annual.growth))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
   ggplot(test.data, aes(x= as.character(M), y = prop.focal.ba.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
-  ggplot(test.data, aes(x= as.character(M), y = SPCD.BA.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  ggplot(test.data, aes(x= as.character(M), y = plt_ba_sq_ft_old.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  ggplot(test.data, aes(x= as.character(M), y = plt_ba_sq_ft_cur.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  ggplot(test.data, aes(x= as.character(M), y = ba.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  ggplot(test.data, aes(x= as.character(M), y = BAL.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  
   #ggplot(test.data, aes(x= as.character(M), y = SPCD.density.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
   ggplot(test.data, aes(x= as.character(M), y = non_SPCD.BA.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
   #ggplot(test.data, aes(x= as.character(M), y = non.SPCD.density.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
@@ -185,6 +217,7 @@ if(remper.correction == "random"){
                                                                  DIA_scaled, 
                                                                  #RD.scaled, 
                                                                  ba.scaled, 
+                                                                 
                                                                  BAL.scaled,
                                                                  #non_SPCD.BA.scaled,
                                                                  damage.scaled 

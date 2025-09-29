@@ -10,8 +10,8 @@ library(scales)
 
 options(mc.cores = parallel::detectCores())
 cleaned.data <- readRDS( "data/cleaned.data.mortality.TRplots.RDS")
-cleaned.data.no.ll <- cleaned.data %>% select(-LAT_FIADB, -LONG_FIADB)
-saveRDS(cleaned.data.no.ll, "data/cleaned.data.mortality.TRplots_no_LL.RDS")
+# cleaned.data.no.ll <- cleaned.data %>% select(-LAT_FIADB, -LONG_FIADB)
+# saveRDS(cleaned.data.no.ll, "data/cleaned.data.mortality.TRplots_no_LL.RDS")
 
 cleaned.data <- cleaned.data %>% filter(!is.na(ba) & !is.na(slope) & ! is.na(physio) & !is.na(aspect))%>% 
   dplyr::select(state, county, pltnum, cndtn, point, tree, PLOT.ID, cycle, spp, dbhcur, dbhold, damage, Species, SPCD,
@@ -79,6 +79,12 @@ plot.medians <- unique(
       SPCD_BA, 
       non_SPCD_BA, 
       
+      plt_ba_sq_ft_cur,
+      plt_ba_sq_ft_old,
+      Difference_per_yr, 
+      Ndep.remper.rel.1950,
+      
+      
       slope,
       aspect,
       MAP,
@@ -100,6 +106,16 @@ plot.medians <- unique(
     nonSPCD_BA_tot.median = median(non_SPCD_BA, na.rm = TRUE),
     SPCD_BA.median = median(SPCD_BA, na.rm =
                               TRUE),
+    
+    plt_ba_sq_ft_cur.median = median(plt_ba_sq_ft_cur, na.rm = TRUE),
+    plt_ba_sq_ft_old.median = median(plt_ba_sq_ft_old, na.rm =
+                              TRUE),
+    
+    Difference_per_yr.median = median(Difference_per_yr, na.rm = TRUE),
+    Ndep.remper.rel.1950.median = median(Ndep.remper.rel.1950, na.rm =
+                                       TRUE),
+    
+    
     slope.median = median(slope, na.rm = TRUE),
     aspect.median = median(aspect, na.rm = TRUE),
     damage.median = median(damage.total, na.rm =
@@ -121,6 +137,16 @@ plot.medians <- unique(
     nonSPCD_BA_tot.sd = sd(non_SPCD_BA, na.rm = TRUE),
     SPCD_BA.sd = sd(SPCD_BA, na.rm =
                       TRUE),
+    
+    plt_ba_sq_ft_cur.sd = sd(plt_ba_sq_ft_cur, na.rm = TRUE),
+    plt_ba_sq_ft_old.sd = sd(plt_ba_sq_ft_old, na.rm =
+                      TRUE),
+    
+    Difference_per_yr.sd = sd(Difference_per_yr, na.rm = TRUE),
+    Ndep.remper.rel.1950.sd = sd(Ndep.remper.rel.1950, na.rm =
+                               TRUE),
+    
+    
     si.sd = sd(si, na.rm =
                  TRUE),
     slope.sd = sd(slope, na.rm = TRUE),
@@ -186,11 +212,11 @@ summary(cleaned.data.full)
 # 9. All Fixed effects and all interactions
 
 stan.model.table <- data.frame(Model = 1:9, 
-                               `Covariates` = c("annual growth",  
-                                                "annual growth & diameter ",
-                                                "annual growth, diameter  & competition variables", 
-                                                "annual growth, diameter, competition variables, climate variables", 
-                                                "annual growth, diameter, competition variables, climate variables, site conditions ",
+                               `Covariates` = c("diameter difference",  
+                                                "diameter difference & diameter ",
+                                                "diameter difference, diameter  & competition variables", 
+                                                "diameter difference, diameter, competition variables, climate variables", 
+                                                "diameter difference, diameter, competition variables, climate variables, site conditions ",
                                                 "all fixed effects and all growth + diameter interactions",
                                                 "model 5 + competition interactions",
                                                 "model 6 + climate interactions",
@@ -198,11 +224,7 @@ stan.model.table <- data.frame(Model = 1:9,
                                `Fixed.parameters` = c(1, 2, 7, 13, 18, 51, 103, 148, 158))
 stan.model.table |> gt() |> cols_label(Fixed.parameters = "# of fixed parameters") |> gtsave("C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_manuscript/figures/model_table_summary.png")
 
-# make another table with covariates
-Covariate.table <- read.csv("C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_manuscript/Covariate_descriptions_table.csv")
-Covariate.table %>% rename(`Covariate Group` = "Covariate.group", 
-                           `Spatial Scale` = "Spatial.Scale")|> gt()|> 
-  gtsave("C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_manuscript/figures/covariate_table_summary.png")
+
 # script that generates all the testing and training datasets
 source("R/speciesModels/SPCD_stan_data.R")
 # write the data for all 26 different species groups:
