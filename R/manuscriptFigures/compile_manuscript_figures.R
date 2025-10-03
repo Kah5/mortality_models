@@ -4,7 +4,7 @@ library(cowplot)
 library(posterior)
 library(FIESTA)
 library(sf)
-output.dir <- "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
+output.dir <- output.folder <- "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
 
 # # get the complete species list
 nspp <- data.frame(SPCD = c(316, 318, 833, 832, 261, 531, 802, 129, 762,  12, 541,  97, 621, 400, 371, 241, 375))
@@ -352,14 +352,6 @@ mort.rate.legend <- get_legend(barplot.mort)
 
 # get state-level information and plot up mortality rates:
 
-# pull the terrain background from stamenmaps
-height <- max(state_sub$lat) - min(state_sub$lat)
-width <- max(state_sub$long) - min(state_sub$long)
-ne_borders <- c(bottom  = min(state_sub$lat)  - 0.1 * height, 
-                top     = max(state_sub$lat)  + 0.1 * height,
-                left    = min(state_sub$long) - 0.1 * width,
-                right   = max(state_sub$long) + 0.1 * width)
-#map <- get_stadiamap(ne_borders, zoom = 6, maptype = "stamen_terrain")
 
 
 library(maps)
@@ -377,6 +369,16 @@ canada <- map_data("worldHires", "Canada")
 # join up mortality data to state_sub
 state_sub <- state_sub %>% left_join(., st.mort.df)
 state_sub$mortality.rate <- factor(state_sub$mortality.rate, levels = c("> 0.25", "0.25 - 0.5", "0.5 - 0.75", "0.75 - 1", "1 - 1.5", "1.5 - 2", "2 - 4", "4-6"))
+
+# pull the terrain background from stamenmaps
+height <- max(state_sub$lat) - min(state_sub$lat)
+width <- max(state_sub$long) - min(state_sub$long)
+ne_borders <- c(bottom  = min(state_sub$lat)  - 0.1 * height, 
+                top     = max(state_sub$lat)  + 0.1 * height,
+                left    = min(state_sub$long) - 0.1 * width,
+                right   = max(state_sub$long) + 0.1 * width)
+#map <- get_stadiamap(ne_borders, zoom = 6, maptype = "stamen_terrain")
+
 
 library(rnaturalearth)
 library(terra)
@@ -633,7 +635,7 @@ full.model <- data.frame(Covariates = colnames(mod.data$xM),
                          id = 1:length(colnames(mod.data$xM)))
 
 # read in the betas, marginal responses, and variance parsing summaries ---
-betas.df <- readRDS(paste0(input.folder, "samples/u_betas_model_", model.no, "_1000samples.rds"))
+betas.df <- readRDS(paste0(input.folder, "samples/u_betas_model_", model.no, "_5000samples.rds"))
 marginal_response_df <- readRDS(paste0(input.folder, "all_marginal_responses.RDS"))
 interaction_response_df <- readRDS(paste0(input.folder, "interaction_responses.RDS"))
 var_summary <- readRDS(paste0(output.folder, "variance_partitioning_summary_region_species.RDS"))
@@ -691,8 +693,8 @@ plot_beta_effects <- function(pred.group, betas.sig){
       strip.fill <- as.character(color.pred.class.2[unique(df.covar$predictor.class2)])
       
       ggplot()+
-        geom_errorbar(data = na.omit(df.covar), aes(y = Predictor , xmin = ci.lo, xmax = ci.hi, color = Species, linetype = significance), position = position_dodge(width = 0.8), width = 0)+
-        geom_point(data = na.omit(df.covar), aes(y = Predictor, x = median, color = Species, shape = significance), position = position_dodge(width = 0.8), size = 1.5)+
+        geom_errorbar(data = na.omit(df.covar), aes(y = Predictor , xmin = ci.lo, xmax = ci.hi, color = Species, linetype = significance), position = position_dodge(width = 0.9), width = 0)+
+        geom_point(data = na.omit(df.covar), aes(y = Predictor, x = median, color = Species, shape = significance), position = position_dodge(width = 0.9), size = 1.5)+
        
        
         facet_wrap(~predictor.class2, scales= "free_y", ncol = 1)+
@@ -751,15 +753,16 @@ betas.sig.all <- betas.quant %>% filter(Covariate %in% unique(betas.sig.df$Covar
 beta.sig.all.plots <- lapply(unique(betas.sig.all$predictor.class2), function(x){
   plot_beta_effects(pred.group = x, betas.sig = betas.sig.all)
 })
-
+library(patchwork)
 # set up the layouts using patchwork
 growth.plt <- (beta.sig.all.plots[[1]] / beta.sig.all.plots[[2]]/ beta.sig.all.plots[[8]] & coord_cartesian(xlim=c(-1, 3.567)))+ plot_layout(ncol = 1, guides = "collect", axes = "collect_x") 
 
-compete.plt <- ( beta.sig.all.plots[[3]] / beta.sig.all.plots[[9]]  & coord_cartesian(xlim=c(-0.5, 1))) + plot_layout(ncol = 1, guides = "collect", axes = "collect_x") 
+compete.plt <- ( (beta.sig.all.plots[[3]]) / beta.sig.all.plots[[12]]/beta.sig.all.plots[[4]] /beta.sig.all.plots[[9]]  & coord_cartesian(xlim=c(-0.7, 0.5))) + 
+  plot_layout(ncol = 1, guides = "collect", axes = "collect_x", heights = c(2, 1,1,1)) 
 
-climate.plt <- ( beta.sig.all.plots[[5]] / beta.sig.all.plots[[10]] & coord_cartesian(xlim=c(-1, 1.5))) + plot_layout(ncol = 1, guides = "collect", axes = "collect_x") 
+climate.plt <- ( beta.sig.all.plots[[5]] / beta.sig.all.plots[[10]] & coord_cartesian(xlim=c(-1, 1))) + plot_layout(ncol = 1, guides = "collect", axes = "collect_x") 
 
-site.ndep.plt <- (beta.sig.all.plots[[4]] / beta.sig.all.plots[[6]] / beta.sig.all.plots[[7]]/ beta.sig.all.plots[[11]]  & coord_cartesian(xlim=c(-0.5, 0.5))) + plot_layout(ncol = 1, guides = "collect", axes = "collect_x") 
+site.ndep.plt <- (  beta.sig.all.plots[[7]]/ beta.sig.all.plots[[11]]/beta.sig.all.plots[[6]]   & coord_cartesian(xlim=c(-0.5, 0.7))) + plot_layout(ncol = 1, guides = "collect", axes = "collect_x") 
 
 # save all the plots
 save_plot(paste0(output.folder,"images/significant_betas_growth_dia.png"), 
@@ -769,16 +772,16 @@ save_plot(paste0(output.folder,"images/significant_betas_growth_dia.svg"),
           growth.plt, base_width = 5, base_height = 8)
 
 save_plot(paste0(output.folder,"images/significant_betas_competition.png"), 
-          compete.plt, base_width = 5, base_height = 8) 
+          compete.plt, base_width = 5, base_height = 10) 
 
 save_plot(paste0(output.folder,"images/significant_betas_competition.svg"),
-          compete.plt, base_width = 5, base_height = 8)
+          compete.plt, base_width = 5, base_height = 10)
 
 save_plot(paste0(output.folder,"images/significant_betas_climate.png"), 
-          climate.plt, base_width = 5, base_height = 8) 
+          climate.plt, base_width = 5, base_height = 10) 
 
 save_plot(paste0(output.folder,"images/significant_betas_climate.svg"),
-          climate.plt, base_width = 5, base_height = 8)
+          climate.plt, base_width = 5, base_height = 10)
 
 
 save_plot(paste0(output.folder,"images/significant_betas_siteNdep.png"), 
@@ -999,8 +1002,9 @@ var.summary.region %>% group_by(COMMON) %>% arrange(COMMON, desc(mean_logit)) %>
   summarise(total_cat = sum(mean_logit)*100)%>%
   select(total_cat,  predictor.class2, COMMON) %>%
   
-  filter(total_cat > 5) %>% 
-  arrange( desc(total_cat)) %>% View()
+  filter(total_cat > 2.5) %>% 
+  arrange( desc(total_cat)) %>%
+  group_by(COMMON)%>% View()
 
 
 var.summary.region %>% group_by(COMMON) %>% arrange(COMMON, desc(mean_logit)) %>% 
@@ -1009,12 +1013,15 @@ var.summary.region %>% group_by(COMMON) %>% arrange(COMMON, desc(mean_logit)) %>
   group_by(predictor.class2, COMMON)%>%
   mutate(total_cat = sum(mean_logit)*100)%>%
   select(Covariate, logit_percent, total_cat,  predictor.class2, COMMON) %>%
-  filter(predictor.class2 %in%  "Ndep x G & S")%>%
+  filter(predictor.class2 %in%  "Competition x G & S")%>%
   #filter(total_cat > 5) %>% 
-  arrange(desc(total_cat), desc(logit_percent)) %>% View()
+  arrange(desc(total_cat), desc(logit_percent)) %>% 
+  filter(total_cat >1)%>% View()
 
 #########################################################################
 # Marginal effects, but plotting effects for species in affected by different pests
+
+
 
 marginal_response_df$predictor.class2
 #interaction_response_df<- left_join(interaction_response_df, Covariate.types.df)
@@ -1203,7 +1210,7 @@ plot_main_region_effects<- function(species.group, covar, ymax.spp){
 # Plot up the important marginal effects for different groups of species---
 # select main effects and interactions to plot for each species group:
 # read in the variance partitioning summary by species
-var_summary <- readRDS(paste0(output.folder, "variance_partitioning_summary_region_species.RDS"))
+#var_summary <- readRDS(paste0(output.folder, "variance_partitioning_summary_region_species.RDS"))
 
 plot_main_region_effects(species.group = c("northern red oak"), 
                          covar = "MAP.scaled_DIA.int", 
@@ -1212,6 +1219,10 @@ plot_main_region_effects(species.group = c("northern red oak"),
 plot_main_region_effects(species.group = c("northern red oak", "hickory spp."), 
                          covar = c("tmax.anom_DIA.int"),
                          ymax.spp = 0.001)
+
+plot_main_region_effects(species.group = c("chestnut oak"), 
+                         covar = c("Ndep.scaled"),
+                         ymax.spp = 0.01)
 
 plot_main_region_effects(species.group = c("red maple", "yellow birch"), 
                          covar = c("MATmax.scaled_growth.int"),
@@ -1269,7 +1280,7 @@ plot_grid(region.plt.list[[3]]+theme(legend.position = "none"),
           
 plot_grid(region.plt.list[[7]]+theme(legend.position = "none"),
           region.plt.list[[9]]+theme(legend.position = "none"),
-          region.plt.list[[10]]+theme(legend.position = "none"),
+         # region.plt.list[[10]]+theme(legend.position = "none"),
           region.plt.list[[4]]+theme(legend.position = "none"),
           region.plt.list[[6]]+theme(legend.position = "none"),
          ncol = 5, align = "hv"),
@@ -1292,7 +1303,7 @@ spongy.susceptible.top5 <- var_summary %>% filter(Species %in% spongy.susceptibl
   group_by( Covariate, predictor.class2, Species)%>%
   summarise(mean.region = median(mean))%>% arrange(desc(mean.region)) %>% 
   group_by(Species)%>% #View()
-  slice(1:6) %>% ungroup() %>% select(Covariate) %>% distinct()
+  slice(1:7) %>% ungroup() %>% select(Covariate) %>% distinct()
 
 region.plt.list <-list()
 for(h in 1:length(spongy.susceptible.top5$Covariate)){
@@ -1500,5 +1511,108 @@ save_plot(paste0(output.folder,"images/mixed_dominant_marginal_variance_effects.
           mixed.effects, base_width = 16, base_height = 15)
 
 ## Select variance partitioning across the region:---------------------
+# read in the state-level variance partitioning:
+st.var.files <- list.files(paste0(output.folder,"predicted_mort/"), pattern = "variance_partitioning_summary_by_predictor_state_", full.names = TRUE)
+last_three_str_sub <- str_sub(st.var.files, -3, -1)
+Covariate_names <- read.csv(paste0(output.dir, "data/model_covariate_types_v2.csv"))
+                          
+st.var.all.df <- do.call(rbind, lapply(st.var.files, function(x){
+  read.csv(x)%>% mutate(state = str_sub(x, -6, -5)) %>% rename("Covariate" = "predictor")%>% left_join(., Covariate_names)
+ }))
+
+state.variance.df <- st.var.all.df %>% left_join(.,state.df %>% mutate(state = as.character(state)))
+state.variance.df
+var.summary.region <- var_summary
+state.variance.df$COMMON <- factor(state.variance.df$Species, 
+                                    levels = rev(c("balsam fir", "red spruce", "northern white-cedar", 
+                                                   "eastern hemlock", "American beech", 
+                                                   "black oak", "chestnut oak", "northern red oak", "white oak", "yellow birch", "paper birch", 
+                                                   "hickory spp.", "eastern white pine", "red maple", "sugar maple", 
+                                                   "black cherry", "white ash", "yellow-poplar")))
+state.variance.df$predictor.class <- factor(state.variance.df$predictor.class, 
+                                             levels = c(
+                                               
+                                               "Size" ,
+                                               "Change in Size" ,
+                                               "Climate" ,
+                                               "Site Conditions",
+                                               "Competition",
+                                               "N deposition", 
+                                               "% Damage", 
+                                               "Growth x Size",
+                                               
+                                               "Site x G & S",
+                                               "Competition x G & S" ,
+                                               
+                                               "Ndep x G & S",
+                                               "Climate x G & S",
+                                               "Damage x G & S"))
 
 
+state.variance.df$predictor.class2 <- factor(state.variance.df$predictor.class2, 
+                                              levels = c(
+                                                
+                                                "Size",
+                                                "Change in Size",
+                                                "Growth x Size" ,
+                                                
+                                                "Climate",
+                                                "Climate x G & S",
+                                                
+                                                "N deposition", 
+                                                "Ndep x G & S" ,
+                                                
+                                                "% Damage", 
+                                                "Damage x G & S",
+                                                
+                                                
+                                                "Competition",
+                                                "Competition x G & S",
+                                                
+                                                "Site Conditions",
+                                                "Site x G & S"
+                                                
+                                                
+                                              ))
+
+
+
+ ggplot(data = state.variance.df %>% filter(COMMON %in% spruce.fir))+
+  geom_bar(aes(x = region, y = mean, fill = predictor.class2), stat = "identity", position = "stack")+
+  theme_bw(base_size = 16)+ theme(axis.text.x = element_text(angle = 60, hjust = 1), 
+                                  panel.background = element_blank())+
+  ylab("Across-tree variance in  \n p(survival) explained")+
+  scale_fill_manual(values = color.pred.class.2, name = "",
+                    labels = c("Change in Size" = expression(Delta ~ "D" ), 
+                               "Growth x Size" = expression(Delta ~ "D x D"), 
+                               "Size" = "Diameter (D)", 
+                               "Climate x G & S" = expression("Climate x " ~Delta ~ "D or D"), 
+                               "Ndep x G & S" = expression("N dep. x " ~Delta ~ "D or D"),
+                               "Damage x G & S" = expression("Damage x " ~Delta ~ "D or D"), 
+                               "Competition x G & S" = expression("Compeition x " ~Delta ~ "D or D"),
+                               "Site x G & S" = expression("Site x " ~Delta ~ "D or D")
+                    ),
+                    guide = guide_legend(direction = "horizontal",
+                                         ncol = 14,nrow = 1,reverse = TRUE,
+                                         label.position="top", label.hjust = 0,
+                                         label.vjust = 0.5,
+                                         label.theme = element_text(angle = 90)))+
+  coord_flip()+
+  xlab("")+
+  theme(panel.grid = element_blank(), 
+        legend.position = "top", 
+        panel.border = element_blank(), 
+        axis.ticks.y = element_blank())+
+   facet_wrap(~COMMON, scales = "free_y", ncol = 1)
+
+ 
+ 
+ 
+ state.variance.df %>% filter(COMMON %in% spruce.fir)%>%
+   mutate(logit_percent = round(mean_logit*100, digits = 2))%>%
+   group_by(predictor.class2, COMMON, region, Covariate)%>%
+   summarise(total_cat = sum(mean_logit)*100)%>%
+   #select(Covariate, logit_percent, total_cat,  predictor.class2, COMMON, region) %>%
+   filter(COMMON %in% "red spruce" )%>%
+   filter(total_cat > 1) %>% 
+   arrange(region, desc(total_cat))%>% View()
