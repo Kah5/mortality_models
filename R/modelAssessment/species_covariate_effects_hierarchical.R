@@ -5,6 +5,14 @@ library(rstan)
 library(tidyverse)
 library(posterior)
 library(cowplot)
+
+#input.folder = "/home/rstudio/data-store/data/output/"
+#input.folder = "/home/rstudio/data-store/data/iplant/home/kellyheilman/analyses/Mortality_hierarchical_models-2025-04-07-18-56-47.7/"
+#output.folder = "/home/rstudio/SPCD_stanoutput_joint_v3/"
+input.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
+output.folder = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
+
+
 ################################################################################
 # Read in mortality data for 17 species
 ################################################################################
@@ -206,9 +214,6 @@ named_species_linetype <- scale_linetype_manual(values = sppLinetype.species)
 
 SPCD.id <- 318
 model.no <- 6
-input.folder = "/home/rstudio/data-store/data/output/"
-input.folder = "/home/rstudio/data-store/data/iplant/home/kellyheilman/analyses/Mortality_hierarchical_models-2025-04-07-18-56-47.7/"
-output.folder = "/home/rstudio/SPCD_stanoutput_joint_v3/"
 
 m <- 6
 #for(m in 1:9){
@@ -219,7 +224,7 @@ model.no <- m
 
 
 # get the number of variables
-mod.data <- readRDS(paste0(input.folder, "SPCD_stanoutput_joint_v3_model_", model.no, "/all_SPCD_model_",model.no,".RDS"))
+mod.data <- readRDS(paste0(input.folder, "SPCD_stanoutput_joint_v3/all_SPCD_model_",model.no,".RDS"))
 ncovar <- length(colnames(mod.data$xM))
 
 full.model <- data.frame(Covariates = colnames(mod.data$xM), 
@@ -234,13 +239,13 @@ full.model <- data.frame(Covariates = colnames(mod.data$xM),
 #   mutate(remper.cor = 0.5)
 # # relabel u_betas to meaningful species ids names
 # betas.quant$spp <- rep(1:17, ncovar)
-alpha.fit <- readRDS(paste0(input.folder, "SPCD_stanoutput_joint_v3_model_", model.no, "/alpha.spp_model_", model.no, "_1000samples.rds"))
+alpha.fit <- readRDS(paste0(input.folder, "SPCD_stanoutput_joint_v3/samples/alpha.spp_model_", model.no, "_5000samples.rds"))
 alpha_df <- as_draws_df(alpha.fit) # takes awhile to convert to df
 
 
 
 # get all the covariates using posterior package
-betas.df <- readRDS(paste0(input.folder, "SPCD_stanoutput_joint_v3_model_", model.no, "/u_betas_model_", model.no, "_1000samples.rds"))
+betas.df <- readRDS(paste0(input.folder, "SPCD_stanoutput_joint_v3/samples/u_betas_model_", model.no, "_5000samples.rds"))
 betas.quant <- betas.df %>% summarise_draws(median, ~quantile(., probs = c(0.025, 0.975))) %>%
   rename(`ci.lo` = "2.5%", `ci.hi` = "97.5%") %>%
   mutate(remper.cor = 0.5)
@@ -289,7 +294,7 @@ ggsave(height = 10, width = 15,dpi = 350, units = "in",paste0(output.folder,"SPC
 
 # get the population estimates for the betas
 
-mubetas.estimates <- readRDS( paste0(input.folder, "SPCD_stanoutput_joint_v3_model_", model.no, "/beta_model_", model.no, "_1000samples.rds"))
+mubetas.estimates <- readRDS( paste0(input.folder, "SPCD_stanoutput_joint_v3/samples/beta_model_", model.no, "_5000samples.rds"))
 
 mubetas.quant <- summarise_draws(mubetas.estimates, median, ~quantile(.x, probs = c(0.025, 0.975)))%>% rename(`ci.lo` = `2.5%`, `ci.hi` = `97.5%`)
 
@@ -525,9 +530,9 @@ SPECIES.groups$Species
 
 all.joint.betas$Species <- factor(all.joint.betas$Species, levels = c(
   "balsam fir", "red spruce", "northern white-cedar", "eastern hemlock", "eastern white pine", 
-  "yellow birch", "American beech", "sugar maple", "red maple",
+  "yellow birch","paper birch", "American beech", "sugar maple", "red maple",
   "northern red oak","chestnut oak", "black oak", "white oak", 
-  "hickory spp.","white ash", "yellow-poplar"))
+  "hickory spp.","white ash","black cherry", "yellow-poplar"))
 
 
 
@@ -605,7 +610,7 @@ if(model.no >=5){
 
 
 # get the species alpha estimates
-alphas.estimates <- readRDS( paste0(input.folder,"SPCD_stanoutput_joint_v3_model_",model.no,"/alpha.spp_model_",model.no,"_1000samples.rds"))
+alphas.estimates <- readRDS( paste0(input.folder,"SPCD_stanoutput_joint_v3/samples/alpha.spp_model_",model.no,"_5000samples.rds"))
 
 alphas.quant <- summarise_draws(alphas.estimates, median, ~quantile(.x, probs = c(0.025, 0.975)))%>% rename(`ci.lo` = `2.5%`, `ci.hi` = `97.5%`)
 
@@ -640,7 +645,7 @@ ggsave(height = 5, width = 10, units = "in",paste0(output.folder,"SPCD_stanoutpu
 # combine the population and the species level betas
 
 ## get population level alpha estimates:
-alphas.pop.estimates <- readRDS( paste0(input.folder,"SPCD_stanoutput_joint_v3_model_",model.no,"/alpha.p_model_",model.no,"_1000samples.rds"))
+alphas.pop.estimates <- readRDS( paste0(input.folder,"SPCD_stanoutput_joint_v3/samples/alpha.p_model_",model.no,"_5000samples.rds"))
 
 alphas.pop.quant <- summarise_draws(alphas.pop.estimates, median, ~quantile(.x, probs = c(0.025, 0.975)))%>% rename(`ci.lo` = `2.5%`, `ci.hi` = `97.5%`)
 
@@ -714,7 +719,7 @@ for(i in 17:1){
     readRDS (
       paste0(
         input.folder,
-        "SPCD_stanoutput_joint_v3_model_",model.no,"/all_SPCD_model_",
+        "SPCD_stanoutput_joint_v3/all_SPCD_model_",
         model.no,
         ".RDS"
       )
@@ -898,9 +903,248 @@ for(i in 17:1){
   
 }
 
+################################################################################
+# Conditional effects by species, by state ----
+################################################################################
+for(i in 17:1){
+  cat(i)
+  
+  SPCD.id <- nspp[i,]$SPCD
+  beta.species.names <- betas.quant %>% filter(spp %in% i) %>% select(variable)
+  # select only the betas and intercepts for the species of interest:
+  beta <- subset_draws(betas.df, variable = beta.species.names$variable) %>% select(-.chain, -.iteration, -.draw) 
+  beta_0 <- data.frame(subset_draws(alpha_df, variable = paste0("alpha_SPP[",i,"]"))) %>% select(-.chain, -.iteration, -.draw)  # Intercept
+  # read in the species data and covariates to get the min and max and get ranges
+  mod.data <-
+    readRDS (
+      paste0(
+        input.folder,
+        "SPCD_stanoutput_joint_v3/all_SPCD_model_",
+        model.no,
+        ".RDS"
+      )
+    )
+  
+  train.data.spp <- train.data %>% filter(spp %in% SPCD.id)
+  unique(train.data.spp$state)
+  
+  for(st in unique(train.data.spp$state)){
+  
+  train.data.spp.st.index <- which(train.data$spp == SPCD.id & train.data$state == st)
+  
+  covariate_names <- c(colnames(mod.data$xM))  # Replace with your covariate names
+  xM.st.spp <- mod.data$xM[train.data.spp.st.index,]
+  #xM.st.spp <- mod.data$xM[train.data.spp.st.index,]
+  
+  var.mins <- as.vector(apply(data.frame(xM.st.spp),2 , function(x)quantile(x, 0.025)))
+  var.maxes <- as.vector(apply(data.frame(xM.st.spp),2 , function(x) quantile(x, 0.975)))
+  var.75s <- as.vector(apply(data.frame(xM.st.spp),2 , function(x) quantile(x, 0.75)))
+  var.25s <- as.vector(apply(data.frame(xM.st.spp),2 , function(x) quantile(x, 0.25)))
+  var.medians <- as.vector(apply(data.frame(xM.st.spp),2 , function(x) quantile(x, 0.5)))
+  
+  covariate_ranges_df <- data.frame(
+    covariate  = covariate_names, 
+    mins = var.mins, 
+    maxes = var.maxes, 
+    qq25 = var.25s, 
+    qq75 = var.75s, 
+    medians = var.medians
+  )
+  
+  covariate_ranges_df[1,]
+  cov.list <- list()
+  for(j in 1:length (covariate_ranges_df[,2])){
+    cov.list[[j]] <- seq(covariate_ranges_df[j,2], covariate_ranges_df[j,3], length.out = 25)
+  }
+  names(cov.list) <- c(colnames(xM.st.spp))
+  
+  # Define a baseline for other covariates (mean or median values)
+  #var.medians <- as.vector(apply(data.frame(mod.data$xM),2 , median))
+  
+  #covariate_ranges_df$medians <- 0#as.vector(apply(data.frame(mod.data$xM),2 , median))
+  
+  
+  # set up a function calculate probabilities
+  inv_logit_fxn <- function(x) {
+    1 / (1 + exp(-x))
+  }
+  cov_name <- "annual.growth.scaled"
+  
+  
+  # get all the data and make prediction over the range of each individual covariate
+  plot_data <- map_dfr(covariate_names, function(cov_name) {
+    # Range of the focal covariate
+    cov_range <- cov.list[[cov_name]]
+    
+    # Create a matrix for covariates
+    covariate_matrix <- matrix(covariate_ranges_df$medians, nrow = length(cov_range), ncol = length(covariate_names), byrow = TRUE)
+    colnames(covariate_matrix) <- covariate_names
+    covariate_matrix[, cov_name] <- cov_range  # Vary only the focal covariate
+    
+    # Calculate probabilities for each sample
+    #probabilities <- apply(beta, MARGIN = 1 , function(b) {
+    probabilities <- list()
+    for(j in 1:length(covariate_matrix[,1])){
+      linear_predictor <- beta_0[,1] + rowSums( as.matrix(beta)%*% covariate_matrix[j,] )
+      probabilities[[j]] <-  as.vector(inv_logit_fxn(linear_predictor))
+    }
+    
+    
+    
+    # Summarize probabilities (mean and 90% credible interval)
+    prob_summary <- lapply(probabilities, function(p) {
+      c(mean = median(p), ci.lo = quantile(p, 0.1), ci.hi = quantile(p, 0.9))
+    })
+    
+    prob_summary.df <- do.call(rbind, prob_summary)
+    
+    # Combine with covariate range for plotting
+    data.frame(
+      Covariate = cov_name,
+      Value = cov_range,
+      mean = prob_summary.df[, "mean"],
+      ci.lo = prob_summary.df[, "ci.lo.10%"],
+      ci.hi = prob_summary.df[, "ci.hi.90%"]
+    )
+  })
+  
+  plot_data$Covariate <- factor(plot_data$Covariate, levels = unique(plot_data$Covariate))
+  
+  # make a plot of covariate responses for each species
+ 
+  # save for this species:
+  plot_data$SPCD <- SPCD.id
+  plot_data$state <- st
+  
+  saveRDS(plot_data, paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/model_",model.no,"_main_effects_state_",st,"_marginal_SPCD_", SPCD.id, ".RDS") )
+  
+  
+  # make interaction term plots:
+  
+  interaction.ranges <- left_join(covariate_ranges_df, Covariate.types.df %>% rename("covariate" = "Covariate"))#%>%
+  #filter(!is.na(Pred.2)) 
+  dia.ranges <- interaction.ranges %>% filter(covariate %in% "DIA_scaled")
+  diadiff.ranges <- interaction.ranges %>% filter(covariate %in% "DIA_DIFF_scaled")
+  
+  main.effectsi <- interaction.ranges %>% filter(pred.type %in% "Main Effects") %>%
+    select(Pred.1, mins:medians)%>%
+    rename("p1.mins" = "mins", "p1.maxes" = "maxes", "p1.medians" = "medians")%>%
+    select(Pred.1, p1.mins, p1.maxes, p1.medians)
+  
+  interactions <- interaction.ranges %>% filter(!is.na(Pred.2))%>%
+    mutate(interaction.qq25 = ifelse(Pred.2 %in% "DIA_DIFF_scaled", diadiff.ranges$qq25, 
+                                     dia.ranges$qq25), 
+           interaction.qq75 = ifelse(Pred.2 %in% "DIA_DIFF_scaled", diadiff.ranges$qq75, 
+                                     dia.ranges$qq75), 
+           interaction.qq50 = ifelse(Pred.2 %in% "DIA_DIFF_scaled", mean(xM.st.spp[,"DIA_DIFF_scaled"]), 
+                                     mean(xM.st.spp[,"DIA_scaled"])))%>% 
+    left_join(.,main.effectsi)
+  
+  # for each interaction term, generate 3 prediction lines:
+  interaction.list <- list()
+  for(j in 1:length (interactions[,2])){
+    
+    p1.seq.median <-  seq(interactions[j,"p1.mins"], interactions[j,"p1.maxes"], length.out = 25)
+    p1.seq.hi <-  seq(interactions[j,"p1.mins"], interactions[j,"p1.maxes"], length.out = 25)
+    p1.seq.lo <-  seq(interactions[j,"p1.mins"], interactions[j,"p1.maxes"], length.out = 25)
+    
+    interaction.list[[j]] <- data.frame(p1.value = c(p1.seq.median, p1.seq.hi, p1.seq.lo), 
+                                        p2.value = c(rep(interactions[j, "interaction.qq50"], 25), rep(interactions[j, "interaction.qq75"], 25), rep(interactions[j, "interaction.qq25"], 25)),
+                                        p2.rank = c(rep("median", 25), rep("high", 25), rep("low", 25)),
+                                        covariate = rep(interactions[j,"covariate"], 25*3), 
+                                        Pred.1 = rep(interactions[j,"Pred.1"], 25*3), 
+                                        Pred.2 = rep(interactions[j,"Pred.2"], 25*3))
+  }
+  names(interaction.list) <- c(interactions$covariate)
+  
+  interaction.list[[j]]
+  
+  interaction_effects <- function(j){
+    
+    int.list <- interaction.list[[j]]
+    cov_name <- unique(int.list$covariate)
+    Pred.1.name <- unique(int.list$Pred.1)
+    Pred.2.name <- unique(int.list$Pred.2)
+    
+    covariate_matrix_int <- matrix(covariate_ranges_df$medians, 
+                                   nrow = length(int.list$p1.value), 
+                                   ncol = length(covariate_names), byrow = TRUE)
+    colnames( covariate_matrix_int) <- covariate_names
+    covariate_matrix_int[, cov_name] <- int.list$p1.value * int.list$p2.value
+    covariate_matrix_int[, Pred.1.name] <- int.list$p1.value
+    covariate_matrix_int[, Pred.2.name] <- int.list$p2.value
+    #covariate_matrix[, Pred.1.name] <- int.list$ 
+    probabilities <- list()
+    for(d in 1:length(covariate_matrix_int[,1])){
+      linear_predictor <- beta_0[,1] + rowSums( as.matrix(beta) %*%  covariate_matrix_int[d,] )
+      probabilities[[d]] <-  as.vector(inv_logit_fxn(linear_predictor))
+    }
+    
+    # Summarize probabilities (mean and 90% credible interval)
+    prob_summary <- lapply(probabilities, function(p) {
+      c(mean = median(p), ci.lo = quantile(p, 0.1), ci.hi = quantile(p, 0.9))
+    })
+    
+    
+    
+    prob_summary.df <- do.call(rbind, prob_summary)
+    prob_summary_covariate <- cbind(int.list, prob_summary.df)
+    # Combine with covariate range for plotting
+    prob_summary_covariate
+  }
+  
+  allmarginal.interaction.spp <- do.call(rbind, lapply(1:length(interaction.list), interaction_effects))
+ 
+  allmarginal.interaction.spp$SPCD <- SPCD.id
+  allmarginal.interaction.spp$state <- st
+  
+  saveRDS(allmarginal.interaction.spp, paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/model_",model.no,"_interaction_state_",st,"_marginal_SPCD_", SPCD.id, ".RDS") )
+  
+  }
+  
+}
+################################################################################
+# combine the state-wide species conditional responses together---
+################################################################################
+SPCD.ids <- c(531)
+
+# load the state-level marginal effects:
+species.st.main.files <- list.files(paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/"), pattern ="_main_effects_state_", full.names = TRUE)
+
+species.st.main.df <- do.call(rbind, lapply(species.st.main.files, readRDS))
+
+species.st.interaction.files <- list.files(paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/"), pattern ="_interaction_state_", full.names = TRUE)
+
+species.st.interaction.df <- do.call(rbind, lapply(species.st.interaction.files, readRDS))
+
+species.main <- species.st.main.df %>% filter(SPCD %in% 531)
+
+ggplot(species.main %>% filter(Covariate %in% "MATmax.scaled"), aes(x = Value, y = mean, group = state, color = as.character(state)))+
+  geom_line()+facet_wrap(~state)
+ggplot(species.main %>% filter(Covariate %in% "MATmax.scaled_DIA.int"), aes(x = Value, y = mean, group = state, color = as.character(state)))+
+  geom_line()+facet_wrap(~state)
+
+ggplot(species.main %>% filter(Covariate %in% "MATmax.scaled_growth.int"), aes(x = Value, y = mean, group = state, color = as.character(state)))+
+  geom_line()+facet_wrap(~state)
+
+
+species.main <- species.st.main.df %>% filter(SPCD %in% 832)
+
+ggplot(species.main %>% filter(Covariate %in% "MATmax.scaled"), aes(x = Value, y = mean, group = state, color = as.character(state)))+
+  geom_line()+facet_wrap(~state)
+ggplot(species.main %>% filter(Covariate %in% "MATmax.scaled_DIA.int"), aes(x = Value, y = mean, group = state, color = as.character(state)))+
+  geom_line()+facet_wrap(~state)
+
+ggplot(species.main %>% filter(Covariate %in% "MATmax.scaled_growth.int"), aes(x = Value, y = mean, group = state, color = as.character(state)))+
+  geom_line()+facet_wrap(~state)
+
+
+ggplot(species.main %>% filter(Covariate %in% "Ndep.scaled"), aes(x = Value, y = mean, group = state, color = as.character(state)))+
+  geom_line()+geom_ribbon(aes(x = Value, ymin = ci.lo, ymax = ci.hi, group = as.character(state), fill = as.character(state)), alpha = 0.5) +facet_wrap(~state)
+
 
 ################################################################################
-# combine all of the species conditional responses together
+# combine the regional species conditional responses together---
 ################################################################################
 
 # for the main effects:
@@ -949,7 +1193,8 @@ ggplot(data = interaction_response_df %>% filter(Predictor %in% "Diameter x DIA_
   #species_fill + species_color + species_linetype+
   theme_bw(base_size = 14)+theme(panel.grid = element_blank(), legend.position = "bottom") 
 
-
+saveRDS(marginal_response_df, paste0(output.folder, "SPCD_stanoutput_joint_v3/all_marginal_responses.RDS"))
+saveRDS(interaction_response_df, paste0(output.folder, "SPCD_stanoutput_joint_v3/interaction_marignal_responses.RDS"))
 
 
 ggplot(marginal_response_df, aes(x = Value, y = 1-mean, color = Species, linetype = `Shade Tolerance`)) +
@@ -1290,6 +1535,13 @@ if(model.no >=6){
   ggsave(height = 12, width = 12, 
          paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/summary/model_",model.no,"_species_level_model_marginal_main_effects_summary_noBF.png"), 
          dpi = 350)
+  ################################################################
+  # plot species level marginal effects by state for some species 
+  ################################################################
+  # for spruce fir forests
+  
+  list.files(path = paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted"))
+  
   
   
   ################################################################
@@ -1578,7 +1830,7 @@ if(model.no >=6){
           y = "Annual Probability of Mortality",
           #title = "Effect of Predictors on Probability of Mortality"
         ) +
-        var.part.fill + var.part.color+
+        #var.part.fill + var.part.color+
         theme_bw(base_size = 14)+theme(panel.grid = element_blank(), 
                                        legend.key.size = unit(1, "cm"), 
                                        legend.position = "none", 
@@ -1797,7 +2049,7 @@ if(model.no >=6){
 
 ### Plotting marginal responses by the species groups----
 # set up the output directory to read the marginal responses from
-output.dir <- "SPCD_stanoutput_joint_v3/"
+#output.dir <- "SPCD_stanoutput_joint_v3/"
 all_marginal_response_df <- readRDS(paste0(output.dir, "all_marginal_responses.RDS"))
 interaction_response_df <-readRDS(paste0(output.dir, "interaction_responses.RDS"))
 
