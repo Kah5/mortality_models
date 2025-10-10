@@ -99,7 +99,7 @@ plot.data.train <- readRDS (
 # rep = out of sample
 # calculate AUC estimates with uncertainty
 
-for(sp_i in 1:17){ 
+for(sp_i in 17:1){ 
       
     cat(paste("Generating in-sample predictions for tree survival for ", spp.table[match(sp_i, spp.table$spp),]$COMMON, "\n"))
       
@@ -124,7 +124,7 @@ for(sp_i in 1:17){
     
     # for in sample predictions:-----
     # create arrays for all the trees of this species  
-    yhat_spp <- mMhat_spp <- AUC_spp <- array(data = NA, dim = c(nrow(alpha_spp), nrow(xM_spp)))
+    yhat_spp <- mMhat_spp <- pSannual_spp <- AUC_spp <- array(data = NA, dim = c(nrow(alpha_spp), nrow(xM_spp)))
     dimnames(yhat_spp) <- list(c(1:nrow(alpha_spp)),c(paste0("yhat[", 1:nrow(xM_spp),"]")))
     
     
@@ -137,12 +137,14 @@ for(sp_i in 1:17){
           
         yhat_spp[,j] <- tree_posteriors$y_hat
         mMhat_spp[,j] <- tree_posteriors$mMhat
+        pSannual_spp[,j] <- tree_posteriors$pSannual
       
     }
     
     # save the posterior estimates for yhat and mMhat of this species:
     saveRDS(yhat_spp, paste0(output.folder, "SPCD_stanoutput_joint_v3/samples/Yhat_spp_",sp_i, ".RDS" ))
     saveRDS(mMhat_spp, paste0(output.folder, "SPCD_stanoutput_joint_v3/samples/mMhat_spp_",sp_i, ".RDS" ))
+    saveRDS(pSannual_spp, paste0(output.folder, "SPCD_stanoutput_joint_v3/samples/pSannual_spp_",sp_i, ".RDS" ))
     
     # save the tree indices for each species
     species.tree.indices <- data.frame(SPP = mod.data.full$SPP[species.index], 
@@ -180,7 +182,7 @@ for(sp_i in 1:17){
     cat(paste("Generating out-of-sample predictions for tree survival for ", spp.table[match(sp_i, spp.table$spp),]$COMMON, "\n"))
     
     # create arrays for all the trees of this species  
-    yrep_spp <- mMrep_spp  <- array(data = NA, dim = c(nrow(alpha_spp), nrow(xM_spp.rep)))
+    yrep_spp <- mMrep_spp <- pSannual_spp_rep <- array(data = NA, dim = c(nrow(alpha_spp), nrow(xM_spp.rep)))
     dimnames(yrep_spp) <- list(c(1:nrow(alpha_spp)),c(paste0("yrep[", 1:nrow(xM_spp.rep),"]")))
     
     
@@ -189,16 +191,18 @@ for(sp_i in 1:17){
                                                  Xmat_tree = as.vector(xM_spp.rep[j,]), #a vector of the xM covariate values for trep tree
                                                  alpha_re = alpha_spp, # species or population alphas
                                                  remper = remper_spp.rep[j])
-      colnames(tree_posteriors) <- c("y_rep", "mMrep", "pSannual", "logit.p.annual")
+      colnames(tree_posteriors) <- c("y_rep", "mMrep", "pSannual_rep", "logit.p.annual")
       
       yrep_spp[,j] <- tree_posteriors$y_rep
       mMrep_spp[,j] <- tree_posteriors$mMrep
+      pSannual_spp_rep[,j] <- tree_posteriors$pSannual_rep
       
     }
     
     # save the posterior estimates for yrep and mMrep of this species:
     saveRDS(yrep_spp, paste0(output.folder, "SPCD_stanoutput_joint_v3/samples/Yrep_spp_",sp_i, ".RDS" ))
     saveRDS(mMrep_spp, paste0(output.folder, "SPCD_stanoutput_joint_v3/samples/mMrep_spp_",sp_i, ".RDS" ))
+    saveRDS(pSannual_spp_rep, paste0(output.folder, "SPCD_stanoutput_joint_v3/samples/pSannual_rep_spp_",sp_i, ".RDS" ))
     
     # save the tree indices for each species
     species.tree.indices <- data.frame(SPP = mod.data.full$SPPrep[species.index.rep], 
@@ -230,3 +234,16 @@ for(sp_i in 1:17){
     saveRDS(AUC.oos.species, paste0(output.folder, "SPCD_stanoutput_joint_v3/samples/AUC_oos_spp_",sp_i, ".RDS" ))
 
 }
+
+###############################################################
+# Combine all species AUC scores for the posterior predictions
+###############################################################
+
+
+###############################################################
+# Plot remper mortality estimated probabilities vs regional mortality rates
+###############################################################
+
+########################################################################################
+# Generating posterior predictions from population estimates for the rest of the species
+########################################################################################
