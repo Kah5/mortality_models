@@ -14,7 +14,7 @@ output.folder <- "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortalit
 # get the complete species list
 nspp <- data.frame(SPCD = c(316, 318, 833, 832, 261, 531, 802, 129, 762,  12, 541,  97, 621, 400, 371, 241, 375))
 nspp$Species <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$GENUS, FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$SPECIES)
-nspp$COMMON <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$GENUS, FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$SPECIES)
+nspp$COMMON <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$COMMON_NAME
 
 
 # read in the test data for all the species
@@ -63,7 +63,17 @@ plot.data.train <- readRDS (
   
   paste0(
     output.folder,
-    "/SPCD_stanoutput_joint_v3/train_plot_data_SPCD_model_",
+    "/SPCD_stanoutput_joint_v3/train_data_all_SPCD_model_",
+    model.no,
+    ".RDS"
+  )
+)
+
+plot.data.test <- readRDS (
+  
+  paste0(
+    output.folder,
+    "/SPCD_stanoutput_joint_v3/test_data_all_SPCD_model_",
     model.no,
     ".RDS"
   )
@@ -238,11 +248,176 @@ for(sp_i in 17:1){
 ###############################################################
 # Combine all species AUC scores for the posterior predictions
 ###############################################################
+# read in the in-sample AUC scores:
+auc.is.files <- list.files(path = paste0(output.folder, "SPCD_stanoutput_joint_v3/samples/"), pattern = 
+"AUC_is_spp_", full.names = TRUE)
+
+
+AUC.is.df <-
+  do.call(rbind, lapply(auc.is.files, readRDS)) %>% group_by(spp, AUC_type) %>%
+  summarise(
+    median = median(AUC),
+    auc.ci.lo = quantile(AUC, 0.025),
+    auc.ci.hi = quantile(AUC, 0.975)
+  ) %>% left_join(., spp.table) 
+
+AUC.is.df$COMMON <- FIESTA::ref_species[match(AUC.is.df$SPCD.id, ref_species$SPCD),]$COMMON_NAME
+
+# save as a combined AUC in-sample
+saveRDS(
+  AUC.is.df,
+  paste0(
+    output.folder,
+    "SPCD_stanoutput_joint_v3/AUC_is_with_uncertainty.rds"
+  )
+)
+
+# read in the out of sample species AUC scores:
+auc.oos.files <- list.files(path = paste0(output.folder, "SPCD_stanoutput_joint_v3/samples/"), pattern = 
+                             "AUC_oos_spp_", full.names = TRUE)
+
+
+AUC.oos.df <-
+  do.call(rbind, lapply(auc.oos.files, readRDS)) %>% group_by(spp, AUC_type) %>%
+  summarise(
+    median = median(AUC),
+    auc.ci.lo = quantile(AUC, 0.025),
+    auc.ci.hi = quantile(AUC, 0.975)
+  ) %>% left_join(., spp.table) 
+
+AUC.oos.df$COMMON <- FIESTA::ref_species[match(AUC.oos.df$SPCD.id, ref_species$SPCD),]$COMMON_NAME
+
+# save as a combined AUC out of sample
+saveRDS(
+  AUC.oos.df,
+  paste0(
+    output.folder,
+    "SPCD_stanoutput_joint_v3/AUC_oos_with_uncertainty.rds"
+  )
+)
+
 
 
 ###############################################################
 # Plot remper mortality estimated probabilities vs regional mortality rates
 ###############################################################
+# for each species, read in the in-sample and out-of-sample annual probability of mortality:
+
+
+
+for(i in 17:1){
+    
+    # read in the in-sample and out of sample
+    pSannual_s <- readRDS(paste0(output.folder, "SPCD_stanoutput_joint_v3/samples/pSannual_spp_",i,".RDS"))#%>%
+    
+    # convert to 10 year survival probabilities:
+    pS_10year <- pSannual_s^10
+    
+    # get the tree and species-level summaries
+    pS10year_tree <- pS_10year %>% reshape2::melt(.) %>% 
+      rename("tree.id"  = "Var2", 
+             "sample" = "Var1", 
+             "p10year" = "value")%>%
+      group_by(tree.id)%>%
+      summarise(p10year.med = median(p10year), 
+                p10year.ci.lo = quantile(p10year, 0.025), 
+                p10year.ci.hi = quantile(p10year, 0.975), 
+                p10year.sd = sd(p10year))%>%
+      mutate(spp = i) %>%
+      left_join(., spp.table) %>%
+      group_by(tree.id)%>%
+      # use pS_10median to get a survival for each tree over a ten year interval:
+      mutate(survival.draw = rbinom(1,1, prob = p10year.med))%>%
+      mutate(data.type = "in-sample")
+    
+    spp.state.id.is <- plot.data.train %>% filter(SPCD %in% unique(pS10year_tree$SPCD.id))%>%
+      mutate(tree.id = 1:length(county))%>%
+      select(PLOT.ID, SPCD, tree.id, state, county, remper)%>%
+      mutate(data.type = "in-sample")
+    
+    pS10year_tree <- left_join(pS10year_tree, spp.state.id)
+    
+    # read the out of sample data
+    
+    # read in the out of sample
+    pSannual_rep <- readRDS(paste0(output.folder, "SPCD_stanoutput_joint_v3/samples/pSannual_rep_spp_",i,".RDS"))#%>%
+    
+    # convert to 10 year survival probabilities:
+    pS_10year_rep <- pSannual_rep^10
+    
+    # get the tree and species-level summaries
+    pS10year_tree_rep <- pS_10year_rep %>% reshape2::melt(.) %>% 
+      rename("tree.id"  = "Var2", 
+             "sample" = "Var1", 
+             "p10year" = "value")%>%
+      group_by(tree.id)%>%
+      summarise(p10year.med = median(p10year), 
+                p10year.ci.lo = quantile(p10year, 0.025), 
+                p10year.ci.hi = quantile(p10year, 0.975), 
+                p10year.sd = sd(p10year))%>%
+      mutate(spp = i) %>%
+      left_join(., spp.table) %>%
+      group_by(tree.id)%>%
+      # use pS_10median to get a survival for each tree over a ten year interval:
+      mutate(survival.draw = rbinom(1,1, prob = p10year.med)) %>%
+      mutate(data.type = "out-of-sample")
+    
+    spp.state.id.oos <- plot.data.test %>% filter(SPCD %in% unique(pS10year_tree$SPCD.id))%>%
+      mutate(tree.id = 1:length(county))%>%
+      select(PLOT.ID, SPCD, tree.id, state, county, remper)%>%
+      mutate(data.type = "out-of-sample")
+    
+    pS10year_tree_rep <- left_join(pS10year_tree_rep, spp.state.id.oos)
+    
+    # combine all the trees
+    pS10year_all <- rbind(pS10year_tree, pS10year_tree_rep) %>% ungroup() %>%
+      mutate(mortality.draw = 1-survival.draw)
+    
+    # calculate a whole region summary
+    regional.spp.summary <-  pS10year_all %>% 
+      group_by(spp, SPCD.id, COMMON)%>% 
+      summarise(ntree = n(), 
+                nmort = sum(mortality.draw),
+                pct.mort.10year = ((sum(mortality.draw)/n())*100))%>%
+      mutate(pct.mort.annual = pct.mort.10year/10)
+    
+    
+    
+    # calculate a state-level summaries:
+    state.spp.summary <-  pS10year_all %>% ungroup() %>%
+      
+      mutate(mortality.draw = 1-survival.draw) %>% 
+      group_by(spp, state, SPCD.id, COMMON)%>% 
+      summarise(ntree = n(), 
+                nmort = sum(mortality.draw),
+                pct.mort.10year = ((sum(mortality.draw)/n())*100))%>%
+      mutate(pct.mort.annual = pct.mort.10year/10)
+    
+    # save these combined summaries:
+    saveRDS(
+      state.spp.summary,
+      paste0(
+        output.folder,
+        "SPCD_stanoutput_joint_v3/predicted_mort/Mort_10yr/state_10yr_mortality_",nspp[i,]$SPCD,".rds"
+      )
+    )
+    
+    saveRDS(
+      regional.spp.summary,
+      paste0(
+        output.folder,
+        "SPCD_stanoutput_joint_v3/predicted_mort/Mort_10yr/regional_10yr_mortality_",nspp[i,]$SPCD,".rds"
+      )
+    )
+    
+    saveRDS(
+      pS10year_all,
+      paste0(
+        output.folder,
+        "SPCD_stanoutput_joint_v3/predicted_mort/Mort_10yr/tree_10yr_mortality_",nspp[i,]$SPCD,".rds"
+      )
+    )
+}
 
 ########################################################################################
 # Generating posterior predictions from population estimates for the rest of the species
