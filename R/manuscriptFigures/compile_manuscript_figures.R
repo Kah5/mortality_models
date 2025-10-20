@@ -83,9 +83,10 @@ disturb.species.order <- c(
   "white oak", 
   "yellow birch", 
   "paper birch",
-  "hickory spp.", 
+
   
   # spongy moth resistant
+  "hickory spp.", 
   "eastern white pine", 
   "red maple", 
   "sugar maple", 
@@ -350,9 +351,7 @@ barplot.mort <- ggplot(data = st.mort.df )+
   ylab("Average Species Mortality Rate (% per year)")
 mort.rate.legend <- get_legend(barplot.mort)
 
-# get state-level information and plot up mortality rates:
-
-
+# get state-level information and plot up observed mortality rates:
 
 library(maps)
 library(mapdata)
@@ -463,7 +462,76 @@ ggsave(paste0(output.dir, "images/map_mortality_rate_state.png"), plot = mort.ma
 ggsave(paste0(output.dir, "images/map_mortality_rate_state.svg"), plot = mort.maps.species, 
        width = 12, height = 13, units = "in")
 
-# looking at distibution of mortality rates within the contxt of disturbances----
+# observed vs predicted mortality rates -----
+# predictions compiled in R/hierarchicalModel/posterior_prediction_joint_longchains.R
+# read in predicted mortality by species by tree:
+spp.tree.pred.mort <- do.call(rbind, lapply(list.files(path = paste0(
+  output.folder,
+  "SPCD_stanoutput_joint_v3/predicted_mort/Mort_10yr/"), 
+  pattern = "tree_10yr_mortality_", 
+  full.names = TRUE), 
+  readRDS))
+
+# scale tree-level predictions of mortality by volfac to estimate mortality on trees per acre scale:
+
+# combine with volfac estimates by tree:
+# volfacs are listed in all.remeas, so we need to join spp.tree.pred.mort
+
+spp.tree.pred.mort.volfac <- left_join(spp.tree.pred.mort, 
+                                       all.remeas %>% select(state, county, pltnum, cndtn, point, tree, SPCD,status, dbhcur, dbhold, volfac)%>% distinct())
+
+# sum up volfac by state
+# sum up number of plots by state
+
+st.mort.rate.species <- all.remeas %>% group_by(SPCD, Species, state, remper)%>% filter(status %in% c(2, 4, 5, 6)) %>%
+  summarise(nonlog_dead_trees_volfac = sum(volfac, na.rm = TRUE), 
+            n_nonlog_dead = n()) %>%
+  left_join(., st.total.tree.sums) %>%# join to total trees
+  
+  # for each remper period, get the mortality rate per year 
+  mutate(nonlog_mort_rate_volfac = ((nonlog_dead_trees_volfac/total_trees_volfac)*100)/remper, 
+         nonlog_mort_rate = ((n_nonlog_dead/total_n)*100)/remper)%>%
+  ungroup()%>%
+  
+  # average all the remper mortality rates together to get a single species value
+  group_by(SPCD, Species, state)%>%
+  summarise(species_volfac_mort = mean(nonlog_mort_rate_volfac, na.rm =TRUE), 
+            species_n_mort = mean(nonlog_mort_rate, na.rm =TRUE))
+
+
+# get the total trees predicted for each species: 
+# predictions were made on standard 10 year intervals
+total.spp.predicted <- spp.tree.pred.mort.volfac %>% rename("Species" = "COMMON")%>% 
+  group_by(SPCD, Species, state)%>%
+  summarise(n_predicted_total = n(), 
+            volfac_predicted_total = sum(volfac, na.rm =TRUE))
+
+spp.predicted.dead <- spp.tree.pred.mort.volfac %>% rename("Species" = "COMMON")%>% 
+  mutate(predicted.status = ifelse(survival.draw == 1, "1", "2"))%>%
+  filter(predicted.status == "2")%>%
+  group_by(SPCD, Species, state)%>%
+  
+  summarise(predicted_dead_trees_volfac = sum(volfac, na.rm = TRUE), 
+            n_predicted_dead = n())%>%
+  left_join(., total.spp.predicted )
+  
+
+predicted.mort.rates.spp.state <- spp.predicted.dead %>% group_by(SPCD, Species, state)%>%
+  # for each remper period, get the mortality rate per year 
+  summarise(predicted_mort_rate_volfac = ((predicted_dead_trees_volfac/volfac_predicted_total)*100)/10, 
+         predicted_mort_rate = ((n_predicted_dead/n_predicted_total)*100)/10)%>%
+  ungroup()
+
+
+# combine with the observed mortality rates by species:
+p.o.mort.rates <- left_join(st.mort.rate.species, predicted.mort.rates.spp.state)
+
+ggplot(data = p.o.mort.rates, aes(x = species_volfac_mort, y = predicted_mort_rate_volfac, color = Species))+
+  geom_point()+
+  species_color+geom_abline(aes(slope = 1, intercept = 0), linetype = "dashed")+
+  xlim(0, 6)+ylim(0,6)
+
+# looking at distibution of mortality rates within the context of disturbances----
 
 PLOT <- read_delim(paste0(output.dir,"data/formatted_older_matching_plts_PLOT.txt"))
 colnames(PLOT)

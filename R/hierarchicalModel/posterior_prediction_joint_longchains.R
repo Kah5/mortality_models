@@ -21,6 +21,56 @@ nspp$COMMON <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$
 spp.table <- data.frame(SPCD.id = nspp[1:17,]$SPCD, 
                         spp = 1:17, 
                         COMMON = nspp[1:17,]$COMMON)
+
+# set the species order using the factors:
+SP.TRAITS <- read.csv("data/NinemetsSpeciesTraits.csv") %>% filter(COMMON_NAME %in% unique(nspp[1:17,]$COMMON))
+# order the trait db by softwood-hardwood, then shade tolerance, then name (this puts all the oaks together b/c hickory and red oak have the same tolerance values)
+SP.TRAITS <- SP.TRAITS %>% group_by(SFTWD_HRDWD) %>% arrange(desc(SFTWD_HRDWD), desc(ShadeTol), desc(COMMON_NAME))
+
+SP.TRAITS$Color <- c(# softwoods
+  "#b2df8a",
+  "#003c30", 
+  "#b2182b", 
+  "#fee090", 
+  "#33a02c",
+  
+  
+  # sugar  maples
+  "#a6cee3",
+  "#1f78b4",
+  
+  # red maple
+  "#e31a1c",
+  # yellow birch
+  "#fdbf6f",
+  # oaks
+  "#cab2d6",
+  "#8073ac",
+  "#6a3d9a",
+  
+  # hickory
+  "#7f3b08",
+  # white ash
+  "#bababa",
+  # black cherry
+  "#4d4d4d",
+  # yellow poplar
+  "#ff7f00",
+  "#fccde5" # paper birch
+  
+  
+)
+
+SP.TRAITS$`Shade Tolerance`  <- ifelse(SP.TRAITS$ShadeTol >=4, "High", 
+                                       ifelse(SP.TRAITS$ShadeTol <=2.5, "Low", "Moderate"))
+
+# set up custom colors for species
+sppColors <- SP.TRAITS$Color 
+names(sppColors) <- unique(SP.TRAITS$COMMON_NAME) 
+
+species_fill <- scale_fill_manual(values = sppColors)
+species_color <- scale_color_manual(values = sppColors)
+
 model.no <- 6
 
 set.seed(22)
@@ -302,7 +352,7 @@ saveRDS(
 # Plot remper mortality estimated probabilities vs regional mortality rates
 ###############################################################
 # for each species, read in the in-sample and out-of-sample annual probability of mortality:
-
+# read in tree_remeas to get the volfac for each represented tree:
 
 
 for(i in 17:1){
@@ -328,18 +378,17 @@ for(i in 17:1){
       group_by(tree.id)%>%
       # use pS_10median to get a survival for each tree over a ten year interval:
       mutate(survival.draw = rbinom(1,1, prob = p10year.med))%>%
-      mutate(data.type = "in-sample")
+      mutate(data.type = "in-sample") %>%
+      rename("SPCD" = "SPCD.id")
     
-    spp.state.id.is <- plot.data.train %>% filter(SPCD %in% unique(pS10year_tree$SPCD.id))%>%
+    spp.state.id.is <- plot.data.train %>% filter(SPCD %in% unique(pS10year_tree$SPCD))%>%
       mutate(tree.id = 1:length(county))%>%
-      select(PLOT.ID, SPCD, tree.id, state, county, remper)%>%
+      select(PLOT.ID, SPCD, tree.id, state, county, pltnum, cndtn, point, tree, cycle, dbhcur, dbhold, remper)%>%
       mutate(data.type = "in-sample")
     
-    pS10year_tree <- left_join(pS10year_tree, spp.state.id)
+    pS10year_tree <- left_join(pS10year_tree, spp.state.id.is)
     
     # read the out of sample data
-    
-    # read in the out of sample
     pSannual_rep <- readRDS(paste0(output.folder, "SPCD_stanoutput_joint_v3/samples/pSannual_rep_spp_",i,".RDS"))#%>%
     
     # convert to 10 year survival probabilities:
@@ -360,11 +409,12 @@ for(i in 17:1){
       group_by(tree.id)%>%
       # use pS_10median to get a survival for each tree over a ten year interval:
       mutate(survival.draw = rbinom(1,1, prob = p10year.med)) %>%
-      mutate(data.type = "out-of-sample")
+      mutate(data.type = "out-of-sample")%>%
+      rename("SPCD" = "SPCD.id")
     
-    spp.state.id.oos <- plot.data.test %>% filter(SPCD %in% unique(pS10year_tree$SPCD.id))%>%
+    spp.state.id.oos <- plot.data.test %>% filter(SPCD %in% unique(pS10year_tree$SPCD))%>%
       mutate(tree.id = 1:length(county))%>%
-      select(PLOT.ID, SPCD, tree.id, state, county, remper)%>%
+      select(PLOT.ID, SPCD, tree.id, state, county, pltnum, cndtn, point, tree, cycle, dbhcur, dbhold, remper)%>%
       mutate(data.type = "out-of-sample")
     
     pS10year_tree_rep <- left_join(pS10year_tree_rep, spp.state.id.oos)
@@ -373,9 +423,9 @@ for(i in 17:1){
     pS10year_all <- rbind(pS10year_tree, pS10year_tree_rep) %>% ungroup() %>%
       mutate(mortality.draw = 1-survival.draw)
     
-    # calculate a whole region summary
+    # calculate a whole region summary: note that these are not scaled by volfac
     regional.spp.summary <-  pS10year_all %>% 
-      group_by(spp, SPCD.id, COMMON)%>% 
+      group_by(spp, SPCD, COMMON)%>% 
       summarise(ntree = n(), 
                 nmort = sum(mortality.draw),
                 pct.mort.10year = ((sum(mortality.draw)/n())*100))%>%
@@ -383,11 +433,11 @@ for(i in 17:1){
     
     
     
-    # calculate a state-level summaries:
+    # calculate a state-level summaries: note that these are not scaled by volfac
     state.spp.summary <-  pS10year_all %>% ungroup() %>%
       
       mutate(mortality.draw = 1-survival.draw) %>% 
-      group_by(spp, state, SPCD.id, COMMON)%>% 
+      group_by(spp, state, SPCD, COMMON)%>% 
       summarise(ntree = n(), 
                 nmort = sum(mortality.draw),
                 pct.mort.10year = ((sum(mortality.draw)/n())*100))%>%
@@ -418,6 +468,50 @@ for(i in 17:1){
       )
     )
 }
+
+# read in predicted mortality summaries: note that these are not scaled by volfac
+all.state.species.10year <- do.call(rbind, lapply(list.files(path = paste0(
+  output.folder,
+  "SPCD_stanoutput_joint_v3/predicted_mort/Mort_10yr/"), 
+  pattern = "state_10yr_mortality_", 
+  full.names = TRUE), 
+  readRDS))
+
+all.region.species.10year <- do.call(rbind, lapply(list.files(path = paste0(
+  output.folder,
+  "SPCD_stanoutput_joint_v3/predicted_mort/Mort_10yr/"), 
+  pattern = "regional_10yr_mortality_", 
+  full.names = TRUE), 
+  readRDS))
+
+
+# refactor the species so they are plotted in our order
+
+ggplot()+
+  geom_bar(data = all.region.species.10year, aes(x = COMMON, y = pct.mort.annual, fill = COMMON), stat = "identity")+
+  theme_bw(base_size = 16)+
+  species_fill+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), 
+        #panel.grid = element_blank(), 
+        legend.position = "none", 
+        axis.title.x = element_blank())+
+  ylab("Predicted annual mortality rate")
+# %>% filter(n_plots_SPCD > 50)
+ggplot(data = all.state.species.10year )+
+  geom_bar(aes(x = COMMON, y = pct.mort.annual, fill = COMMON), stat = "summary", fun = median,  color = "black")+
+  theme_bw(base_size = 16)+
+  species_fill+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), 
+        axis.title.x = element_blank(), 
+        legend.position = "none", 
+        panel.grid = element_blank())+
+  geom_point(aes(x = COMMON, y = pct.mort.annual, group = state), alpha = 0.9) +
+  #geom_text(aes(x = Species, y = species_volfac_mort, label = region),position = position_jitter(width = 0.1), alpha = 0.6)
+  ggrepel::geom_text_repel(aes(x = COMMON, y = pct.mort.annual, label = state), color = "black", size = 2.5, segment.color = "grey", max.overlaps = 12) +  
+  ylab("Mortality Rate (% per year)")
+
+
+
 
 ########################################################################################
 # Generating posterior predictions from population estimates for the rest of the species
