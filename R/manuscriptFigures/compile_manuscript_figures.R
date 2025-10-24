@@ -77,7 +77,7 @@ disturb.species.order <- c(
   "American beech", 
   
   # spongy moth susceptible
-  "black oak", 
+ # "black oak", 
   "chestnut oak", 
   "northern red oak",
   "white oak", 
@@ -419,9 +419,9 @@ NE_basemap <- ggplot(data = raster_data, aes(x = x, y = y)) +
 
 mortality_rate_maps <- list()
 
-for(i in 1:length(disturb.species.order)){
+for(i in 1:length(nspp$SPCD)){
   
-  state_sub_species <- state_sub %>% filter(Species %in% disturb.species.order[i] &  n_plots_SPCD >= 25)
+  state_sub_species <- state_sub %>% filter(Species %in% nspp[i,]$COMMON &  n_plots_SPCD >= 25)
   
   
   
@@ -478,8 +478,684 @@ spp.tree.pred.mort <- do.call(rbind, lapply(list.files(path = paste0(
 # volfacs are listed in all.remeas, so we need to join spp.tree.pred.mort
 
 spp.tree.pred.mort.volfac <- left_join(spp.tree.pred.mort, 
-                                       all.remeas %>% select(state, county, pltnum, cndtn, point, tree, SPCD,status, dbhcur, dbhold, volfac)%>% distinct())
+                                       all.remeas %>% select(state, county, pltnum, cndtn, point, tree, SPCD,status, dbhcur, dbhold, volfac, LAT_FIADB, LONG_FIADB)%>% distinct())
 
+# map up probability of survival for each species
+ggplot(data = spp.tree.pred.mort.volfac %>% filter(COMMON %in% c("balsam fir", "red spruce", "northern white-cedar")), aes(x =LONG_FIADB,  y = LAT_FIADB, color = 1-p10year.med), size = 0.1)+
+  geom_point()+facet_wrap(~COMMON)+ scale_color_viridis_c(option = "magma")
+
+# get the median 1 year mortality rate for each tree:
+spp.tree.mort.probs <- spp.tree.pred.mort.volfac %>% mutate(p1year.survival = p10year.med^(1/10))%>%
+  mutate(p1year.mortality = 1- p1year.survival) %>%
+  rename("Species"="COMMON")
+
+
+ggplot(data = spp.tree.mort.probs)+
+  geom_density(aes(y = p1year.mortality*100, fill = Species))+
+  facet_wrap(~Species, scales = "free")+species_fill
+
+# get plot-level averages of species rate estimates for the modelled rate:--
+avg.plt.mort.annual <- spp.tree.mort.probs %>% group_by(state, PLOT.ID, Species, SPCD, LONG_FIADB, LAT_FIADB)%>%
+  summarise(pMort_annual_plot = median(p1year.mortality, na.rm =TRUE), 
+            pMort_annual_plot.sd = sd(p1year.mortality, na.rm =TRUE), 
+            nTrees = n())
+
+
+
+ggplot(data = avg.plt.mort.annual)+
+  geom_density(aes(y = pMort_annual_plot*100, fill = Species))+
+  facet_wrap(~Species, scales = "free")+species_fill
+
+ggplot(data = avg.plt.mort.annual)+
+  geom_boxplot(aes(x = Species, y = pMort_annual_plot*100, fill = Species))+
+  species_fill
+
+ggplot(data = avg.plt.mort.annual)+
+  geom_density(aes(y = pMort_annual_plot*100, fill = Species))+
+  facet_wrap(~Species, scales = "free")+species_fill
+
+ggplot(data = avg.plt.mort.annual)+
+  geom_point(aes(x = LONG_FIADB, y = LAT_FIADB, color = pMort_annual_plot*100), size = 0.5)+
+  facet_wrap(~Species)+
+  scale_color_viridis_c()
+hist(avg.plt.mort.annual$pMort_annual_plot*100)
+
+# Create discrete categories from continuous_var
+avg.plt.mort.annual$pMort_annual_plot_discrete <- cut(avg.plt.mort.annual$pMort_annual_plot*100,
+                                breaks = c(0, 0.5, 1, 1.5, 2, 5, 7.5, 10, 20  ),
+                                labels = c("< 0.5", "0.5 - 1", "1 - 1.5", "1.5 - 2", "2 - 5", "5 - 7.5", "7.5 - 10", "> 10"))
+nspp$COMMON
+
+disturb.species.order <- c("balsam fir" ,"red spruce","northern white-cedar","eastern hemlock",     
+                          "American beech" ,"chestnut oak","northern red oak",    
+                           "white oak", "yellow birch" ,"paper birch" ,"hickory spp.",        
+                            "eastern white pine","red maple","sugar maple" ,"black cherry",      
+                            "white ash" ,"yellow-poplar"   )
+
+species.plot.mortality.list <- list()
+for(i in 1:length(disturb.species.order)){
+  
+species.plot.mortality.list[[i]] <- ggplot() + 
+  geom_polygon(data = canada, 
+               aes(x=long, y=lat, group = group), 
+               color = "black", fill = "white") +
+  geom_polygon(data = lakes_df , 
+               aes(x = long, y = lat, group = group), 
+               color = "black", fill = "lightblue") +
+  geom_polygon(data = state_sub, 
+               aes(x=long, y=lat, group = group), 
+               color = "black", fill = "white") +
+ 
+  geom_point(data = avg.plt.mort.annual %>% filter(Species %in% disturb.species.order[i]) , aes(x = LONG_FIADB, y = LAT_FIADB, color = pMort_annual_plot_discrete), size = 0.1)+
+  scale_color_manual(values =  c(
+    "#74add1",
+    "#abd9e9",
+   
+    "#fcbba1",
+    "#fc9272",
+    "#fb6a4a",
+    "#ef3b2c",
+    "#cb181d",
+    "#99000d"), name = "Mortality Probability\n(%/year)")+
+  
+
+  coord_sf(xlim = c(-85, -67.5), ylim = c(37, 47.5))+theme(panel.grid = element_blank(), #panel.background = element_rect(fill = 'lightblue'), 
+                                                          legend.position = "none",
+                                                           axis.title  = element_blank(),
+                                                           #legend.title = element_blank(),
+                                                           legend.background = element_rect(fill = "white", color = "black") 
+  ) + ggtitle(paste0(disturb.species.order[i]))
+}
+
+mort.pred.legend <- get_legend(ggplot() + 
+                                 geom_point(data = avg.plt.mort.annual  , aes(x = LONG_FIADB, y = LAT_FIADB, color = pMort_annual_plot_discrete), size = 3)+
+                                 scale_color_manual(values =  c(
+                                   "#74add1",
+                                   "#abd9e9",
+                                   
+                                   "#fcbba1",
+                                   "#fc9272",
+                                   "#fb6a4a",
+                                   "#ef3b2c",
+                                   "#cb181d",
+                                   "#99000d"), name = "Mortality Probability\n(%/year)")+
+                                 
+                                 
+                                 coord_sf(xlim = c(-85, -67.5), ylim = c(37, 47.5))+theme(panel.grid = element_blank(), #panel.background = element_rect(fill = 'lightblue'), 
+                                                                                          #legend.position = "none",
+                                                                                          axis.title  = element_blank(),
+                                                                                          #legend.title = element_blank(),
+                                                                                          legend.background = element_rect(fill = "white", color = "black") 
+                                 ) )
+mort.pred.maps.species <- plot_grid(
+  plot_grid(plotlist = species.plot.mortality.list, ncol = 3, align = "hv"), 
+  mort.pred.legend, rel_widths = c(1, 0.2), ncol = 2
+)
+
+ggsave(paste0(output.dir, "images/map_annual_mortality_prob_plot.png"), plot = mort.pred.maps.species, 
+       width = 12, height = 13, units = "in")
+
+ggsave(paste0(output.dir, "images/map_annual_mortality_prob_plot.svg"), plot = mort.pred.maps.species, 
+       width = 12, height = 13, units = "in")
+
+
+# ideas for improving this figure:
+# summarise by county (need to scale by volfac)
+# alternative colors?
+
+# Looking at four attibutes of tree mortality-----
+# after Davis et al. hemlock pollen decline:
+# Quaternary history and the stability of forest communities. Pages 132–153 in D. C. West, H. H. Shugart, and D. B. Botkin, eds. Forest succession: concepts and applications. Springer, New York.
+
+# Specificity: Is it only one species or a group?--
+# Synchrony: Is it happening at the same time across the range?--
+# Rapidity: ??--
+  # dia_diff as metric? lower diameter differences mean less growth prior to mortality?
+  # may not be able to answer
+# Uniformity: Is it happening across the range at similar rates?--
+
+# Specificity: Are Species proability of mortality correlated with one another?
+nmort.df <- spp.tree.mort.probs %>% group_by(state, PLOT.ID, Species, SPCD, LONG_FIADB, LAT_FIADB)%>%
+  summarise(pMort_annual_plot = median(p1year.mortality, na.rm =TRUE), 
+            pMort_annual_plot.sd = sd(p1year.mortality, na.rm =TRUE), 
+            nTrees = n(), 
+            Nmort = sum(mortality.draw))
+
+
+# set up a dataframe with plots as rows and columns the pmort for different species
+pmort.spread <- avg.plt.mort.annual %>% ungroup()%>% 
+  mutate(pMort.pct  = pMort_annual_plot*100)%>%
+  select(LAT_FIADB, LONG_FIADB, PLOT.ID,Species,pMort.pct)%>%
+  group_by(LAT_FIADB, LONG_FIADB, PLOT.ID) %>% 
+  spread(Species,pMort.pct,  fill = NA)
+#p_correlations <- cor(pmort.spread[,4:ncol(pmort.spread)], use = "pairwise.complete")
+# library(ggcorrplot)
+# library(Hmisc)
+# library(GGally)
+# 
+# 
+# ggpairs(pmort.spread, columns = 4:ncol(pmort.spread))
+
+library(ggcorrplot)
+library(Hmisc)
+p_correlations <- rcorr(as.matrix(pmort.spread[,4:ncol(pmort.spread)]), type = "spearman" ) # or "spearman"
+
+# lets look at correlations for species that co-occur in at least 10 plots
+# Get upper triangle of the correlation matrix
+get_upper_tri <- function(cormat){
+  cormat[lower.tri(cormat)]<- NA
+  return(cormat)
+}
+
+get_lower_tri<-function(cormat){
+  cormat[upper.tri(cormat)] <- NA
+  return(cormat)
+}
+melted.correlation <- get_lower_tri(p_correlations$r[disturb.species.order,disturb.species.order]) %>% reshape2::melt()%>%
+  rename("r"="value") %>% left_join(., 
+                                    get_lower_tri(p_correlations$n[disturb.species.order,disturb.species.order]) %>% reshape2::melt())%>%
+  rename("n" = "value")%>%
+  left_join(., 
+            get_lower_tri(p_correlations$P[disturb.species.order,disturb.species.order]) %>% reshape2::melt())%>%
+  rename("pval" = "value")%>%
+  mutate(R_revised = ifelse(n>=50, round(r, digits = 1), NA), 
+         P_revised = ifelse(n >=50, pval, NA))%>%
+  mutate(R_revised = ifelse(R_revised == 1, NA, R_revised))%>%
+  mutate(sig.label = ifelse(P_revised <= 0.05, R_revised, NA))%>%
+  filter(!is.na(R_revised))# if the species are colocated in less than 10 plots omit the correlation
+
+
+pmort_correlation <-  ggplot(data = melted.correlation, aes(Var2, Var1, fill = R_revised))+
+  geom_tile(color = "white")+
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-0.6,0.6), space = "Lab", 
+                       name="Spearman\nCorrelation") +
+  theme_bw(base_size = 16)+ 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                    hjust = 0))+
+  coord_fixed()+
+  scale_x_discrete(position = "top",
+                   limits = levels(melted.correlation$Var2))+
+  scale_y_discrete(position = "left",
+                   limits = rev(levels(melted.correlation$Var1)))+
+ 
+  geom_text(aes(Var2, Var1, label = sig.label), color = "black", size = 4) +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.major = element_blank(),
+    #panel.border = element_blank(),
+    panel.background = element_blank(),
+    axis.ticks = element_blank(),
+    legend.justification = c(1, 0),
+    legend.position = c(0.9, 0.65),
+    legend.direction = "horizontal")+
+  guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
+                               title.position = "top", title.hjust = 0.5))#+coord_flip()
+  
+
+ggsave(filename = paste0(output.dir, "images/posterior_plot_pMort_species_correlations.png"), 
+       plot = pmort_correlation, 
+       height = 6, width = 6, units = "in", 
+       dpi = 350)
+
+# fourteen species pairs have R_revised >= 0.3
+melted.correlation %>% filter(R_revised >=0.3)
+# northern region:
+# balsam fir - Red spruce
+# balsam fir - eastern hemlock
+
+# eastern hemlock - yellow birch
+# American beech - red maple
+
+# American beech - red maple
+
+# oaks:
+# chestnut oak - N red oak
+# chestnut oak - white oak
+
+# chestnut oak - E. white pine
+# chestnut oak - red maple
+
+# N red oak - paper birch
+# hickor spp. - northern red oak
+
+# white oak - yellow birch 
+# white oak - red maple
+
+# red maple - paper birch
+# sugar maple - red maple
+
+# four species pairs have correlations >= 0.4
+melted.correlation %>% filter(R_revised >=0.4)
+
+
+# Synchrony and uniformity across space:
+# moran's global 
+# moran's local 
+# Ripley's K-function:
+
+library(spdep)
+polygon.buffer.list <- buffer.map.list <- moran.local.list <- polygon_hull.list <- list()
+for(i in 1:17){
+  
+plt_mort_sf <- st_as_sf(avg.plt.mort.annual %>% filter(Species %in% nspp[i,]$COMMON), coords = c("LONG_FIADB", "LAT_FIADB"))
+# get the spatial weights matrix 
+
+plot_neighbors <- knn2nb(knearneigh(plt_mort_sf, k = 10)) # 10 nearest neighbors
+
+# get spatial weights 
+plot_weights <- nb2listw(plot_neighbors, style = "W")
+
+# global Moran's I
+moran_global <- moran.test(plt_mort_sf$pMort_annual_plot, plot_weights)
+print(moran_global)
+
+# Moran plot 
+moran.plot(plt_mort_sf$pMort_annual_plot, plot_weights, #labels = as.character(tree_data$id),
+           main = "Moran Plot for Tree Mortality Risk")
+
+
+#Calculate Local Moran's I
+local_moran_result <- localmoran(plt_mort_sf$pMort_annual_plot, plot_weights)
+
+# Add the local Moran statistics to the sf object
+plt_mort_sf$local_moran_I <- local_moran_result[, 1]
+plt_mort_sf$p_value <- local_moran_result[, 5]
+
+# get the type of local cluster
+# standardization and  filter by significance
+plt_mort_sf$cluster_type <- "Not Significant"
+plt_mort_sf$standardized_risk <- scale(plt_mort_sf$pMort_annual_plot)
+plt_mort_sf$quadrant <- local_moran_result[, 3] # Quadrant for the moran plot
+
+# assign labels
+significant_clusters <- which(plt_mort_sf$p_value <= 0.05)
+plt_mort_sf$cluster_type[significant_clusters] <- ifelse(
+  plt_mort_sf$standardized_risk[significant_clusters] > 0 & plt_mort_sf$quadrant[significant_clusters] > 0, "High-High",
+  ifelse(plt_mort_sf$standardized_risk[significant_clusters] < 0 & plt_mort_sf$quadrant[significant_clusters] < 0, "Low-Low",
+         ifelse(plt_mort_sf$standardized_risk[significant_clusters] > 0 & plt_mort_sf$quadrant[significant_clusters] < 0, "High-Low",
+                ifelse(plt_mort_sf$standardized_risk[significant_clusters] < 0 & plt_mort_sf$quadrant[significant_clusters] > 0, "Low-High", "Not Significant"))))
+
+# plot the  clusters
+# ggplot(plt_mort_sf) +
+#   geom_sf(aes(color = cluster_type), size = 3) +
+#   scale_color_manual(values = c("High-High" = "red", "Low-Low" = "blue", "High-Low" = "pink", "Low-High" = "lightblue", "Not Significant" = "grey")) +
+#   theme_minimal()
+# 
+
+# identify hotspots of mortality risk and create a polygon
+high_high_clusters <- plt_mort_sf %>%
+  filter(p_value < 0.05 & local_moran_I > 0)# & pMort_annual_plot >= 0.01)
+
+
+
+# Convex hull around all HH cluster points
+if (nrow(high_high_clusters) > 0) {
+  hh_polygon_chull <- st_convex_hull(st_union(high_high_clusters))
+} else {
+  message("No HH clusters found to create a polygon.")
+  hh_polygon_chull <- NULL
+}
+if (!is.null(hh_polygon_chull)) {
+  ggplot() +
+    geom_sf(data = plt_mort_sf, aes(color = pMort_annual_plot), size = 2) +
+    geom_sf(data = high_high_clusters, color = "red", size = 3) +
+    geom_sf(data = hh_polygon_chull, fill = "red", alpha = 0.3, color = NA) +
+    labs(title = "HH Clusters and Convex Hull Polygon") +
+    theme_minimal()
+}
+
+# Create a buffer around each High-High cluster point, then union
+# You might want to adjust the buffer distance (dist)
+if (nrow(high_high_clusters) > 0) {
+  hh_polygon_buffer <- st_union(st_buffer(high_high_clusters, dist = 0.5))
+} else {
+  message("No HH clusters found to create a polygon.")
+  hh_polygon_buffer <- NULL
+}
+
+gg.buffer.map <- ggplot() + 
+  geom_polygon(data = canada, 
+               aes(x=long, y=lat, group = group), 
+               color = "black", fill = "white") +
+  geom_polygon(data = lakes_df , 
+               aes(x = long, y = lat, group = group), 
+               color = "black", fill = "lightblue") +
+  geom_polygon(data = state_sub, 
+               aes(x=long, y=lat, group = group), 
+               color = "black", fill = "white")+
+    geom_sf(data = plt_mort_sf, aes(color = pMort_annual_plot_discrete), size = 2) +
+    #geom_sf(data = high_high_clusters, color = "red", size = 3) +
+    geom_sf(data = hh_polygon_buffer, fill = "red", alpha = 0.3, color = NA) +
+    #labs(title = "HH Clusters and Convex Hull Polygon") +
+    theme_minimal()+
+  scale_color_manual(values =  c(
+    "#74add1",
+    "#abd9e9",
+    
+    "#fcbba1",
+    "#fc9272",
+    "#fb6a4a",
+    "#ef3b2c",
+    "#cb181d",
+    "#99000d"), name = "Mortality Probability\n(%/year)")+
+  
+  
+  coord_sf(xlim = c(-85, -67.5), ylim = c(37, 47.5))+theme(panel.grid = element_blank(), #panel.background = element_rect(fill = 'lightblue'), 
+                                                           #legend.position = "none",
+                                                           axis.title  = element_blank(),
+                                                           #legend.title = element_blank(),
+                                                           legend.background = element_rect(fill = "white", color = "black") 
+  ) +ggtitle(paste0("mortality risk hotspots for ", nspp[i,]$COMMON))
+
+  
+
+# save each species buffers:
+
+polygon.buffer.list[[i]] <- hh_polygon_buffer
+polygon_hull.list[[i]] <- hh_polygon_chull
+buffer.map.list[[i]] <- gg.buffer.map
+moran.local.list[[i]] <- plt_mort_sf
+
+rm(hh_polygon_buffer, hh_polygon_chull, gg.buffer.map)
+}
+
+names(polygon.buffer.list) <- nspp$COMMON
+names(polygon_hull.list) <- nspp$COMMON
+#spatial_buffer_points <- st_sfc(polygon.buffer.list[[1]], polygon.buffer.list[[2]], polygon.buffer.list[[3]])
+# plot the point-based buffers all together:
+base.map <- ggplot() + 
+  geom_polygon(data = canada, 
+               aes(x=long, y=lat, group = group), 
+               color = "black", fill = "white") +
+  geom_polygon(data = lakes_df , 
+               aes(x = long, y = lat, group = group), 
+               color = "black", fill = "lightblue") +
+  geom_polygon(data = state_sub, 
+               aes(x=long, y=lat, group = group), 
+               color = "black", fill = "white")+
+  theme_minimal()
+  
+# all species point-based buffers together:
+base.map +
+  geom_sf(data = polygon.buffer.list[["balsam fir"]], aes(fill = "balsam fir"), alpha = 0.5, color = NA) +
+  geom_sf(data = polygon.buffer.list[["red spruce"]], aes(fill = "red spruce"), alpha = 0.5, color = NA) +
+  geom_sf(data = polygon.buffer.list[["northern white-cedar"]], aes(fill = "northern white-cedar"), alpha = 0.5, color = NA) +
+  
+  geom_sf(data = polygon.buffer.list[["eastern hemlock"]], aes(fill = "eastern hemlock"), alpha = 0.5, color = NA) +
+  geom_sf(data = polygon.buffer.list[["American beech"]], aes(fill = "American beech"), alpha = 0.5,color = NA) +
+  
+  
+  geom_sf(data = polygon.buffer.list[["northern red oak"]], aes(fill = "northern red oak"), alpha = 0.5, color = NA) +
+  geom_sf(data = polygon.buffer.list[["chestnut oak"]], aes(fill = "chestnut oak"), alpha = 0.5,color = NA) +
+  geom_sf(data = polygon.buffer.list[["white oak"]], aes(fill = "white oak"), alpha = 0.5, color = NA) +
+  geom_sf(data = polygon.buffer.list[["yellow birch"]], aes(fill = "yellow birch"), alpha = 0.5,color = NA) +
+  geom_sf(data = polygon.buffer.list[["paper birch"]], aes(fill = "paper birch"), alpha = 0.5,color = NA) +
+  geom_sf(data = polygon.buffer.list[["hickory spp."]], aes(fill = "hickory spp."), alpha = 0.5,color = NA) +
+  geom_sf(data = polygon.buffer.list[["eastern white pine"]], aes(fill = "eastern white pine"), alpha = 0.5,color = NA) +
+  geom_sf(data = polygon.buffer.list[["sugar maple"]], aes(fill = "sugar maple"), alpha = 0.5,color = NA) +
+  geom_sf(data = polygon.buffer.list[["red maple"]], aes(fill = "red maple"), alpha = 0.5,color = NA) +
+  geom_sf(data = polygon.buffer.list[["black cherry"]], aes(fill = "black cherry"), alpha = 0.5,color = NA) +
+  geom_sf(data = polygon.buffer.list[["yellow-poplar"]], aes(fill = "yellow-poplar"), alpha = 0.5,color = NA) +
+  geom_sf(data = polygon.buffer.list[["white ash"]], aes(fill = "white ash"), alpha = 0.5,color = NA) +
+  species_fill+coord_sf(xlim = c(-85, -67.5), ylim = c(37, 47.5))+theme(panel.grid = element_blank(), #panel.background = element_rect(fill = 'lightblue'), 
+                                                                        #legend.position = "none",
+                                                                        axis.title  = element_blank(),
+                                                                        #legend.title = element_blank(),
+                                                                        legend.background = element_rect(fill = "white", color = "black") 
+  )
+
+
+spruce.fir.hotspots <- base.map +
+  geom_sf(data = polygon.buffer.list[["balsam fir"]], aes(fill = "balsam fir"), alpha = 0.9, color = NA) +
+  geom_sf(data = polygon.buffer.list[["red spruce"]], aes(fill = "red spruce"), alpha = 0.9, color = NA) +
+  geom_sf(data = polygon.buffer.list[["northern white-cedar"]], aes(fill = "northern white-cedar"), alpha = 0.5, color = NA) +
+  
+  #geom_sf(data = polygon.buffer.list[["eastern hemlock"]], aes(fill = "eastern hemlock"), alpha = 0.5, color = NA) +
+  #geom_sf(data = polygon.buffer.list[["American beech"]], aes(fill = "American beech"), alpha = 0.5,color = NA) +
+  
+  
+ 
+  species_fill+coord_sf(xlim = c(-85, -67.5), ylim = c(37, 47.5))+theme(panel.grid = element_blank(), #panel.background = element_rect(fill = 'lightblue'), 
+                                                                        #legend.position = "none",
+                                                                        axis.title  = element_blank(),
+                                                                        #legend.title = element_blank(),
+                                                                        legend.background = element_rect(fill = "white", color = "black") 
+  )
+
+oak.hotspots <- base.map +
+  geom_sf(data = polygon.buffer.list[["northern red oak"]], aes(fill = "northern red oak"), alpha = 0.5, color = NA) +
+  geom_sf(data = polygon.buffer.list[["chestnut oak"]], aes(fill = "chestnut oak"), alpha = 0.5,color = NA) +
+  geom_sf(data = polygon.buffer.list[["white oak"]], aes(fill = "white oak"), alpha = 0.5, color = NA) +
+  geom_sf(data = polygon.buffer.list[["yellow birch"]], aes(fill = "yellow birch"), alpha = 0.5,color = NA) +
+  geom_sf(data = polygon.buffer.list[["paper birch"]], aes(fill = "paper birch"), alpha = 0.5,color = NA) +
+  
+  species_fill+coord_sf(xlim = c(-85, -67.5), ylim = c(37, 47.5))+theme(panel.grid = element_blank(), #panel.background = element_rect(fill = 'lightblue'), 
+                                                                        #legend.position = "none",
+                                                                        axis.title  = element_blank(),
+                                                                        #legend.title = element_blank(),
+                                                                        legend.background = element_rect(fill = "white", color = "black") 
+  )
+
+
+
+beech.hemlock.hotspots <- base.map +
+  geom_sf(data = polygon.buffer.list[["eastern hemlock"]], aes(fill = "eastern hemlock"), alpha = 0.5, color = "black") +
+  geom_sf(data = polygon.buffer.list[["American beech"]], aes(fill = "American beech"), alpha = 0.5,color = "black") +
+  geom_sf(data = polygon.buffer.list[["eastern white pine"]], aes(fill = "eastern white pine"), alpha = 0.5,color = "black") +
+  species_fill+coord_sf(xlim = c(-85, -67.5), ylim = c(37, 47.5))+theme(panel.grid = element_blank(), #panel.background = element_rect(fill = 'lightblue'), 
+                                                                        #legend.position = "none",
+                                                                        axis.title  = element_blank(),
+                                                                        #legend.title = element_blank(),
+                                                                        legend.background = element_rect(fill = "white", color = "black") 
+  )
+
+beech.hemlock.hotspots
+
+
+
+maple.hotspots <- base.map +
+  geom_sf(data = polygon.buffer.list[["sugar maple"]], aes(fill = "sugar maple"), alpha = 0.5, color = "black") +
+  geom_sf(data = polygon.buffer.list[["red maple"]], aes(fill = "red maple"), alpha = 0.5,color = "black") +
+ # geom_sf(data = polygon.buffer.list[["eastern white pine"]], aes(fill = "eastern white pine"), alpha = 0.5,color = "black") +
+  species_fill+coord_sf(xlim = c(-85, -67.5), ylim = c(37, 47.5))+theme(panel.grid = element_blank(), #panel.background = element_rect(fill = 'lightblue'), 
+                                                                        #legend.position = "none",
+                                                                        axis.title  = element_blank(),
+                                                                        #legend.title = element_blank(),
+                                                                        legend.background = element_rect(fill = "white", color = "black") 
+  )
+
+maple.hotspots
+
+other.hotspots <- base.map +
+  geom_sf(data = polygon.buffer.list[["black cherry"]], aes(fill = "black cherry"), alpha = 0.7,color = "black") +
+  geom_sf(data = polygon.buffer.list[["yellow-poplar"]], aes(fill = "yellow-poplar"), alpha = 0.7,color = "black") +
+  geom_sf(data = polygon.buffer.list[["white ash"]], aes(fill = "white ash"), alpha = 0.7,color = "black") +
+  geom_sf(data = polygon.buffer.list[["hickory spp."]], aes(fill = "hickory spp."), alpha = 0.7,color = "black") +
+  # geom_sf(data = polygon.buffer.list[["eastern white pine"]], aes(fill = "eastern white pine"), alpha = 0.5,color = "black") +
+  species_fill+coord_sf(xlim = c(-85, -67.5), ylim = c(37, 47.5))+theme(panel.grid = element_blank(), #panel.background = element_rect(fill = 'lightblue'), 
+                                                                        #legend.position = "none",
+                                                                        axis.title  = element_blank(),
+                                                                        #legend.title = element_blank(),
+                                                                        legend.background = element_rect(fill = "white", color = "black") 
+  )
+
+other.hotspots
+
+spruce.fir.hothulls <- base.map +
+  geom_sf(data = polygon_hull.list[["balsam fir"]], aes(fill = "balsam fir"), alpha = 0.9, color = NA) +
+  geom_sf(data = polygon_hull.list[["red spruce"]], aes(fill = "red spruce"), alpha = 0.9, color = NA) +
+  geom_sf(data = polygon_hull.list[["northern white-cedar"]], aes(fill = "northern white-cedar"), alpha = 0.5, color = NA) +
+  
+  #geom_sf(data = polygon.buffer.list[["eastern hemlock"]], aes(fill = "eastern hemlock"), alpha = 0.5, color = NA) +
+  #geom_sf(data = polygon.buffer.list[["American beech"]], aes(fill = "American beech"), alpha = 0.5,color = NA) +
+  
+  
+  
+  species_fill+coord_sf(xlim = c(-85, -67.5), ylim = c(37, 47.5))+theme(panel.grid = element_blank(), #panel.background = element_rect(fill = 'lightblue'), 
+                                                                        #legend.position = "none",
+                                                                        axis.title  = element_blank(),
+                                                                        #legend.title = element_blank(),
+                                                                        legend.background = element_rect(fill = "white", color = "black") 
+  )
+
+
+
+# geom_boxplot()# to do this, we need to handle some of the predicted trees have a volfac == 0
+all.remeas %>% select(state, volfac)%>% distinct()%>% group_by(state) %>% summarise(nunique_volfac = n())
+
+# states 9, 23, 24, 33, and 50 may have fewer plot designs and volfacs are either zero, sawtimber, poletimber, etc
+all.remeas %>% select(state, volfac, dbhcur) %>% filter(state %in% c(9, 23, 24, 33, 50))%>% distinct()%>% 
+  group_by(state, volfac) %>% 
+  summarise(min_dbh = min(dbhcur))
+
+all.remeas %>% filter(dbhcur>5)%>% select(state, PLOT.ID, point, date, cndtn) %>% 
+  distinct()%>% group_by(state, PLOT.ID, date, cndtn)%>% summarise(npoints = n())%>% 
+  ungroup()%>% group_by(state, date, cndtn) %>% summarise(max_npoints = max(npoints), min_npoints = min(npoints))
+
+all.remeas %>% select(state, volfac, dbhcur) %>% filter(!state %in% c(9, 23, 24, 33, 50))%>% distinct()%>% 
+  group_by(state, volfac) %>% 
+  summarise(min_dbh = min(dbhcur), 
+            dbhcur/volfac)
+# formula for TPA
+#TPA = (BAF / 0.005454*DIA^2)/Npoints
+#volfac*Npoints = BAF/0.005454*DIA^2
+(volfac*Npoints)*(0.005454*DIA^2)
+
+# the trees with volfac == 0 are in mostly fixed radius plot states (9, 23, 33, 50), except for 50
+all.remeas %>% filter(volfac == 0 & status %in% c(2,4,5,6))%>% group_by(state, mortfac > 0) %>% summarise(n())
+
+# if status == 1 and volfac == 0, assume it is not counted
+
+BAFestimated <- left_join(all.remeas, all.remeas %>% select(state, PLOT.ID, point) %>% distinct()%>%
+  group_by(state, PLOT.ID) %>% summarise(Npoints = n())) %>%
+  ungroup()%>%
+  #filter(Npoints >1) %>% 
+  mutate(BAFest = (volfac*Npoints)*(0.005454*dbhcur^2))                                           
+
+# state 36, new york == 10 point design, 37.5 BAF?
+# state 39, ohio == 5 point design, 18.7 BAF?
+# state 42, Pennsylvannia == 5 point design, 18.7 BAF?
+# state 54, West Virginia == 10 point design, 37.5BAF or 5 point design, 18.7 BAF?
+
+ggplot(BAFestimated, aes( y = BAFest, fill = state, group = state))+geom_histogram()+facet_wrap(~state)+ylim(0,50)
+ggplot(BAFestimated, aes( y = Npoints, fill = state, group = state))+geom_histogram()+facet_wrap(~state)
+
+ggplot(BAFestimated %>% filter(state == 54), aes( y = BAFest, fill = state, group = state))+geom_histogram()+facet_wrap(~state)
+ggplot(BAFestimated %>% filter(state == 54), aes( y = BAFest, fill = state, group = state))+geom_histogram()+facet_wrap(~Npoints >5)
+
+# state 34, new jersey is a mix of fixed radius and variable radius designs
+ggplot(BAFestimated %>% filter(state == 34), aes( y = BAFest, fill = state, group = state))+geom_histogram()+facet_wrap(~state)
+ggplot(BAFestimated %>% filter(state == 34), aes( y = BAFest, fill = state, group = state))+geom_histogram()+facet_wrap(~Npoints >5)
+ggplot(BAFestimated %>% filter(state == 34), aes( y = volfac, fill = state, group = state))+geom_histogram()+facet_wrap(~Npoints >1)
+
+BAFestimated %>% filter(volfac == 0)%>% group_by(state) %>% summarise(n())
+# fixed radius volfacs--
+# volfac == 10.0196, for trees < 11.0 in
+# volfac == 4.9928, for trees >= 11 inches
+# all of these are single point plots:
+BAFestimated %>% filter(state == 34) %>% filter(volfac == 10.0196 | volfac == 4.9928) %>% 
+  group_by(volfac, point)%>% summarise(maxdbh = max(dbhcur), 
+                                mindbh = min(dbhcur))
+
+BAFestimated %>% filter(state == 34) %>% filter(!volfac == 10.0196 & !volfac == 4.9928) #%>% 
+  
+ggplot(BAFestimated %>% filter(state == 34 & !volfac == 10.0196 & !volfac == 4.9928), aes( y = BAFest, fill = state, group = state))+geom_histogram()+facet_wrap(~Npoints >5)
+ggplot(BAFestimated %>% filter(state == 34 & !volfac == 10.0196 & !volfac == 4.9928), aes( y = Npoints, fill = state, group = state))+geom_histogram()+facet_wrap(~Npoints >5)
+
+
+BAFestimated %>% filter(Npoints > 10)%>% View()
+
+# states 34, 36, 39, 42, and 54 likely have variable radius plot designs
+all.remeas %>% group_by(state,volfac == 0) %>% summarise(n = n())
+
+# total trees in each species on the stand and in the plots
+
+  
+group_by(SPCD, Species, state, remper, PLOT.ID, LONG_FIADB, LAT_FIADB) %>%
+  
+  summarise(n_trees_volfac = sum(volfac, na.rm = TRUE), 
+            n_count = n())
+
+
+
+
+total.spp.predicted.plt <- spp.tree.pred.mort.volfac %>% rename("Species" = "COMMON")%>% 
+  group_by(SPCD, Species, state, PLOT.ID, LAT_FIADB, LONG_FIADB)%>%
+  summarise(n_predicted_plot = n(), 
+            volfac_predicted_plot = sum(volfac, na.rm =TRUE))
+
+spp.predicted.dead.plot <- spp.tree.pred.mort.volfac %>% rename("Species" = "COMMON")%>% 
+  mutate(predicted.status = ifelse(survival.draw == 1, "1", "2"))%>%
+  filter(predicted.status == "2")%>%
+  group_by(SPCD, Species, state, PLOT.ID, LAT_FIADB, LONG_FIADB)%>%
+  
+  summarise(predicted_dead_trees_volfac = sum(volfac, na.rm = TRUE), 
+            n_predicted_dead = n())%>%
+  left_join(., total.spp.predicted.plt )
+
+
+
+# get the plot-level predicted mortality rates by each species
+predicted.mort.rates.spp.plot <- spp.predicted.dead.plot %>% 
+  group_by(SPCD, Species, state, PLOT.ID, LAT_FIADB, LONG_FIADB)%>%
+  # for each remper period, get the mortality rate per year 
+  summarise(predicted_10yrmort_rate_volfac = ((predicted_dead_trees_volfac/volfac_predicted_plot)), 
+            predicted_10yrmort_rate = ((n_predicted_dead/n_predicted_plot)))%>%
+  ungroup()%>%
+  # 10 year survival rates
+  mutate(predicted_10yr_surv_rate_volfac = 1-predicted_10yrmort_rate_volfac, 
+         predicted_10yr_surv_rate = 1-predicted_10yrmort_rate)%>%
+  # get annualized predicted survival and mortality rates
+  mutate(predicted_1year_surv_rate_volfac = predicted_10yr_surv_rate_volfac^(1/10),
+         predicted_1year_surv_rate = predicted_10yr_surv_rate^(1/10))%>%
+  mutate(predicted_1year_mort_rate_volfac = 1 - predicted_1year_surv_rate_volfac, 
+         predicted_1year_mort_rate = 1 - predicted_1year_surv_rate)
+
+hist(predicted.mort.rates.spp.plot$predicted_1year_mort_rate_volfac)
+
+  
+# plot up 10 year survival rates by plot, by species:
+ggplot(data = predicted.mort.rates.spp.plot %>% filter(Species %in% c("balsam fir", "red spruce", "northern white-cedar")))+
+  geom_point(aes(x =LONG_FIADB,  y = LAT_FIADB, color = predicted_10yrmort_rate*100))+
+  facet_wrap(~Species)+ scale_color_viridis_c(option = "magma")
+
+
+ggplot(data = predicted.mort.rates.spp.plot %>% filter(Species %in% c("balsam fir", "red spruce", "northern white-cedar")))+
+  geom_density(aes(y = predicted_1year_surv_rate*100, fill = Species))+
+  facet_wrap(~Species)#+ylab("predicted_1year_mort_rate_volfac")
+
+ggplot(data = predicted.mort.rates.spp.plot %>% filter(Species %in% c("balsam fir", "red spruce", "northern white-cedar")))+
+  geom_density(aes(y = predicted_10yrmort_rate*100, fill = Species))+
+  facet_wrap(~Species)+ylab("Predicted 10-year mortality rates")
+
+
+ggplot(data = predicted.mort.rates.spp.plot)+
+  geom_density(aes(y = predicted_10yrmort_rate*100, fill = Species))+
+  facet_wrap(~Species)+ylab("Predicted 10-year mortality rates")+
+  species_fill
+
+
+
+
+ggplot(data = predicted.mort.rates.spp.plot)+
+  geom_density(aes(y = predicted_10yrmort_rate_volfac*100, fill = Species))+
+  facet_wrap(~Species)+ylab("Predicted 10-year mortality rates (% of stems/species/plot)")+
+  species_fill
+
+predicted.mort.rates.spp.plot %>% filter(Species %in% c("balsam fir", "red spruce", "northern white-cedar"))%>%
+  ggplot(aes(x = Species, y = predicted_10yrmort_rate_volfac, fill = Species)) +
+  geom_dots(layout = "weave") +
+  stat_slabinterval()
+
+
+
+ggplot(data = predicted.mort.rates.spp.plot %>% filter(Species %in% c("balsam fir", "red spruce", "northern white-cedar")))+
+  geom_point(aes(x =LONG_FIADB,  y = LAT_FIADB, color = predicted_10yrmort_rate*100))+
+  facet_wrap(~Species)+ scale_color_viridis_c(option = "magma")
+
+# get state-level mortality rate estimates for the modelled estimates---
 # sum up volfac by state
 # sum up number of plots by state
 
