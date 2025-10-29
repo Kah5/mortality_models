@@ -735,8 +735,18 @@ melted.correlation %>% filter(R_revised >=0.4)
 # moran's local 
 # Ripley's K-function:
 
+
+
+data_built <- ggplot_build(p)
+
+# The data for the filled contours is in the second layer
+data_2d <- data_built$data[[2]]
+
+# The head() function shows the structure
+head(data_2d)
+
 library(spdep)
-polygon.buffer.list <- buffer.map.list <- moran.local.list <- polygon_hull.list <- list()
+polygon.contour.list <- polygon.buffer.list <- buffer.map.list <- moran.local.list <- polygon_hull.list <- list()
 for(i in 1:17){
   
 plt_mort_sf <- st_as_sf(avg.plt.mort.annual %>% filter(Species %in% nspp[i,]$COMMON), coords = c("LONG_FIADB", "LAT_FIADB"))
@@ -849,21 +859,158 @@ gg.buffer.map <- ggplot() +
                                                            legend.background = element_rect(fill = "white", color = "black") 
   ) +ggtitle(paste0("mortality risk hotspots for ", nspp[i,]$COMMON))
 
+
+# # use spatstat package to get KDE
+library(spatstat)
+spp.mort.rate <- avg.plt.mort.annual %>% filter(Species %in% nspp[i,]$COMMON)
+# spp_mort_high_sf <- st_as_sf(spp.mort.rate %>% filter(pMort_annual_plot >= mean(spp.mort.rate$pMort_annual_plot)), coords = c("LONG_FIADB", "LAT_FIADB"), crs = 4269)%>%
+#   st_transform(., crs = 5070)
+# 
+# # use state spatial polygons as the windown for the density object using as.owin 
+# us_polygon_df <-map("usa", fill = TRUE, plot = FALSE) %>% st_as_sf() %>%
+#   st_transform(., crs = 5070)
+# us_state_owin <- as.owin(us_polygon_df)
+# 
+# ppp_obj_us <- as.ppp(st_coordinates(spp_mort_high_sf), W = us_state_owin)
+# kde_result_us <- density(ppp_obj_us, sigma = 12)
+
+
+# Convert the im object to a data frame for ggplot2
+# kde_df <- as.data.frame(kde_result_us)
+
+# Plot with filled contours
+# ggplot(kde_df %>% filter(value >=0), aes(x = x, y = y, z = value)) +
+#   geom_contour_filled() +
+#   scale_fill_viridis_d() # Or other color scales
+# 
+# plot(kde_result_us)
+
+# Define contour levels (e.g., at 25%, 50%, 75% of the maximum density)
+# levels <- quantile(kde_result_us$v, probs = c(0.25, 0.50, 0.75), na.rm =TRUE)
+# 
+# # Extract contours
+# contours_list <- contour(kde_result_us, levels = levels, draw = FALSE)
+
+
+#mean(spp.mort.rate$pMort_annual_plot)
+# if there are any points with > 1% mortality per year:
+avg.plt.mort.annual %>% filter(pMort_annual_plot >= 0.005) %>% ungroup()%>% dplyr::select(Species) %>% distinct()
+
+# get 2D KDE of above average mortality rates form stat_density2d
+p <- ggplot(data = spp.mort.rate %>% filter(pMort_annual_plot >= quantile(spp.mort.rate$pMort_annual_plot, 0.75)), aes(x = LONG_FIADB, y = LAT_FIADB)) +
+  geom_point(alpha = 0.5) + # Optional: show the original points
+  coord_sf(xlim = c(-85, -60), ylim = c(30, 50))+
   
+  stat_density2d(aes(fill = ..level..,), alpha = 0.5, geom = "polygon", contour_var = "count",#, contour_var = "count",
+                 breaks =  c(0,0.5, 1, 2, 5, 10, 15, 20, 25, 30, 60)) +
+  scale_fill_viridis_c() + # A color scale for the density levels
+  #coord_equal() + # Ensures correct aspect ratio for spatial data
+  labs(title = "Density of higher than average mortality",
+       x = "Longitude",
+       y = "Latitude") +
+  theme_minimal()
+p
+
+
+p2 <- ggplot(data = spp.mort.rate %>% filter(pMort_annual_plot >= quantile(spp.mort.rate$pMort_annual_plot, 0.5)), aes(x = LONG_FIADB, y = LAT_FIADB)) +
+  geom_point(alpha = 0.5) + # Optional: show the original points
+  coord_sf(xlim = c(-85, -60), ylim = c(30, 50))+
+  #geom_hdr(probs = c(0.25, 0.5, 0.75, 0.95))
+  
+   geom_density2d(aes(color = ..level..,), alpha = 0.5)+ 
+  #                breaks = density_levels) +
+  scale_fill_viridis_c() + # A color scale for the density levels
+  #coord_equal() + # Ensures correct aspect ratio for spatial data
+  labs(title = "Density of higher than average mortality",
+       x = "Longitude",
+       y = "Latitude") +
+  theme_minimal()
+
+
+
+
+
+
+
+data_built <- ggplot_build(p2)
+
+# The data for the filled contours is in the second layer
+data_2d <- data_built$data[[2]]
+
+# set a polygon IDs for each contour piece
+data_2d$pol_id <- paste0(data_2d$group)
+
+# Split and create sf polygons based on the IDs
+polygons_list <- lapply(unique(data_2d$pol_id), function(x) {
+  # Subset data for the current polygon
+  polygon_data <- data_2d[data_2d$pol_id == x, ]
+  
+  # close polygon
+  closed_polygon <- rbind(polygon_data, polygon_data[1, ])
+  
+  # sf polygon 
+  polygon_sf <- st_polygon(list(as.matrix(closed_polygon[, c("x", "y")])))
+  
+  # density level 
+  level_data <- unique(polygon_data[, grepl("level", names(polygon_data))])
+  
+  # sf object with the level data
+  st_as_sf(level_data, geometry = st_sfc(polygon_sf))
+})
+
+# combine species contours into a df
+final_polygons_sf <- do.call(rbind, polygons_list) %>% 
+  mutate(Species = nspp[i,]$COMMON, 
+         mean.plt.mort.spp = mean(spp.mort.rate$pMort_annual_plot))
+
+final_polygons_sf %>% filter(nlevel >=0.5) %>% ggplot()+geom_sf(aes(fill = nlevel))+scale_fill_viridis_c()+
+  geom_point(data = spp.mort.rate %>% filter(pMort_annual_plot >= 0.01), aes(x = LONG_FIADB, y = LAT_FIADB), size = 0.1)
+
+
+
 
 # save each species buffers:
-
+polygon.contour.list[[i]] <- final_polygons_sf
 polygon.buffer.list[[i]] <- hh_polygon_buffer
 polygon_hull.list[[i]] <- hh_polygon_chull
 buffer.map.list[[i]] <- gg.buffer.map
 moran.local.list[[i]] <- plt_mort_sf
 
-rm(hh_polygon_buffer, hh_polygon_chull, gg.buffer.map)
+rm(hh_polygon_buffer, hh_polygon_chull, gg.buffer.map, final_polygons_sf)
 }
 
+names(polygon.contour.list) <- nspp$COMMON
 names(polygon.buffer.list) <- nspp$COMMON
 names(polygon_hull.list) <- nspp$COMMON
 #spatial_buffer_points <- st_sfc(polygon.buffer.list[[1]], polygon.buffer.list[[2]], polygon.buffer.list[[3]])
+
+
+poly.contours <- do.call(rbind, polygon.contour.list)%>% #data.frame()%>%
+  group_by(Species) %>% mutate(max.level = max(level))
+
+poly.contours %>% as.data.frame ()%>% group_by(Species)%>% summarise(max.level = max(level), min (level))%>% 
+  arrange(max.level)
+
+
+polygon.contour.list[[1]] %>% filter(nlevel > 0.5) %>% ggplot()+geom_sf(aes(fill = level))+scale_fill_viridis_c()
+polygon.contour.list[[2]] %>% filter(nlevel > 0.5) %>% ggplot()+geom_sf(aes(fill = level))+scale_fill_viridis_c()
+polygon.contour.list[[3]]  %>% filter(level >= 15) %>% ggplot()+geom_sf(aes(fill = level))+scale_fill_viridis_c()
+polygon.contour.list[[4]]   %>% filter(level >= 15)%>% ggplot()+geom_sf(aes(fill = level))+scale_fill_viridis_c()
+polygon.contour.list[[5]]  %>% filter(level >= 15)%>% ggplot()+geom_sf(aes(fill = level))+scale_fill_viridis_c()
+polygon.contour.list[[6]]  %>% filter(level >= 15)%>% ggplot()+geom_sf(aes(fill = level))+scale_fill_viridis_c()
+polygon.contour.list[[7]]   %>% filter(level >= 15)%>% ggplot()+geom_sf(aes(fill = level))+scale_fill_viridis_c()
+polygon.contour.list[[8]]   %>% filter(level >= 15)%>% ggplot()+geom_sf(aes(fill = level))+scale_fill_viridis_c()
+polygon.contour.list[[9]]   %>% filter(level >= 15)%>% ggplot()+geom_sf(aes(fill = level))+scale_fill_viridis_c()
+polygon.contour.list[[10]] %>% filter(level >= 15)%>% ggplot()+geom_sf(aes(fill = level))+scale_fill_viridis_c()
+polygon.contour.list[[11]]  %>% filter(level >= 15)%>% ggplot()+geom_sf(aes(fill = level))+scale_fill_viridis_c()
+polygon.contour.list[[12]]   %>% filter(level >= 15)%>% ggplot()+geom_sf(aes(fill = level))+scale_fill_viridis_c()
+polygon.contour.list[[13]]   %>% filter(level >= 15)%>% ggplot()+geom_sf(aes(fill = level))+scale_fill_viridis_c()
+polygon.contour.list[[14]]  %>% filter(level >= 15) %>% ggplot()+geom_sf(aes(fill = level))+scale_fill_viridis_c()
+polygon.contour.list[[15]]   %>% filter(level >= 15)%>% ggplot()+geom_sf(aes(fill = level))+scale_fill_viridis_c()
+polygon.contour.list[[16]]   %>% filter(level >= 15)%>% ggplot()+geom_sf(aes(fill = level))+scale_fill_viridis_c()
+polygon.contour.list[[17]]   %>% filter(level >= 15)%>% ggplot()+geom_sf(aes(alpha = level), fill = "forestgreen")#+scale_fill_viridis_c()
+
+
 # plot the point-based buffers all together:
 base.map <- ggplot() + 
   geom_polygon(data = canada, 
@@ -876,7 +1023,119 @@ base.map <- ggplot() +
                aes(x=long, y=lat, group = group), 
                color = "black", fill = "white")+
   theme_minimal()
+
+# plot kde based polygons for each species:
+all.kde <- base.map +
+  geom_sf(data = poly.contours %>% filter(nlevel >= 0.75) , aes(fill = Species, group = Species), alpha = 0.7) +
+  species_fill+coord_sf(xlim = c(-85, -67.5), ylim = c(37, 47.5))+theme(panel.grid = element_blank(), #panel.background = element_rect(fill = 'lightblue'), 
+                                                                       legend.position = "none",
+                                                                       axis.title  = element_blank(),
+                                                                       #legend.title = element_blank(),
+                                                                       legend.background = element_rect(fill = "white", color = "black") )
+
+
+TREE.remeas %>% dplyr::select(state, stname, date, remper) %>% distinct() %>%
+  filter(!remper == 0) %>%
+  group_by(state, stname, date)%>%
+  summarise(avg.remper = median(remper))%>%
+  mutate(date2 = date - avg.remper)
+
+# most mortality here is 1981-1995 (1997)
+northern.kde <- base.map +
+  geom_sf(data = poly.contours %>% 
+            filter(Species %in% c("balsam fir", "northern white-cedar",  "red spruce"))%>%
+                     filter(nlevel > 0.75), aes(fill = Species, group = Species), alpha = 0.75, color = NA) +
+  species_fill+coord_sf(xlim = c(-85, -67.5), ylim = c(37, 47.5))+theme(panel.grid = element_blank(), #panel.background = element_rect(fill = 'lightblue'), 
+                                                                        legend.position = "none",
+                                                                        axis.title  = element_blank(),
+                                                                        #legend.title = element_blank(),
+                                                                        legend.background = element_rect(fill = "white", color = "black") )
+
+
+
   
+
+
+# peaks of mortality in PA for Oaks, in NY, NH, and VT, and ME for birches
+# most mortality here is 1976-1989 for PA and WV and 1980-1997ish for birches
+# Oaks:
+# PA: remper 1976-1989 # peak SM defoliation = 1990
+# NJ: remper 1972-1987 # peak SM defoliation = 1981
+# Birches:
+# NY: remper = 1980-1993 # peak SM defoliation = 1980
+# VT: remper = 1982-1997 # peak SM defoliation = 1953, but some later on
+# NH: remper = 1983 - 1997 # peak SM defoliation = 1981, and large peaks in 1980s
+
+
+oak.kde <- base.map +
+  geom_sf(data = poly.contours %>% 
+            filter(Species %in% c( "chestnut oak","northern red oak", "white oak", "paper birch", "yellow birch"))%>%
+            filter(nlevel >= 0.70), aes(fill = Species, group = Species), alpha = 0.75, color = NA) +
+  species_fill+coord_sf(xlim = c(-85, -67.5), ylim = c(37, 47.5))+theme(panel.grid = element_blank(), #panel.background = element_rect(fill = 'lightblue'), 
+                                                                        legend.position = "none",
+                                                                        axis.title  = element_blank(),
+                                                                        #legend.title = element_blank(),
+                                                                        legend.background = element_rect(fill = "white", color = "black") )
+
+
+  
+  
+
+# most mortality is in PA, NY, VT, NH, an Maine for both
+# could be HWA related for hemlock in PA and NY
+# PA = 1976 - 1989 (HWA first detected 1979)
+# NY = 1980 - 1993 (HWA first detected 1984)
+# VT = 1982 - 1997 (HWA first detected 2008)-Hemlock looper?
+# NH = 1983 - 1997 (HWA first detected 2004)-Hemlock looper?
+
+
+beech.hemlock<- base.map +
+  geom_sf(data = poly.contours %>% 
+            filter(Species %in% c("eastern hemlock", "American beech"))%>%
+            filter(nlevel > 0.70), aes(fill = Species, group = Species), alpha = 0.75, color = NA) +
+  species_fill+coord_sf(xlim = c(-85, -67.5), ylim = c(37, 47.5))+theme(panel.grid = element_blank(), #panel.background = element_rect(fill = 'lightblue'), 
+                                                                        legend.position = "none",
+                                                                        axis.title  = element_blank(),
+                                                                        #legend.title = element_blank(),
+                                                                        legend.background = element_rect(fill = "white", color = "black") )
+
+
+
+
+
+# hickory mortality is WV, OH = 
+spongy.resistant.kde <- base.map +
+  geom_sf(data = poly.contours %>% 
+            filter(Species %in% c("sugar maple", "red maple", "eastern white pine", "hickory spp."))%>%
+            filter(nlevel >= 0.7), aes(fill = Species, group = Species), alpha = 0.75, color = NA) +
+  species_fill+coord_sf(xlim = c(-85, -67.5), ylim = c(37, 47.5))+theme(panel.grid = element_blank(), #panel.background = element_rect(fill = 'lightblue'), 
+                                                                        legend.position = "none",
+                                                                        axis.title  = element_blank(),
+                                                                        #legend.title = element_blank(),
+                                                                        legend.background = element_rect(fill = "white", color = "black") )
+
+
+
+
+
+
+spongy.immune.kde <- base.map +
+  geom_sf(data = poly.contours %>% 
+            filter(Species %in% c("black cherry", "yellow-poplar", "white ash"))%>%
+            filter(nlevel >=0.7), aes(fill = Species, group = Species), alpha = 0.75, color = NA) +
+  species_fill+coord_sf(xlim = c(-85, -67.5), ylim = c(37, 47.5))+theme(panel.grid = element_blank(), #panel.background = element_rect(fill = 'lightblue'), 
+                                                                        legend.position = "none",
+                                                                        axis.title  = element_blank(),
+                                                                        #legend.title = element_blank(),
+                                                                        legend.background = element_rect(fill = "white", color = "black") )
+
+
+
+
+
+
+
+
 # all species point-based buffers together:
 base.map +
   geom_sf(data = polygon.buffer.list[["balsam fir"]], aes(fill = "balsam fir"), alpha = 0.5, color = NA) +
@@ -941,9 +1200,9 @@ oak.hotspots <- base.map +
 
 
 beech.hemlock.hotspots <- base.map +
-  geom_sf(data = polygon.buffer.list[["eastern hemlock"]], aes(fill = "eastern hemlock"), alpha = 0.5, color = "black") +
-  geom_sf(data = polygon.buffer.list[["American beech"]], aes(fill = "American beech"), alpha = 0.5,color = "black") +
-  geom_sf(data = polygon.buffer.list[["eastern white pine"]], aes(fill = "eastern white pine"), alpha = 0.5,color = "black") +
+  geom_sf(data = polygon.buffer.list[["eastern hemlock"]], aes(fill = "eastern hemlock"), alpha = 0.75, color = "black") +
+  geom_sf(data = polygon.buffer.list[["American beech"]], aes(fill = "American beech"), alpha = 0.75,color = "black") +
+  geom_sf(data = polygon.buffer.list[["eastern white pine"]], aes(fill = "eastern white pine"), alpha = 0.75,color = "black") +
   species_fill+coord_sf(xlim = c(-85, -67.5), ylim = c(37, 47.5))+theme(panel.grid = element_blank(), #panel.background = element_rect(fill = 'lightblue'), 
                                                                         #legend.position = "none",
                                                                         axis.title  = element_blank(),
