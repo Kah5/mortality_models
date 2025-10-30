@@ -495,12 +495,305 @@ ggplot(data = spp.tree.mort.probs)+
   facet_wrap(~Species, scales = "free")+species_fill
 
 # get plot-level averages of species rate estimates for the modelled rate:--
-avg.plt.mort.annual <- spp.tree.mort.probs %>% group_by(state, PLOT.ID, Species, SPCD, LONG_FIADB, LAT_FIADB)%>%
+avg.plt.mort.annual <- spp.tree.mort.probs %>% group_by(state, PLOT.ID, county, Species, SPCD, LONG_FIADB, LAT_FIADB)%>%
   summarise(pMort_annual_plot = median(p1year.mortality, na.rm =TRUE), 
             pMort_annual_plot.sd = sd(p1year.mortality, na.rm =TRUE), 
             nTrees = n())
 
+# get county-level weighted averages:
+#at the plot get the pmort_tree: pmort*ntrees
+# numerator: sum(pmort_tree)/total ntrees in county
+weight.annual.prob <- spp.tree.mort.probs %>% group_by(state, county, Species, SPCD)%>%
+  mutate(ntree_county_spcd = n(), 
+         volfac_county_spcd = sum(volfac, na.rm =TRUE)) %>%
+  ungroup()%>%
+  
+  # calculate plot-level values
+  group_by(state, county, Species, SPCD, PLOT.ID, LONG_FIADB, LAT_FIADB)%>%
+  summarise(ntree_plot_spcd = n(), 
+            volfac_plot_spcd = sum(volfac, na.rm =TRUE), 
+            average_plt = mean(p1year.mortality, na.rm =TRUE))%>%
+  mutate(ntree_weight_plt = average_plt*ntree_plot_spcd, 
+         volfac_weight_plt = average_plt*volfac_plot_spcd)%>%
+  
+  
+  ungroup()%>%
+  
+  # # calculate tree-level values
+  # group_by(state, county, Species, SPCD, PLOT.ID, LONG_FIADB, LAT_FIADB, tree.id)%>%
+  # mutate(mort_volfac_tree = p1year.mortality*volfac)%>%
+  # ungroup()%>%
+  
+  # calculate county-level weighted averages for each species
+  group_by(state, county, Species, SPCD)%>%
+    summarise(plots_with_spcd = n(), 
+              trees_in_spcd = sum(ntree_plot_spcd, na.rm =TRUE),
+              volfac_in_spcd = sum(volfac_plot_spcd, na.rm =TRUE),
+              raw_avg_prob = mean(average_plt, na.rm =TRUE),
+              weight_plt_prob = sum(ntree_weight_plt, na.rm =TRUE)/sum(ntree_plot_spcd, na.rm =TRUE), 
+              #weight_tree_prob = sum(p1year.mortality, na.rm =TRUE)/ntree_county_spcd, 
+              weight_plot_volfac_prob = sum(volfac_weight_plt, na.rm =TRUE)/sum(volfac_plot_spcd, na.rm = TRUE))%>%
+  mutate(COUNTYFP = str_pad(county, side = "left",3, pad = 0), 
+         STATEFP = str_pad(state, side = "left", 2, pad = 0))
+              #weight_tree_volfac_prob = sum(mort_volfac_tree, na.rm =TRUE)/volfac_county_spcd)
 
+
+# join up with state and county shapefiles for plotting:
+library(tigris)
+# Get the most recent county data for all the states
+counties <- counties(state = c("DE","RI","ME", "MA","MD", "NH", "NJ", "NY", "OH", "PA", "VT", "WV"), cb = TRUE) %>% 
+  data.frame()%>% 
+  rename(
+         "CONAME" = "NAME")  %>%
+  dplyr::select("STATEFP",
+                "COUNTYFP","COUNTYNS" , "GEOID" ,"CONAME",    
+                "NAMELSAD","STUSPS","STATE_NAME", "LSAD","ALAND","AWATER",    
+                "geometry" )%>% as.data.frame()
+# separate handling for CT, which changed their county names around 2017
+CT.counties <- counties(state = "CT", cb = FALSE, year = 2015) %>% 
+  rename("CONAME" = "NAME") %>%
+  mutate(STATE_NAME = "Connecticut", 
+         STUSPS = "CT") %>%
+  dplyr::select("STATEFP",
+                "COUNTYFP","COUNTYNS" , "GEOID" ,"CONAME",    
+                "NAMELSAD","STUSPS","STATE_NAME", "LSAD","ALAND","AWATER",    
+                "geometry" )%>% as.data.frame()
+
+# join CT and join up mortality data
+
+id.var.counties <- c("STATEFP",
+                     "COUNTYFP","COUNTYNS" , "GEOID" ,"CONAME",    
+                     "NAMELSAD","STUSPS","STATE_NAME", "LSAD","ALAND","AWATER",    
+                     "geometry" )
+n_county_prob_spread <- weight.annual.prob %>% 
+  ungroup()%>%
+  dplyr::select(STATEFP, COUNTYFP, Species, weight_plt_prob)%>% 
+  group_by(STATEFP, COUNTYFP, Species)%>%
+  spread(Species, weight_plt_prob, fill = NA)
+
+volfac_county_prob_spread <- weight.annual.prob %>% 
+  ungroup()%>%
+  dplyr::select(STATEFP, COUNTYFP, Species, weight_plot_volfac_prob)%>% 
+  group_by(STATEFP, COUNTYFP, Species)%>%
+  spread(Species, weight_plot_volfac_prob, fill = NA)
+
+n_plots_species_county_spread <- weight.annual.prob %>% 
+  ungroup()%>%
+  dplyr::select(STATEFP, COUNTYFP, Species, plots_with_spcd)%>% 
+  group_by(STATEFP, COUNTYFP, Species)%>%
+  spread(Species, plots_with_spcd, fill = 0)
+
+county.volfac.sf <-  counties %>% full_join(.,volfac_county_prob_spread) %>% 
+  reshape2::melt(., id.vars = id.var.counties)%>%rename("volfac_county_pmort" = "value", 
+                                                        "Species" = "variable")
+county.ntree.sf <-  counties %>% full_join(.,n_county_prob_spread) %>% 
+  reshape2::melt(., id.vars = id.var.counties) %>%rename("n_county_pmort" = "value", 
+            "Species" = "variable")
+county.nplots.sf <-  counties %>% full_join(.,n_plots_species_county_spread) %>% 
+  reshape2::melt(., id.vars = id.var.counties) %>%rename("n_plots" = "value", 
+                                                         "Species" = "variable")
+
+county.pmort.sf <- left_join(county.nplots.sf, county.ntree.sf) %>% 
+  left_join(., county.volfac.sf)%>% st_as_sf()
+
+
+
+ggplot(data = county.pmort.sf %>% mutate(ncount_pmort_plot_3 = ifelse(n_plots > 3, n_county_pmort, NA)))+
+  geom_sf(aes(fill = ncount_pmort_plot_3), color = NA)+scale_fill_viridis_c()+
+  facet_wrap(~Species)
+
+species.name <- "yellow birch"
+hotspot.variable <- "n_county_pmort"
+
+get.spatial.hotspots <- function(species.name, hotspot.variable ){
+        # do a hotspot analysis for eastern hemlock:
+  
+  
+  species.data.all <- county.pmort.sf %>% filter(Species %in% species.name )
+  
+  species.data.all$hotspot.var <- species.data.all[[hotspot.variable]]
+    
+  # Visualize the variable on the map
+  #species.data.all |>
+    spp.map.pmort <- ggplot() +
+    geom_sf(data = species.data.all, aes(fill = hotspot.var),color = "black", lwd = 0.1) +
+    scale_fill_fermenter(palette = "Oranges", direction = "rev",na.value = "grey") +
+    
+    theme_void() +
+    labs(
+      fill = paste(hotspot.variable),
+      title = paste(species.name, "-", hotspot.variable))
+  
+  # ggsave(filename = paste0(output.dir, "/images/hotspots/Pmort_map_", species.name, "_", hotspot.variable, ".png"), 
+  #        plot = spp.map.pmort, 
+  #        height = 4, width = 6, units = "in")
+  # 
+  
+  
+        hemlock.counties <- county.pmort.sf[!is.na(county.pmort.sf[,hotspot.variable]),] %>% filter(Species %in% species.name )
+        # Create a neighbor list based on queen contiguity
+        list_nb <- poly2nb(hemlock.counties, queen = TRUE)
+        
+        empty_nb <- which(card(list_nb) == 0)
+        empty_nb       
+        
+        if(length(empty_nb)>0){
+        hemlock_subset <- hemlock.counties[-empty_nb, ]
+        }else{
+          hemlock_subset <- hemlock.counties
+        }
+        # Now that we removed empty neighbor sets (tes_subset)
+        # Identify neighbors with queen contiguity (edge/vertex touching)
+        hemlock_nb <- poly2nb(hemlock_subset, queen = TRUE)
+        
+        # Binary weighting assigns a weight of 1 to all neighboring features 
+        # and a weight of 0 to all other features
+        hemlock_w_binary <- nb2listw(hemlock_nb, style="B")
+        
+        # Calculate spatial lag of county probability of mortality
+        # rename the variable of interest 
+        hemlock_subset$hotspot.var <- hemlock_subset[[hotspot.variable]]
+        
+        hemlock_lag <- lag.listw(hemlock_w_binary, hemlock_subset$hotspot.var)
+        
+        #  global G statistic of county probability of mortality
+       global.G.results <-  globalG.test( hemlock_subset$hotspot.var, hemlock_w_binary)
+        
+        # local gi test:
+        # Identify neighbors, create weights, calculate spatial lag
+        hemlock_nbs <- hemlock_subset |> 
+          mutate(
+            nb = st_contiguity(geometry),        # neighbors share border/vertex
+            wt = st_weights(nb),                 # row-standardized weights
+            tes_lag = st_lag(hotspot.var, nb, wt)    # calculate spatial lag of TreEqty
+          ) 
+        
+        # Calculate the Gi using local_g_perm
+        hemlock_hot_spots <- hemlock_nbs |> 
+          mutate(
+            Gi = local_g_perm(hotspot.var, nb, wt, nsim = 999)
+            # nsim = number of Monte Carlo simulations (999 is default)
+          ) |> 
+          # The new 'Gi' column itself contains a dataframe 
+          # We can't work with that, so we need to 'unnest' it
+          unnest(Gi) 
+        
+        # plot Gi star
+        hemlock_hot_spots |> 
+          ggplot((aes(fill = gi))) +
+          geom_sf(color = "black", lwd = 0.15) +
+          scale_fill_gradient2() 
+        
+        # Create a new data frame with pretty hotspots
+     local.hotspot.sf <-   hemlock_hot_spots |> 
+          # with the columns 'gi' and 'p_folded_sim"
+          # 'p_folded_sim' is the p-value of a folded permutation test
+          dplyr::select(gi, p_folded_sim) |> 
+          mutate(
+            # Add a new column called "classification"
+            classification = case_when(
+              # Classify based on the following criteria:
+              gi > 0 & p_folded_sim <= 0.01 ~ "Very hot",
+              gi > 0 & p_folded_sim <= 0.05 ~ "Hot",
+              gi > 0 & p_folded_sim <= 0.1 ~ "Somewhat hot",
+              gi < 0 & p_folded_sim <= 0.01 ~ "Very cold",
+              gi < 0 & p_folded_sim <= 0.05 ~ "Cold",
+              gi < 0 & p_folded_sim <= 0.1 ~ "Somewhat cold",
+              TRUE ~ "Insignificant"
+            ),
+            # Convert 'classification' into a factor for easier plotting
+            classification = factor(
+              classification,
+              levels = c("Very hot", "Hot", "Somewhat hot",
+                         "Insignificant",
+                         "Somewhat cold", "Cold", "Very cold")
+            )
+          ) 
+     
+     local.hotspot.map <-  
+          # Visualize the results with ggplot2
+          ggplot() +
+          geom_sf(data = species.data.all, color = "black", fill = "grey")+
+          geom_sf(data = local.hotspot.sf, aes(fill = classification),color = "black", lwd = 0.1) +
+          scale_fill_brewer(type = "div", palette = 5) +
+          theme_void() +
+          labs(
+            fill = "Hot Spot Classification",
+            title = paste(species.name, "mortality hotspots -", hotspot.variable),
+            subtitle = paste("global G =", round(global.G.results$statistic[1,1], 2), "\np-val =", round(global.G.results$p.value[1,1], 3))
+          )
+     
+local.hotspot.variable <- cowplot::plot_grid(local.hotspot.map, spp.map.pmort, align = "hv")
+# save the hotspot map
+ggsave(filename = paste0(output.dir, "/images/hotspots/hotspot_", species.name, "_", hotspot.variable, ".png"), 
+       plot = local.hotspot.variable, 
+       height = 4, width = 10, units = "in")
+        
+# return the local Gi test data
+return(local.hotspot.sf)
+        
+
+}
+
+# make maps of all spatial hotspots for pmort weighted by # trees in the county
+hotspots.n_pmort <- lapply(unique(county.pmort.sf$Species), 
+       function(x){get.spatial.hotspots(species.name = x, 
+                                        hotspot.variable = "n_county_pmort")})
+# do the same with the volfac estimates:
+hotspots.volfac_pmort <- lapply(unique(county.pmort.sf$Species), 
+                           function(x){get.spatial.hotspots(species.name = x, 
+                                                            hotspot.variable = "volfac_county_pmort")})
+
+
+ggplot(data = county.pmort.sf %>% filter(Species %in% "white oak")%>% 
+         mutate(ncount_pmort_plot_3 = ifelse(n_plots > 3, n_county_pmort, NA)))+
+  geom_sf(aes(fill = ncount_pmort_plot_3), color = NA)+scale_fill_viridis_c()+
+  facet_wrap(~Species)
+
+ggplot(data = county.pmort.sf %>% filter(Species %in% "eastern hemlock")%>% 
+         mutate(ncount_pmort_plot_3 = ifelse(n_plots > 3, n_county_pmort, NA)))+
+  geom_sf(aes(fill = ncount_pmort_plot_3), color = NA)+scale_fill_viridis_c()+
+  facet_wrap(~Species)
+
+ggplot(data = county.pmort.sf %>% filter(Species %in% "eastern hemlock")%>% 
+         mutate(ncount_pmort_plot_3 = ifelse(n_plots > 5, n_county_pmort, NA)))+
+  geom_sf(aes(fill = ncount_pmort_plot_3), color = NA)+scale_fill_viridis_c()+
+  facet_wrap(~Species)
+
+ggplot(data = county.pmort.sf %>% filter(Species %in% "eastern hemlock")
+       %>% mutate(ncount_pmort_plot_3 = ifelse(n_plots > 5, n_county_pmort, 0)))+
+  geom_sf(aes(fill = volfac_county_pmort), color = NA)+scale_fill_viridis_c()+
+  facet_wrap(~Species)
+
+ggplot(data = county.vofac.sf)+
+  geom_sf(aes(fill = `balsam fir`), color = NA)+scale_fill_viridis_c()
+
+ggplot(data = county.nplots.sf)+
+  geom_sf(aes(fill = `balsam fir`), color = NA)+scale_fill_viridis_c()
+
+
+ggplot(data = county.ntree.sf  )+
+  geom_sf(aes(fill = `balsam fir`), color = NA)+scale_fill_viridis_c()
+
+ggplot(data = county.ntree.sf  )+
+  geom_sf(aes(fill = `northern white-cedar`), color = NA)+scale_fill_viridis_c()
+
+
+
+
+ggplot(data = county.annual.mort )+
+  geom_sf(aes(fill = weight_plt_prob), color = NA)+facet_wrap(~Species)+scale_fill_viridis_c()
+
+ggplot(data = county.annual.mort )+
+  geom_sf(aes(fill = weight_plot_volfac_prob), color = NA)+facet_wrap(~Species)+scale_fill_viridis_c()
+
+
+
+
+avg.plt.mort.annual <- spp.tree.mort.probs %>% group_by(state, PLOT.ID, county, Species, SPCD, LONG_FIADB, LAT_FIADB)%>%
+  summarise(pMort_annual_plot = median(p1year.mortality, na.rm =TRUE), 
+            pMort_annual_plot.sd = sd(p1year.mortality, na.rm =TRUE), 
+            nTrees = n())
 
 ggplot(data = avg.plt.mort.annual)+
   geom_density(aes(y = pMort_annual_plot*100, fill = Species))+
@@ -625,8 +918,8 @@ nmort.df <- spp.tree.mort.probs %>% group_by(state, PLOT.ID, Species, SPCD, LONG
 # set up a dataframe with plots as rows and columns the pmort for different species
 pmort.spread <- avg.plt.mort.annual %>% ungroup()%>% 
   mutate(pMort.pct  = pMort_annual_plot*100)%>%
-  select(LAT_FIADB, LONG_FIADB, PLOT.ID,Species,pMort.pct)%>%
-  group_by(LAT_FIADB, LONG_FIADB, PLOT.ID) %>% 
+  select(LAT_FIADB, LONG_FIADB, PLOT.ID, county,Species,pMort.pct)%>%
+  group_by(LAT_FIADB, LONG_FIADB, county,PLOT.ID) %>% 
   spread(Species,pMort.pct,  fill = NA)
 #p_correlations <- cor(pmort.spread[,4:ncol(pmort.spread)], use = "pairwise.complete")
 # library(ggcorrplot)
@@ -1085,9 +1378,11 @@ oak.kde <- base.map +
 # could be HWA related for hemlock in PA and NY
 # PA = 1976 - 1989 (HWA first detected 1979)
 # NY = 1980 - 1993 (HWA first detected 1984)
-# VT = 1982 - 1997 (HWA first detected 2008)-Hemlock looper?
+# VT = 1982 - 1997 (HWA first detected 2008)-likely Hemlock looper (Forest conditions report)
 # NH = 1983 - 1997 (HWA first detected 2004)-Hemlock looper?
 
+# Beech bark disease in vermont increased in n ares
+# beech scale present in pennsyalvannia in forest conditions report 1990
 
 beech.hemlock<- base.map +
   geom_sf(data = poly.contours %>% 
@@ -1104,6 +1399,7 @@ beech.hemlock<- base.map +
 
 
 # hickory mortality is WV, OH = 
+# maples and other hardwoods: 
 spongy.resistant.kde <- base.map +
   geom_sf(data = poly.contours %>% 
             filter(Species %in% c("sugar maple", "red maple", "eastern white pine", "hickory spp."))%>%
