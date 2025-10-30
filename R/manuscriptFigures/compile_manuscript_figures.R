@@ -254,11 +254,11 @@ quantile(st.mort.df$species_volfac_mort, c(0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99
 hist(st.mort.df$species_volfac_mort)
 
 st.mort.df <- st.mort.df %>% mutate(
-  cut.mort.rate = cut(species_volfac_mort, breaks = c(0, 0.25, 0.5, 0.75, 1, 1.5, 2, 4, 8))
+  cut.mort.rate = cut(species_volfac_mort, breaks = c(0, 0.25, 0.5, 0.75, 1, 1.5, 2, 4, 100))
 )
 cut.mort.values <- data.frame(
-  cut.mort.rate = c("(0,0.25]", "(0.25,0.5]", "(0.5,0.75]", "(0.75,1]", "(1,1.5]", "(1.5,2]", "(2,4]", "(4,8]"), 
-  mortality.rate = c("<0.25", "0.25 - 0.5", "0.5 - 0.75", "0.75 - 1", "1 - 1.5", "1.5 - 2", "2 - 4", "4-6"), 
+  cut.mort.rate = c("(0,0.25]", "(0.25,0.5]", "(0.5,0.75]", "(0.75,1]", "(1,1.5]", "(1.5,2]", "(2,4]", "(4,100]"), 
+  mortality.rate = c("< 0.25", "0.25 - 0.5", "0.5 - 0.75", "0.75 - 1", "1 - 1.5", "1.5 - 2", "2 - 4", "> 4"), 
   hex.colors = c("#fff7f3",
                  "#fde0dd",
                  "#fcc5c0",
@@ -269,7 +269,7 @@ cut.mort.values <- data.frame(
                  "#7a0177"))
 
 st.mort.df <- st.mort.df %>% left_join(., cut.mort.values)
-st.mort.df$mortality.rate <- factor(st.mort.df$mortality.rate, levels = c("<0.25", "0.25 - 0.5", "0.5 - 0.75", "0.75 - 1", "1 - 1.5", "1.5 - 2", "2 - 4", "4-6"))
+st.mort.df$mortality.rate <- factor(st.mort.df$mortality.rate, levels = c("< 0.25", "0.25 - 0.5", "0.5 - 0.75", "0.75 - 1", "1 - 1.5", "1.5 - 2", "2 - 4", "> 4"))
 
 val.vec <- as.vector(cut.mort.values$hex.colors)
 names(val.vec) <- as.vector(cut.mort.values$mortality.rate)
@@ -613,16 +613,67 @@ get.spatial.hotspots <- function(species.name, hotspot.variable ){
   
   species.data.all$hotspot.var <- species.data.all[[hotspot.variable]]
     
+  species.data.all <- species.data.all %>% mutate(
+    cut.mort.rate = cut(hotspot.var*100, breaks = c(0, 0.25, 0.5, 0.75, 1, 1.5, 2, 4, 100))
+  )
+  cut.mort.values <- data.frame(
+    cut.mort.rate = c("(0,0.25]", "(0.25,0.5]", "(0.5,0.75]", "(0.75,1]", "(1,1.5]", "(1.5,2]", "(2,4]", "(4,100]"), 
+    mortality.rate = c("< 0.25", "0.25 - 0.5", "0.5 - 0.75", "0.75 - 1", "1 - 1.5", "1.5 - 2", "2 - 4", "> 4"), 
+    red.hex.colors = c(
+      "#ffffcc",
+      "#ffeda0",
+      "#fed976",
+      "#feb24c",
+      "#fd8d3c",
+      "#fc4e2a",
+      "#e31a1c",
+      "#b10026"),
+    hex.colors = c(
+                  "#fff7f3",
+                   "#fde0dd",
+                   "#fcc5c0",
+                   "#fa9fb5",
+                   "#f768a1",
+                   "#dd3497",
+                   "#ae017e",
+                   "#7a0177"))
+  
+  hex.vector <- as.vector(cut.mort.values$red.hex.colors)
+  names( hex.vector) <- cut.mort.values$mortality.rate
+  fill_mort_rate_red <- scale_fill_manual(values = hex.vector, name = "Mortality\nRate\n(%/year)", drop = FALSE)
+  
+  
+  hex.vector <- as.vector(cut.mort.values$hex.colors)
+  names( hex.vector) <- cut.mort.values$mortality.rate
+  fill_mort_rate_pink <- scale_fill_manual(values = hex.vector, name = "Mortality\nRate\n(%/year)", drop = FALSE)
+  
+  species.data.all <-  species.data.all %>% left_join(., cut.mort.values)
+  species.data.all$mortality.rate <- factor( species.data.all$mortality.rate, levels = c("< 0.25", "0.25 - 0.5", "0.5 - 0.75", "0.75 - 1", "1 - 1.5", "1.5 - 2", "2 - 4", "> 4"))
+  
+  # how widespread is mortality probability across the range?---
+  
+  # if high mortality is >1% per year, sum up the # of counties with greater than that
+  pct.counties.high <- species.data.all%>% as.data.frame()%>% filter(!is.na(hotspot.var))%>%
+    mutate(over.threshold = ifelse(hotspot.var*100 >= 0.75, 1, 0))%>%
+    summarise(ncounties = n(), 
+              n.over.threshold = sum(over.threshold, na.rm =TRUE))%>%
+    mutate(pct.counties.high = round(sum(n.over.threshold/ncounties)*100, 1))
+    
+  
+  
+  
+  
   # Visualize the variable on the map
   #species.data.all |>
-    spp.map.pmort <- ggplot() +
-    geom_sf(data = species.data.all, aes(fill = hotspot.var),color = "black", lwd = 0.1) +
-    scale_fill_fermenter(palette = "Oranges", direction = "rev",na.value = "grey") +
+  spp.map.pmort <- ggplot() +
+    geom_sf(data = species.data.all, aes(fill = mortality.rate),color = "black", lwd = 0.1, show.legend = TRUE) +
     
+    fill_mort_rate_pink+
     theme_void() +
     labs(
-      fill = paste(hotspot.variable),
-      title = paste(species.name, "-", hotspot.variable))
+      fill = paste("mortality probability\n(%/year)"),
+      title = paste(species.name, "-", hotspot.variable), 
+      subtitle = paste0(pct.counties.high$pct.counties.high, "% of counties > 1%/year" ))
   
   # ggsave(filename = paste0(output.dir, "/images/hotspots/Pmort_map_", species.name, "_", hotspot.variable, ".png"), 
   #        plot = spp.map.pmort, 
@@ -722,6 +773,8 @@ get.spatial.hotspots <- function(species.name, hotspot.variable ){
             title = paste(species.name, "mortality hotspots -", hotspot.variable),
             subtitle = paste("global G =", round(global.G.results$statistic[1,1], 2), "\np-val =", round(global.G.results$p.value[1,1], 3))
           )
+     
+     
      
 local.hotspot.variable <- cowplot::plot_grid(local.hotspot.map, spp.map.pmort, align = "hv")
 # save the hotspot map
