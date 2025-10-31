@@ -3,6 +3,8 @@ library(ggplot2)
 library(cowplot)
 library(posterior)
 library(FIESTA)
+library(spdep)
+library(sfdep)
 library(sf)
 output.dir <- output.folder <- "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
 
@@ -673,15 +675,19 @@ get.spatial.hotspots <- function(species.name, hotspot.variable ){
     labs(
       fill = paste("mortality probability\n(%/year)"),
       title = paste(species.name, "-", hotspot.variable), 
-      subtitle = paste0(pct.counties.high$pct.counties.high, "% of counties > 1%/year" ))
+      subtitle = paste0(pct.counties.high$pct.counties.high, "% of counties > 0.75%/year" ))
   
   # ggsave(filename = paste0(output.dir, "/images/hotspots/Pmort_map_", species.name, "_", hotspot.variable, ".png"), 
   #        plot = spp.map.pmort, 
   #        height = 4, width = 6, units = "in")
   # 
   
+      county.pmort.sf <- county.pmort.sf[!st_is_empty(county.pmort.sf), ]
   
-        hemlock.counties <- county.pmort.sf[!is.na(county.pmort.sf[,hotspot.variable]),] %>% filter(Species %in% species.name )
+        hemlock.counties <- county.pmort.sf[!is.na(county.pmort.sf[,hotspot.variable]),] %>% 
+          filter(Species %in% species.name ) %>% filter(!is.na(geometry))
+        
+        
         # Create a neighbor list based on queen contiguity
         list_nb <- poly2nb(hemlock.counties, queen = TRUE)
         
@@ -759,7 +765,14 @@ get.spatial.hotspots <- function(species.name, hotspot.variable ){
                          "Insignificant",
                          "Somewhat cold", "Cold", "Very cold")
             )
-          ) 
+          ) %>%
+       mutate(globalG_st_dev = global.G.results$statistic[1,1], 
+              globalG_pval = global.G.results$p.value[1,1], 
+              globalG_estimate = as.numeric(global.G.results$estimate[1]), 
+              globalG_expectation = as.numeric(global.G.results$estimate[2]), 
+              globalG_Variance = as.numeric(global.G.results$estimate[2]),
+              
+              Species = species.name)
      
      local.hotspot.map <-  
           # Visualize the results with ggplot2
@@ -796,6 +809,503 @@ hotspots.n_pmort <- lapply(unique(county.pmort.sf$Species),
 hotspots.volfac_pmort <- lapply(unique(county.pmort.sf$Species), 
                            function(x){get.spatial.hotspots(species.name = x, 
                                                             hotspot.variable = "volfac_county_pmort")})
+
+hotspots.volfac_pmort.df <- do.call(rbind, hotspots.volfac_pmort)
+# get summaries of gedis ord gi* and % of counties with > 1% probability mortality per year:
+
+
+n_counties_over_1pct <-  county.pmort.sf %>% as.data.frame()%>% 
+  filter(!is.na(volfac_county_pmort))%>%
+  group_by(Species, COUNTYFP, STATEFP, STATE_NAME, geometry)%>%
+  
+  mutate(over.0.75.pct = ifelse(volfac_county_pmort*100 >= 0.75,  1, 0), 
+         over.1.pct = ifelse(volfac_county_pmort*100 >= 1,  1, 0), 
+         nplot.over.5 = ifelse(n_plots >= 2, 1, 0))%>%
+  ungroup()%>%
+  group_by(Species)%>%
+  
+  summarise(n_high_1 = sum(over.1.pct, na.rm = TRUE), 
+            n_high_0.75 = sum(over.1.pct, na.rm = TRUE),
+            n_presence_plt = sum(nplot.over.5, na.rm =TRUE),
+            n_presence = n())%>%
+  mutate(pct_high_1 = (n_high_1/n_presence_plt)*100, 
+         pct_high_0.75 = (n_high_0.75/n_presence_plt)*100)%>%
+  ungroup()%>% left_join(.,hotspots.volfac_pmort.df %>% as.data.frame()%>%
+                           ungroup()%>%
+                           dplyr::select(Species, globalG_pval, globalG_st_dev, globalG_estimate, globalG_expectation)%>%
+                           distinct()) %>% 
+  mutate(Global.G.sig = ifelse(globalG_pval <= 0.05, "significant", "n.s."), 
+         Global.G.clustering = ifelse(globalG_estimate - globalG_expectation > 0 , "high", "low"))%>% 
+  arrange(desc(pct_high_1))
+
+species.hotspot.summaries <- hotspots.volfac_pmort.df %>% as.data.frame()%>%
+  ungroup()%>%
+  dplyr::select(Species, globalG_pval, globalG_st_dev, globalG_estimate, globalG_expectation, globalG_Variance)%>%
+  distinct() %>% left_join(.,
+
+hotspots.volfac_pmort.df %>% as.data.frame()%>%
+  ungroup()%>%
+  mutate(hotspot_type_sig = ifelse(p_folded_sim <=0.05 & gi >=0, "Hot", 
+                                   ifelse(p_folded_sim <= 0.05 & gi <= 0, "Cold", "N.S.")))%>%
+  
+  group_by(Species)%>%
+  mutate(n_counties = n())%>%
+  group_by(Species, hotspot_type_sig)%>%
+  summarise(n_sig = n(), 
+            n_counties = mean(n_counties),
+            pct_sig = (n()/ mean(n_counties))*100)%>%
+  ungroup() %>% 
+  filter(hotspot_type_sig %in% "Hot")
+)
+
+uniformity.summary <- left_join(species.hotspot.summaries, n_counties_over_1pct)%>%
+  arrange(desc(pct_high_1))
+
+uniformity.summary$Species <- factor(uniformity.summary$Species, levels = disturb.species.order)
+
+  ggplot(uniformity.summary , aes(x = globalG_st_dev, y = pct_sig, color = Species))+
+    geom_point()+
+    species_color
+  
+  ggplot(uniformity.summary , aes(x = globalG_st_dev , y = pct_sig, 
+                                  color = Global.G.sig))+
+    geom_point()
+  
+  ggplot(uniformity.summary , aes(x = pct_sig, y = globalG_st_dev, color = Species))+
+    geom_point()+
+    species_color +
+    theme_bw()+
+    xlab("% of counties included in hotspots")+
+    xlab("Global G statistic")
+  
+  
+ uniformity.bar.plot <-  ggplot(uniformity.summary, aes(x = Species, y = pct_high_1, fill = Global.G.sig, color = Global.G.sig))+
+    geom_bar(stat = "identity", alpha = 0.5)+
+    geom_point()+
+    scale_fill_manual(values = c("n.s." = "grey", "significant" = "red"), name = "Global G significance")+
+    scale_color_manual(values = c("n.s." = "grey", "significant" = "red"), name = "Global G significance")+
+    #species_fill+
+    theme_bw(base_size = 14)+
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+          panel.grid = element_blank(), 
+          legend.position = c(0.8,0.8))+ylab("% of counties with high posterior\nmortality probabilities (> 1%/year)")
+  
+  ggsave(filename = paste0(output.dir, "/images/hotspots/high_mort_uniformity.png"), 
+         plot = uniformity.bar.plot, 
+         height = 6, width = 8, units = "in")
+  
+  
+  ggplot(uniformity.summary, aes(x = Species, y = pct_sig, fill = Species))+
+    geom_bar(stat = "identity")+
+    species_fill+
+    theme_bw()+
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+
+# do the hotspots for species overlap?
+ gi.matrix <-  hotspots.volfac_pmort.df %>% as.data.frame()%>%
+    ungroup()%>% dplyr::select(gi, Species, geometry)%>%
+    group_by(geometry)%>%
+    spread(Species, gi)
+ 
+ 
+ county.corr.gi <- rcorr(as.matrix( gi.matrix[,2:ncol( gi.matrix)]), type = "pearson" ) # or "spearman"
+ colnames( county.corr.gi$r)
+ # Get upper triangle of the correlation matrix
+ get_upper_tri <- function(cormat){
+   cormat[lower.tri(cormat)]<- NA
+   return(cormat)
+ }
+ 
+ get_lower_tri<-function(cormat){
+   cormat[upper.tri(cormat)] <- NA
+   return(cormat)
+ }
+ melted.correlation <- get_lower_tri( county.corr.gi$r[disturb.species.order,disturb.species.order]) %>% reshape2::melt()%>%
+   rename("r"="value") %>% left_join(., 
+                                     get_lower_tri( county.corr.gi$n[disturb.species.order,disturb.species.order]) %>% reshape2::melt())%>%
+   rename("n" = "value")%>%
+   left_join(., 
+             get_lower_tri( county.corr.gi$P[disturb.species.order,disturb.species.order]) %>% reshape2::melt())%>%
+   rename("pval" = "value")%>%
+   mutate(R_revised = ifelse(n>=25, round(r, digits = 1), NA), 
+          P_revised = ifelse(n >=25, pval, NA))%>%
+   mutate(R_revised = ifelse(R_revised == 1, NA, R_revised))%>%
+   mutate(sig.label = ifelse(P_revised <= 0.1, R_revised, NA))%>%
+   filter(!is.na(R_revised))# if the species are colocated in less than 10 plots omit the correlation
+ 
+ 
+ gi_correlation_county <-  ggplot(data = melted.correlation, aes(Var2, Var1, fill = R_revised))+
+   geom_tile(color = "white")+
+   scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                        midpoint = 0, 
+                        limit = c(-1,1), 
+                        space = "Lab", 
+                        name="Pearson\nCorrelation") +
+   theme_bw(base_size = 16)+ 
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                    hjust = 0))+
+   coord_fixed()+
+   scale_x_discrete(position = "top",
+                    limits = levels(melted.correlation$Var2))+
+   scale_y_discrete(position = "left",
+                    limits = rev(levels(melted.correlation$Var1)))+
+   
+   geom_text(aes(Var2, Var1, label = sig.label), color = "black", size = 4) +
+   theme(
+     axis.title.x = element_blank(),
+     axis.title.y = element_blank(),
+     panel.grid.major = element_blank(),
+     #panel.border = element_blank(),
+     panel.background = element_blank(),
+     axis.ticks = element_blank(),
+     legend.justification = c(1, 0),
+     legend.position = c(0.9, 0.65),
+     legend.direction = "horizontal")+
+   guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
+                                title.position = "top", title.hjust = 0.5))#+coord_flip()
+ 
+ 
+ ggsave(filename = paste0(output.dir, "images/posterior_county_Gi_star_species_correlations.png"), 
+        plot = gi_correlation_county, 
+        height = 6, width = 6, units = "in", 
+        dpi = 350)
+ 
+# Are hotspots related to temporal sampling?---
+ 
+# get remper information by county/state--
+ county.meas.years <- TREE.remeas %>% filter(dbhold >= 5 & dbhcur >=5)%>%
+   dplyr::select(state, county, PLOT.ID, date, remper)%>%
+   distinct()%>%
+   mutate(T1 = date - remper, 
+          T2 = date)%>%
+   group_by(county, state)%>%
+   summarise(T1.avg.year = round(mean(T1)), 
+             T2.avg.year = mean(T2))%>%
+   mutate(COUNTYFP = str_pad(county, side = "left",3, pad = 0), 
+          STATEFP = str_pad(state, side = "left", 2, pad = 0))
+   
+ 
+ # join to county-species information on measurements:
+county.mort.gi.remper <- county.pmort.sf %>% as.data.frame()%>%
+   ungroup()%>% left_join(., county.meas.years) %>%
+  left_join(., hotspots.volfac_pmort.df) %>%
+  mutate(midpoint.remper = T2.avg.year -((T2.avg.year - T1.avg.year)/2))
+county.mort.gi.remper$Species <- factor(county.mort.gi.remper$Species, levels = disturb.species.order)
+
+
+
+temporal_pmort <- ggplot(data = county.mort.gi.remper)+
+  geom_jitter(aes(x = midpoint.remper, y = volfac_county_pmort*100, color = Species), alpha = 0.75)+
+  stat_smooth(aes(x = midpoint.remper, y = volfac_county_pmort*100, color = Species), method = "lm")+
+  facet_wrap(~Species, scales = "free_y")+
+  species_color+
+  scale_x_continuous(breaks = seq(min(county.mort.gi.remper$midpoint.remper, na.rm =TRUE), 
+                                  max(county.mort.gi.remper$midpoint.remper, na.rm =TRUE), by = 5))+
+  theme_bw(base_size = 12)+
+  theme(legend.position = "none", 
+        panel.grid = element_blank())+
+  ylab("County average mortality probability (%/year)")+
+  xlab("Midpoint of Remeasurement Year")
+   
+ggsave(filename = paste0(output.dir, "images/posterior_county_pmort_over_time.png"), 
+       plot = temporal_pmort, 
+       height = 6, width = 8, units = "in", 
+       dpi = 350)
+
+
+
+
+temporal_gistar <- ggplot(data = county.mort.gi.remper %>% filter(!is.na(gi)))+
+  geom_jitter(aes(x = midpoint.remper, y = gi, color = classification), alpha = 0.75)+
+  stat_smooth(aes(x = midpoint.remper, y = gi), method = "lm", color = "black")+
+  facet_wrap(~Species, scales = "free_y")+
+  scale_color_brewer(type = "div", palette = 5) +
+  #species_color+
+  scale_x_continuous(breaks = seq(min(county.mort.gi.remper$midpoint.remper, na.rm =TRUE), 
+                                  max(county.mort.gi.remper$midpoint.remper, na.rm =TRUE), by = 5))+
+  theme_bw(base_size = 12)+
+  theme( 
+        panel.grid = element_blank())+
+  ylab("County Gi* (z-score)")+
+  xlab("Midpoint of Remeasurement Year")
+
+ggsave(filename = paste0(output.dir, "images/posterior_county_Gi_star_over_time.png"), 
+       plot = temporal_gistar, 
+       height = 6, width = 10, units = "in", 
+       dpi = 350)
+
+
+# make line plots 
+
+# Is there spatial overlap across species on county pmort?--- 
+
+species.data.all <- county.pmort.sf %>% mutate(
+  cut.mort.rate = cut(volfac_county_pmort*100, breaks = c(0, 0.25, 0.5, 0.75, 1, 1.5, 2, 4, 100))
+)
+cut.mort.values <- data.frame(
+  cut.mort.rate = c("(0,0.25]", "(0.25,0.5]", "(0.5,0.75]", "(0.75,1]", "(1,1.5]", "(1.5,2]", "(2,4]", "(4,100]"), 
+  mortality.rate = c("< 0.25", "0.25 - 0.5", "0.5 - 0.75", "0.75 - 1", "1 - 1.5", "1.5 - 2", "2 - 4", "> 4"), 
+  red.hex.colors = c(
+    "#ffffcc",
+    "#ffeda0",
+    "#fed976",
+    "#feb24c",
+    "#fd8d3c",
+    "#fc4e2a",
+    "#e31a1c",
+    "#b10026"),
+  hex.colors = c(
+    "#fff7f3",
+    "#fde0dd",
+    "#fcc5c0",
+    "#fa9fb5",
+    "#f768a1",
+    "#dd3497",
+    "#ae017e",
+    "#7a0177"))
+
+hex.vector <- as.vector(cut.mort.values$red.hex.colors)
+names( hex.vector) <- cut.mort.values$mortality.rate
+fill_mort_rate_red <- scale_fill_manual(values = hex.vector, name = "Mortality\nRate\n(%/year)", drop = FALSE)
+
+
+hex.vector <- as.vector(cut.mort.values$hex.colors)
+names( hex.vector) <- cut.mort.values$mortality.rate
+fill_mort_rate_pink <- scale_fill_manual(values = hex.vector, name = "Mortality\nRate\n(%/year)", drop = FALSE)
+
+species.data.all <-  species.data.all %>% left_join(., cut.mort.values)
+species.data.all$mortality.rate <- factor( species.data.all$mortality.rate, levels = c("< 0.25", "0.25 - 0.5", "0.5 - 0.75", "0.75 - 1", "1 - 1.5", "1.5 - 2", "2 - 4", "> 4"))
+
+# how widespread is high mortality probability across the range?
+
+# if high mortality is >1% per year, sum up the # of counties with greater than that
+county.high.pmort.species <- species.data.all %>% as.data.frame()%>% 
+  filter(!is.na(volfac_county_pmort))%>%
+  ungroup()%>%
+  # calculate species mean pmort 
+  group_by(Species)%>%
+  mutate(mean.pmort = mean(volfac_county_pmort, na.rm =TRUE), 
+         median.pmort = median(volfac_county_pmort, na.rm =TRUE), 
+         pmort.75 = quantile(volfac_county_pmort,0.75, na.rm =TRUE))%>%
+  ungroup()%>%
+  mutate(over.threshold = ifelse(volfac_county_pmort*100 >= pmort.75*100, 1, 0))%>%
+  ungroup()
+
+county.high.pmort.species  %>% 
+  group_by(STATEFP, STATE_NAME, COUNTYFP, CONAME, geometry)%>%
+  summarise(nspecies_high = sum(over.threshold, na.rm =TRUE))%>%
+  st_as_sf()|>
+  ggplot() +
+  geom_sf(aes(fill = nspecies_high),color = "black", lwd = 0.1, show.legend = TRUE) +
+  scale_fill_viridis_c()
+
+high.species <- county.high.pmort.species  %>% as.data.frame()%>%
+ 
+  group_by(STATEFP, STATE_NAME, COUNTYFP, CONAME, geometry, Species)%>%
+  summarise(high_species= sum(over.threshold, na.rm =TRUE))%>%
+  ungroup()%>%
+  dplyr::select(STATEFP, STATE_NAME, COUNTYFP, CONAME, geometry, Species, high_species)%>%
+  group_by(STATEFP, STATE_NAME, COUNTYFP, CONAME, geometry)%>%
+  spread(Species, high_species, fill = 0)%>%
+  ungroup()%>%
+  mutate(site = 1:length(STATEFP))%>%
+  as.data.frame()
+
+
+all.species.presence <- county.high.pmort.species  %>% as.data.frame()%>%
+  
+  group_by(STATEFP, STATE_NAME, COUNTYFP, CONAME, geometry, Species)%>%
+  summarise(spp_presence = n())%>%
+  ungroup()%>%
+  dplyr::select(STATEFP, STATE_NAME, COUNTYFP, CONAME, geometry, Species, spp_presence)%>%
+  group_by(STATEFP, STATE_NAME, COUNTYFP, CONAME, geometry)%>%
+  spread(Species, spp_presence, fill = 0)%>%
+  ungroup()%>%
+  mutate(site = 1:length(STATEFP))%>%
+  as.data.frame()
+
+
+count_high_mort_matrix <- t(as.matrix(high.species[,6:22])) %*% as.matrix(high.species[,6:22])
+
+count_total_cooccurance_matrix <- t(as.matrix(all.species.presence[,6:22])) %*% as.matrix(all.species.presence[,6:22])
+
+# Convert to a data frame and make row names a column
+count_high_df <- as.data.frame(as.matrix(count_high_mort_matrix[disturb.species.order, disturb.species.order]))
+count_high_df$Species1 <- rownames(count_high_df)
+
+count_cooccurance_df <- as.data.frame(as.matrix(count_total_cooccurance_matrix[disturb.species.order, disturb.species.order]))
+count_cooccurance_df$Species1 <- rownames(count_cooccurance_df)
+
+
+get_upper_tri <- function(cormat){
+  cormat[lower.tri(cormat)]<- NA
+  return(cormat)
+}
+
+count_high_long <- count_high_df %>% get_upper_tri()%>% reshape2::melt(., id.vars = "Species1")%>%
+  rename("Species2" = "variable", 
+         "Counties_high" = "value")%>%
+  #filter(!Species1 == Species2)%>%
+  filter(!is.na(Counties_high))
+count_high_long$Species1 <- factor(count_high_long$Species1, levels = disturb.species.order)
+count_high_long$Species2 <- factor(count_high_long$Species2, levels = disturb.species.order)
+
+count_cooccurance_long <- count_cooccurance_df %>% get_upper_tri()%>% reshape2::melt(., id.vars = "Species1")%>%
+  rename("Species2" = "variable", 
+         "co.occurance" = "value")
+count_cooccurance_long$Species1 <- factor(count_cooccurance_long$Species1, levels = disturb.species.order)
+count_cooccurance_long$Species2 <- factor(count_cooccurance_long$Species2, levels = disturb.species.order)
+
+
+co.occurance.mort.species <- count_high_long %>% 
+  left_join(.,count_cooccurance_long)%>% ungroup()%>%
+  mutate(prop.cooccurance = Counties_high/co.occurance)%>%
+  mutate(prop.cooccurance.v2 = ifelse(co.occurance < 10, NA, prop.cooccurance))%>%
+  filter(!Species1 == Species2)
+
+co.occurance.high_mort_rates <- co.occurance.mort.species %>% 
+  ggplot()+geom_tile(aes(y = Species2, x = Species1, fill = prop.cooccurance.v2), color = "black")+
+  scale_fill_distiller(palette = "OrRd", direction = 1, na.value = "grey")+
+  theme_minimal()+
+  coord_equal()+
+  scale_x_discrete(position = "top",
+                   limits = levels(count_high_long$Species2))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                   hjust = 0), 
+        axis.title = element_blank())+
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.major = element_blank(),
+    #panel.border = element_blank(),
+    panel.background = element_blank(),
+    axis.ticks = element_blank(),
+    legend.justification = c(1, 0),
+    legend.position = c(0.85, 0.15),
+    legend.direction = "horizontal")+
+  guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
+                               title.position = "top", title.hjust = 0.5))#+coord_flip()
+
+
+  
+  
+ggsave(filename = paste0(output.dir, "images/cooccurance_high_species_county_pMort.png"), 
+       plot = co.occurance.high_mort_rates, 
+       height = 6, width = 6, units = "in", 
+       dpi = 350)
+
+  
+  
+
+
+county.high.pmort.species %>% group_by(Species)%>%
+  summarise(ncounties = n(), 
+            n.over.threshold = sum(over.threshold, na.rm =TRUE))%>%
+  mutate(pct.counties.high = round(n.over.threshold/ncounties*100, 1))
+
+
+pct.counties.high
+
+
+species.ranked.percentiles <- species.data.all %>% as.data.frame()%>% 
+  filter(!is.na(volfac_county_pmort))%>%
+  ungroup()%>%
+  # calculate species mean pmort 
+  group_by(Species) %>%
+  mutate(mean.mort = mean(volfac_county_pmort*100, na.rm =TRUE), 
+         sd.mort = median(volfac_county_pmort*100, na.rm =TRUE))%>%
+  #mutate(mort.percentile = percent_rank(volfac_county_pmort, na.rm =TRUE))%>%
+  ungroup()%>%
+  group_by(STATEFP, STATE_NAME, COUNTYFP, CONAME, geometry, Species)%>%
+  mutate(standardized.pmort = ((volfac_county_pmort*100)-mean.mort)/sd.mort, 
+         log.pmort = log(volfac_county_pmort*100))%>%
+  #View()
+  ungroup()%>%
+  dplyr::select(STATEFP, STATE_NAME, COUNTYFP, CONAME, geometry, Species, standardized.pmort)%>%
+  ungroup()%>%
+  group_by(STATEFP, STATE_NAME, COUNTYFP, CONAME, geometry)%>%
+  spread(Species, standardized.pmort, fill = NA)%>%
+  ungroup()#%>% data.frame()
+  
+
+# get correlations by species:
+county.corr.log.pmort <- rcorr(as.matrix(species.ranked.percentiles[,6:ncol(species.ranked.percentiles)]), type = "spearman" ) # or "spearman"
+colnames(county.corr.log.pmort$r)
+# Get upper triangle of the correlation matrix
+get_upper_tri <- function(cormat){
+  cormat[lower.tri(cormat)]<- NA
+  return(cormat)
+}
+
+get_lower_tri<-function(cormat){
+  cormat[upper.tri(cormat)] <- NA
+  return(cormat)
+}
+melted.correlation <- get_lower_tri(county.corr.log.pmort$r[disturb.species.order,disturb.species.order]) %>% reshape2::melt()%>%
+  rename("r"="value") %>% left_join(., 
+                                    get_lower_tri(county.corr.log.pmort$n[disturb.species.order,disturb.species.order]) %>% reshape2::melt())%>%
+  rename("n" = "value")%>%
+  left_join(., 
+            get_lower_tri(county.corr.log.pmort$P[disturb.species.order,disturb.species.order]) %>% reshape2::melt())%>%
+  rename("pval" = "value")%>%
+  mutate(R_revised = ifelse(n>=50, round(r, digits = 1), NA), 
+         P_revised = ifelse(n >=50, pval, NA))%>%
+  mutate(R_revised = ifelse(R_revised == 1, NA, R_revised))%>%
+  mutate(sig.label = ifelse(P_revised <= 0.05, R_revised, NA))%>%
+  filter(!is.na(R_revised))# if the species are colocated in less than 10 plots omit the correlation
+
+
+pmort_correlation_county <-  ggplot(data = melted.correlation, aes(Var2, Var1, fill = R_revised))+
+  geom_tile(color = "white")+
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-0.6,0.6), space = "Lab", 
+                       name="Spearman\nCorrelation") +
+  theme_bw(base_size = 16)+ 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                   hjust = 0))+
+  coord_fixed()+
+  scale_x_discrete(position = "top",
+                   limits = levels(melted.correlation$Var2))+
+  scale_y_discrete(position = "left",
+                   limits = rev(levels(melted.correlation$Var1)))+
+  
+  geom_text(aes(Var2, Var1, label = sig.label), color = "black", size = 4) +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.major = element_blank(),
+    #panel.border = element_blank(),
+    panel.background = element_blank(),
+    axis.ticks = element_blank(),
+    legend.justification = c(1, 0),
+    legend.position = c(0.9, 0.65),
+    legend.direction = "horizontal")+
+  guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
+                               title.position = "top", title.hjust = 0.5))#+coord_flip()
+
+
+ggsave(filename = paste0(output.dir, "images/posterior_county_pMort_species_correlations.png"), 
+       plot = pmort_correlation, 
+       height = 6, width = 6, units = "in", 
+       dpi = 350)
+
+# 
+
+#ggpairs(data = species.ranked.percentiles, columns = 6:ncol(species.ranked.percentiles))
+
+# Visualize the variable on the map
+#species.data.all |>
+spp.map.pmort <- ggplot() +
+  geom_sf(data = species.data.all, aes(fill = mortality.rate),color = "black", lwd = 0.1, show.legend = TRUE) +
+  
+  fill_mort_rate_pink+
+  theme_void() +
+  labs(
+    fill = paste("mortality probability\n(%/year)"),
+    title = paste(species.name, "-", hotspot.variable), 
+    subtitle = paste0(pct.counties.high$pct.counties.high, "% of counties > 0.7%/year" ))
+
 
 
 ggplot(data = county.pmort.sf %>% filter(Species %in% "white oak")%>% 
