@@ -562,11 +562,12 @@ CT.counties <- counties(state = "CT", cb = FALSE, year = 2015) %>%
                 "geometry" )%>% as.data.frame()
 
 # join CT and join up mortality data
-
+counties <- counties %>% rbind(., CT.counties)
 id.var.counties <- c("STATEFP",
                      "COUNTYFP","COUNTYNS" , "GEOID" ,"CONAME",    
                      "NAMELSAD","STUSPS","STATE_NAME", "LSAD","ALAND","AWATER",    
                      "geometry" )
+
 n_county_prob_spread <- weight.annual.prob %>% 
   ungroup()%>%
   dplyr::select(STATEFP, COUNTYFP, Species, weight_plt_prob)%>% 
@@ -825,7 +826,7 @@ n_counties_over_1pct <-  county.pmort.sf %>% as.data.frame()%>%
   group_by(Species)%>%
   
   summarise(n_high_1 = sum(over.1.pct, na.rm = TRUE), 
-            n_high_0.75 = sum(over.1.pct, na.rm = TRUE),
+            n_high_0.75 = sum(over.0.75.pct, na.rm = TRUE),
             n_presence_plt = sum(nplot.over.5, na.rm =TRUE),
             n_presence = n())%>%
   mutate(pct_high_1 = (n_high_1/n_presence_plt)*100, 
@@ -1036,7 +1037,911 @@ ggsave(filename = paste0(output.dir, "images/posterior_county_Gi_star_over_time.
        dpi = 350)
 
 
-# make line plots 
+# plot mortality rates over time and space
+ggplot(data = county.mort.gi.remper %>% filter(!is.na(gi)))+
+  geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = volfac_county_pmort*100, color = Species), alpha = 0.75)+
+  species_color+
+  facet_wrap(~STATE_NAME, scales = "free_y")+
+  theme_bw()
+
+ggplot(data = county.mort.gi.remper %>% filter(!is.na(gi)))+
+  geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = volfac_county_pmort*100, color = STATE_NAME), alpha = 0.75)+
+  scale_color_viridis_d()+
+  facet_wrap(~Species, scales = "free_y")+
+  theme_bw()
+
+# spongy moth susceptible species:
+
+ggplot(data = county.mort.gi.remper %>% filter(!is.na(gi)) %>% filter(Species %in% c("chestnut oak", "white oak","northern red oak", "yellow birch", "paper birch")))+
+  geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = volfac_county_pmort*100, color = Species), alpha = 0.75)+
+  #scale_color_viridis_d()+
+  species_color+
+  facet_wrap(~STATE_NAME, scales = "free_y")+
+  theme_bw()
+
+# spruce budworm susceptible species:
+
+ggplot(data = county.mort.gi.remper %>% filter(!is.na(gi)) %>% filter(Species %in% c("balsam fir",  "red spruce")))+
+  geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = volfac_county_pmort*100, color = Species), alpha = 0.75)+
+  #scale_color_viridis_d()+
+  species_color+
+  facet_wrap(~STATE_NAME, scales = "free_y")+
+  theme_bw()
+
+# beech, hemlock, eastern white pine:
+ggplot(data = county.mort.gi.remper %>% filter(!is.na(gi)) %>% 
+         filter(Species %in% c("American beech",  "eastern hemlock", "eastern white pine")))+
+  geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = volfac_county_pmort*100, color = Species), alpha = 0.75)+
+  #scale_color_viridis_d()+
+  species_color+
+  facet_wrap(~STATE_NAME)+
+  theme_bw()
+
+ggplot(data = county.mort.gi.remper %>% filter(!is.na(gi)) %>% 
+         filter(Species %in% c("eastern hemlock")))+
+  geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = volfac_county_pmort*100, color = Species), alpha = 0.75)+
+  #scale_color_viridis_d()+
+  species_color+
+  facet_wrap(~STATE_NAME)+
+  theme_bw()
+
+# look at the # of years with HWA present
+HWA <- read.csv("data/HWA_invested_counties_2023_3_6_24.csv")  # just gets the remper states
+
+# since this is just the time it was first observed, we want county area or something:
+# Get county data for all the states
+HWA.cos <- counties %>% mutate(CNTYNAME = toupper(CONAME)) %>% 
+  mutate(ST = STUSPS)%>% left_join(.,HWA %>% distinct() ) # some duplicates in the data
+
+hemlock.co.mort.gi <- county.mort.gi.remper %>% 
+  filter(Species %in% "eastern hemlock")%>% 
+  left_join(., HWA.cos)%>%
+  ungroup()%>%
+  mutate(no.years.present.T1 = T1.avg.year - YEARFIRST, 
+         no.years.present.T2 = T2.avg.year - YEARFIRST)%>%
+  mutate(present = ifelse(no.years.present.T2 >=-1, "present", 
+                          ifelse(is.na(no.years.present.T2) & !is.na(volfac_county_pmort), "not present", "not present")))
+  
+
+hemlock.co.mort.gi
+
+
+mort.hwa.detect <- ggplot(hemlock.co.mort.gi, aes(x = no.years.present.T2, y = volfac_county_pmort*100 ))+
+  geom_point()+theme_bw()+ylab("County average Hemlock \n mortality probability (%/year)")+
+  xlab("# of years of detected HWA")
+
+ggsave(filename = paste0(output.dir, "images/HWA_county_pmort_Hemlock.png"), 
+       plot = mort.hwa.detect, 
+       height = 4, width = 6, units = "in", 
+       dpi = 350)
+
+
+
+ggplot(hemlock.co.mort.gi, aes(x = no.years.present.T2, y = gi, color = classification ))+
+  geom_point()+
+  scale_color_brewer(palette = "Spectral")
+
+ggplot(hemlock.co.mort.gi, aes(x = gi, y = volfac_county_pmort,color = classification  ))+
+  geom_point()+
+  scale_color_brewer(palette = "Spectral")
+
+
+ggplot(data = st_as_sf(hemlock.co.mort.gi))+
+  geom_sf(aes(fill = YEARFIRSTC))
+
+volfac.map.hemlock <- ggplot(data = st_as_sf(hemlock.co.mort.gi))+
+  geom_sf(aes(fill = volfac_county_pmort*100))+
+  scale_fill_distiller(palette = "Spectral")
+
+years.present.HWA <- ggplot(data = st_as_sf(hemlock.co.mort.gi))+
+  geom_sf(aes(fill = no.years.present.T2))+
+  scale_fill_distiller(palette = "Spectral")
+
+
+hemlock.co.mort.gi[is.na(hemlock.co.mort.gi$present) & !is.na(hemlock.co.mort.gi$volfac_county_pmort),]$present <- "not present"
+
+HWA.presence.mort.barplot <- ggplot(data = hemlock.co.mort.gi %>% filter(!is.na(present)))+
+  geom_jitter(aes(x = present, y = volfac_county_pmort*100, color = Species))+
+  geom_boxplot(aes(x = present, y = volfac_county_pmort*100, color = Species), fill = NA, outliers = FALSE)+
+  species_color+
+  ylab("Eastern Hemlock\nmortality probability (%/year)")+
+  xlab("Hemlock wooley adelgid presence in county")+
+  theme_bw()+
+  theme(panel.grid = element_blank(),
+        legend.position = "none")
+
+
+present.hwa <- hemlock.co.mort.gi %>% filter(present %in% "present")
+notpresent.hwa <- hemlock.co.mort.gi %>% filter(present %in% "not present")
+
+t.test(notpresent.hwa$volfac_county_pmort, present.hwa$volfac_county_pmort)
+
+ggsave(filename = paste0(output.dir, "images/box_plot_HWA_county_pmort_Hemlock.png"), 
+       plot = HWA.presence.mort.barplot  , 
+       height = 6, width = 6, units = "in", 
+       dpi = 350)
+
+
+hemlock.co.mort.gi %>% filter(volfac_county_pmort*100 >= 0.5) %>% 
+  group_by(present)%>% summarise(n())
+
+hemlock.co.mort.gi %>% filter(!is.na(volfac_county_pmort*100)) %>% 
+  group_by(present)%>% summarise(n())
+
+
+
+ggplot()+
+  geom_sf(data = st_as_sf(hemlock.co.mort.gi), aes(fill = present))+
+  geom_sf(data = st_as_sf(hemlock.co.mort.gi) %>% filter(volfac_county_pmort*100 >= 0.45), aes(fill = present), color =  "red")+
+  scale_fill_brewer(palette = "Spectral")
+
+
+hemlock.co.mort.gi %>% filter(is.na(present)& !is.na(volfac_county_pmort))
+
+maps.hwa.hemlock <- cowplot::plot_grid(volfac.map.hemlock, years.present.HWA, align = "hv")
+ggsave(filename = paste0(output.dir, "images/map_HWA_county_pmort_Hemlock.png"), 
+       plot = maps.hwa.hemlock , 
+       height = 6, width = 12, units = "in", 
+       dpi = 350)
+
+# compare beech mortality to BBD data:
+beech.bark <- read.csv("data/beech_bark_spread/Cale_Morin-BeechScaleDatesCanadaUS.csv") %>%
+  filter(COUNTRY %in% "USA") %>%
+  rename("STATE_NAME" = "PRVSTTNAME") 
+
+beech.bark.cos <- counties %>% left_join(.,beech.bark %>% dplyr::select(-REFERENCE)) #%>% dplyr::select(-STUSPS) 
+beech.co.mort.gi <- county.mort.gi.remper %>% 
+  filter(Species %in% "American beech")%>% 
+  left_join(., beech.bark.cos)%>%
+  ungroup()%>%
+  mutate(no.years.present.T1 = T1.avg.year - SCALEYR, 
+         no.years.present.T2 = T2.avg.year - SCALEYR)
+
+
+
+
+mort.bbd.detect <- ggplot(beech.co.mort.gi, aes(x = no.years.present.T2, y = volfac_county_pmort*100 ))+
+  geom_point()+theme_bw()+ylab("County average Beech \n mortality probability (%/year)")+
+  xlab("# of years of detected Beech Scale")
+
+ggsave(filename = paste0(output.dir, "images/BBD_county_pmort_Beech.png"), 
+       plot = mort.bbd.detect, 
+       height = 4, width = 6, units = "in", 
+       dpi = 350)
+
+
+
+ggplot(beech.co.mort.gi, aes(x = no.years.present.T2, y = gi, color = classification ))+
+  geom_point()+
+  scale_color_brewer(palette = "Spectral")
+
+ggplot(beech.co.mort.gi, aes(x = gi, y = volfac_county_pmort,color = classification  ))+
+  geom_point()+
+  scale_color_brewer(palette = "Spectral")
+
+ggplot(beech.co.mort.gi, aes(x = no.years.present.T2, y = volfac_county_pmort,color = STATE_NAME  ))+
+  geom_point()+
+  scale_color_brewer(palette = "Spectral")
+
+
+
+volfac.map.beech <- ggplot(data = st_as_sf(beech.co.mort.gi))+
+  geom_sf(aes(fill = volfac_county_pmort*100))+
+  scale_fill_distiller(palette = "Spectral")
+
+years.present.BBD <- ggplot(data = st_as_sf(beech.co.mort.gi))+
+  geom_sf(aes(fill = no.years.present.T2))+
+  scale_fill_distiller(palette = "Spectral")
+
+first.scaleYR.present.BBD <- ggplot(data = st_as_sf(beech.co.mort.gi))+
+  geom_sf(aes(fill = SCALEYR))+
+  scale_fill_distiller(palette = "Spectral")
+
+maps.bbd.beech <- cowplot::plot_grid(volfac.map.beech, years.present.BBD, align = "hv")
+ggsave(filename = paste0(output.dir, "images/map_BBD_county_pmort_beech.png"), 
+       plot = maps.bbd.beech , 
+       height = 6, width = 12, units = "in", 
+       dpi = 350)
+
+
+# compare spongy moth records to mortality:--
+state.area <- counties %>% mutate(ALAND.ha = ALAND/10000) %>%
+  mutate(State = STATE_NAME)%>%
+  group_by(State, STUSPS)%>% summarise(total.land.ha = sum(ALAND.ha))
+
+# join county area up to spongy moth and convert spongy moth defoliation to hectares too
+
+spongy <- read.csv( "data/NE_spongy_moth_outbreaks.csv") %>%
+  mutate(HA.Defoliated = Acres.Defoliated/2.47105381)%>%
+  left_join(., state.area) %>% 
+  mutate(fraction.Defoliated = HA.Defoliated/total.land.ha)
+
+
+spongy %>% group_by(State)%>%
+  summarise(state.max.fraction.defolated = max(fraction.Defoliated*100))%>%
+  arrange(desc(state.max.fraction.defolated))
+
+st.name.id <- "New York"
+state.defoliation.peaks.list <- list()
+for(i in 1:length(unique(spongy$State))){
+  
+  st.name.id <- unique(spongy$State)[i]
+  
+  
+  
+  
+  
+  # make and save some plots of the spongy moth defoliation records and the mortality by species:
+  state.species.spongy <- county.mort.gi.remper %>% 
+    filter(!is.na(gi) & STATE_NAME %in% st.name.id) %>% 
+    filter(Species %in% c("chestnut oak", "white oak","northern red oak", 
+                          "yellow birch", "paper birch"))
+  
+  if(nrow(state.species.spongy) >0){
+  
+  min(state.species.spongy$T1.avg.year)
+  max(state.species.spongy$T2.avg.year)
+  
+  state.spongy <- ggplot(spongy %>% filter(State %in% st.name.id), 
+                         aes(x = year, y = HA.Defoliated/1000000))+
+    geom_line()+
+    geom_vline(aes(xintercept =  min(state.species.spongy$T1.avg.year)), color = "red", linetype = "dashed")+
+    geom_vline(aes(xintercept = max(state.species.spongy$T2.avg.year)), color = "red", linetype = "dashed")+
+    facet_wrap(~State, scales = "free_y")+
+    theme_bw()+
+    xlim(1925, 2015)+
+    ylim(0,2)+
+    ylab("State Defoliation\n(millions of Hectares")
+  
+  
+  
+  state.mort <- ggplot(data =state.species.spongy )+
+    geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = volfac_county_pmort*100, color = Species), alpha = 0.75)+
+    #scale_color_viridis_d()+
+    species_color+
+    facet_wrap(~STATE_NAME, scales = "free_y")+
+    theme_bw()+
+    xlim(1925, 2015)+
+    ylim(0, 3.5)+
+    ylab("mortality probability\n(%/year)")+
+    xlab("year")
+  
+  ggsave(filename = paste0(output.dir, "images/hotspots/hotspots_spongy_species_", st.name.id, ".png"), 
+          plot =   cowplot::plot_grid(state.mort, state.spongy, align = "hv", ncol = 1), 
+         height = 4, width = 5, units = "in")
+
+  }
+  
+ 
+    NY.data <- spongy %>% filter(State %in% st.name.id)%>%
+      arrange(year)
+    peaks_info <- findpeaks(NY.data$fraction.Defoliated)
+    
+    state.defoliation.peaks <- data.frame(
+      STATE_NAME = st.name.id, 
+      # height peak defoliation
+      height = peaks_info[,1],
+      
+      # year of peak defoliation
+      year.peak = NY.data[peaks_info[,2],]$year,
+      
+      # start and end of the peak defoliation
+      start.year = NY.data[peaks_info[,3],]$year,
+      end.year = NY.data[peaks_info[,4],]$year
+    )
+    
+    state.defoliation.peaks.list[[i]] <- state.defoliation.peaks
+}
+spongy.defoliation.state <- do.call(rbind, state.defoliation.peaks.list)
+
+# compare # of defoliation peaks in the remper to pmort
+co.remper.years <- county.mort.gi.remper %>% 
+  dplyr::select(STATE_NAME, CONAME, ALAND, T1.avg.year, T2.avg.year)%>% distinct()%>%
+  filter(!is.na(T1.avg.year))%>%
+  mutate(number.spongy.peaks = NA, 
+         max.defoliation = NA)
+
+for(i in 1:length(co.remper.years$STATE_NAME)){
+  peaks.in.remper <- spongy.defoliation.state %>% filter(STATE_NAME %in% co.remper.years[i,]$STATE_NAME) %>%
+    filter( year.peak >= co.remper.years[i,]$T1.avg.year & 
+           year.peak <= co.remper.years[i,]$T2.avg.year)
+  npeaks = nrow(peaks.in.remper)
+  
+  if(nrow(peaks.in.remper)> 0){
+    co.remper.years[i,]$number.spongy.peaks = nrow(peaks.in.remper)
+    co.remper.years[i,]$max.defoliation = max(peaks.in.remper$height, na.rm =TRUE)
+  }else{
+    co.remper.years[i,]$number.spongy.peaks = 0
+  }
+ 
+}
+
+co.remper.years <- co.remper.years %>% group_by(STATE_NAME)%>%
+  mutate(Total_state_ALAND = sum(ALAND, na.rm =TRUE)) %>% ungroup()
+
+county.mort.gi.remper %>% left_join(.,co.remper.years) %>% 
+  filter(Species %in% c("chestnut oak", "northern red oak", "white oak", "yellow birch", "paper birch"))%>%
+  ungroup()%>%
+  mutate(CO.LAND.FRACTION = ALAND/Total_state_ALAND)%>%
+  filter(!is.na(volfac_county_pmort) & volfac_county_pmort*100 >= 1)%>%
+  group_by(STATE_NAME, Species)%>%
+  summarise(total.land.fraction = sum(CO.LAND.FRACTION, na.rm =TRUE), 
+            maxstate.defoliation = mean(max.defoliation))|>
+  ggplot()+geom_point(aes(x = total.land.fraction, y = maxstate.defoliation, color = STATE_NAME))+
+  facet_wrap(~Species)+
+  ylab("Maximum Defoliation Fraction")+
+  xlab("Total fraction of state with > 1%/year mortality risk")
+
+
+county.mort.gi.remper %>% left_join(.,co.remper.years) %>% 
+  filter(Species %in% c("chestnut oak", "northern red oak", "white oak", 
+                        "yellow birch", "paper birch", 
+                        "eastern hemlock", "eastern white pine", 
+                        "red maple", "sugar maple", 
+                        "red spruce"))%>%
+  ungroup()%>%
+  mutate(CO.LAND.FRACTION = ALAND/Total_state_ALAND)%>%
+  filter(!is.na(volfac_county_pmort))|>
+  ggplot()+geom_boxplot(aes(x = number.spongy.peaks, y = volfac_county_pmort, group = number.spongy.peaks))+
+  facet_wrap(~Species, scales = "free_y")
+
+# from table 2 here:https://www.fs.usda.gov/foresthealth/docs/fidls/FIDL-162-SpongyMoth.pdf
+spongy.susceptible.df <- data.frame(Species = unique(county.mort.gi.remper$Species), 
+                                    Spongy.susceptibility = c(
+                                      "Resistant", 
+                                      "Resistant", 
+                                      "Immune", 
+                                      "Susceptible", 
+                                      "Resistant", 
+                                      "Resistant", 
+                                      "Resistant", 
+                                      "Susceptible", 
+                                      "Immune", 
+                                      "Susceptible", 
+                                      "Resistant", 
+                                      "Resistant", 
+                                      "Resistant", 
+                                      "Immune", 
+                                      "Susceptible", 
+                                      "Immune", 
+                                      "Susceptible"
+                                  
+                                    ))
+
+co.with.spongy <- county.mort.gi.remper %>% left_join(.,co.remper.years) %>% 
+  left_join(., spongy.susceptible.df)%>%
+  
+  ungroup()%>%
+  mutate(CO.LAND.FRACTION = ALAND/Total_state_ALAND)%>%
+  filter(!is.na(volfac_county_pmort)) %>%
+  mutate(CO.withpeak = ifelse(number.spongy.peaks == 0, "no spongy defoliation peaks", "1+ defoliation peaks"))
+
+co.with.spongy %>% filter(Spongy.susceptibility %in% "Susceptible")|> 
+  ggplot()+
+  geom_boxplot(aes(x = CO.withpeak, y = volfac_county_pmort*100, group = CO.withpeak, fill = Species))+
+  facet_wrap(~ Species, scales = "free_y")
+
+co.with.spongy %>% filter(Spongy.susceptibility %in% "Resistant")|> 
+  ggplot()+
+  geom_boxplot(aes(x = CO.withpeak, y = volfac_county_pmort*100, group = CO.withpeak, fill = Species))+
+  facet_wrap(~ Species, scales = "free_y")
+
+co.with.spongy %>% filter(Spongy.susceptibility %in% "Immune")|> 
+  ggplot()+
+  geom_boxplot(aes(x = CO.withpeak, y = volfac_county_pmort*100, group = CO.withpeak, fill = Species))+
+  facet_wrap(~ Species, scales = "free_y")
+
+
+co.with.spongy %>% group_by(Species, CO.withpeak)%>%
+  summarise(median.volfac = median(volfac_county_pmort*100))
+
+
+
+
+defoliation.peaks <- co.with.spongy %>% filter(CO.withpeak %in% "1+ defoliation peaks")
+no.defoliation.peaks <- co.with.spongy %>% filter(!CO.withpeak %in% "1+ defoliation peaks")
+
+# differences in mortality:
+t.test(defoliation.peaks$volfac_county_pmort, no.defoliation.peaks$volfac_county_pmort)
+
+# filter for counties with at least one primary host detected:
+spongy.host.present <- co.with.spongy %>% filter(Spongy.susceptibility %in% "Susceptible") %>% 
+  select(STATEFP:STATE_NAME)%>% distinct()%>%
+  mutate(spongy.host.presence = "Yes")
+
+co.with.spongy <- co.with.spongy %>% left_join(., spongy.host.present)
+
+# differences in mortality for chestnut oak:
+t.test.spongy <- function(Species.name){
+    defoliation.peaks.chestnut <- co.with.spongy %>% 
+      filter(CO.withpeak %in% "1+ defoliation peaks" &
+               spongy.host.presence %in% "Yes")%>%
+      filter(Species %in% Species.name)
+    no.defoliation.peaks.chestnut <- co.with.spongy %>% 
+      filter(!CO.withpeak %in% "1+ defoliation peaks" &
+               spongy.host.presence %in% "Yes")%>%
+      filter(Species %in% Species.name)
+    
+    t.test(defoliation.peaks.chestnut$volfac_county_pmort, no.defoliation.peaks.chestnut$volfac_county_pmort)
+}
+
+# for the susceptible species:
+t.test.spongy("chestnut oak")# significant
+t.test.spongy("northern red oak") # NS
+t.test.spongy("white oak")# signfficant
+t.test.spongy("yellow birch")# NS
+t.test.spongy("paper birch")
+
+# for the resistant species:
+t.test.spongy("balsam fir") # no counties with no defoliatino
+t.test.spongy("red spruce") # NS
+t.test.spongy("eastern hemlock") # signifcantly higher
+t.test.spongy("American beech")# significantly higher
+t.test.spongy("hickory spp.") # N.S
+t.test.spongy("eastern white pine") # significantly higher
+t.test.spongy("red maple") # signifcantly higher
+t.test.spongy("sugar maple") # signficantly higher
+
+# for the immune species:
+t.test.spongy("northern white-cedar")
+t.test.spongy("black cherry") # significantly hihger
+t.test.spongy("white ash")
+t.test.spongy("yellow-poplar")
+
+
+# differences in mortality for white oak:
+defoliation.peaks.white <- co.with.spongy %>% 
+  filter(CO.withpeak %in% "1+ defoliation peaks")%>%
+  filter(Species %in% "white oak")
+no.defoliation.peaks.white <- co.with.spongy %>% 
+  filter(!CO.withpeak %in% "1+ defoliation peaks")%>%
+  filter(Species %in% "white oak")
+
+t.test(defoliation.peaks.white$volfac_county_pmort, 
+       no.defoliation.peaks.white$volfac_county_pmort)
+# white oaks significantly different
+
+# differences in mortality for yellow birch:
+defoliation.peaks.yb <- co.with.spongy %>% 
+  filter(CO.withpeak %in% "1+ defoliation peaks")%>%
+  filter(Species %in% "yellow birch")
+no.defoliation.peaks.yb <- co.with.spongy %>% 
+  filter(!CO.withpeak %in% "1+ defoliation peaks")%>%
+  filter(Species %in% "yellow birch")
+
+t.test(defoliation.peaks.yb$volfac_county_pmort, 
+       no.defoliation.peaks.yb$volfac_county_pmort)
+# yellow birch not significantly different
+
+
+spongy.mort.num.peaks.plt <- co.with.spongy %>% mutate(spongy.peaks = ifelse(CO.withpeak %in% "1+ defoliation peaks", "1+", 
+                                                ifelse(CO.withpeak %in% "no spongy defoliation peaks", "none", NA)))|> ggplot()+
+  geom_jitter(aes(x =spongy.peaks, y = volfac_county_pmort*100, group = spongy.peaks, color = Species))+
+  geom_boxplot(aes(x =spongy.peaks, y = volfac_county_pmort*100, group = spongy.peaks), fill = NA, outliers = FALSE)+
+  facet_wrap(~Species, scales = "free_y", ncol = 5)+
+  species_color+
+  ylab("Mortality probability (%/year)")+
+  xlab("Number of spongy moth defoliation peaks")+
+  theme_bw()+
+  theme(panel.grid = element_blank())
+
+ggsave(filename = paste0(output.dir, "images/county_pMort_spongy_species_num_peaks.png"), 
+       plot = spongy.mort.num.peaks.plt , 
+       height = 4, width = 9, units = "in", 
+       dpi = 350)
+
+
+
+county.mort.gi.remper %>% left_join(.,co.remper.years) %>% 
+  filter(Species %in% c("chestnut oak", "northern red oak", "white oak", "yellow birch", "paper birch"))%>%
+  ungroup()%>%
+  mutate(CO.LAND.FRACTION = ALAND/Total_state_ALAND)%>%
+  filter(!is.na(volfac_county_pmort) & volfac_county_pmort*100 >= 1)%>%
+  group_by(STATE_NAME, Species)%>%
+  summarise(total.land.fraction = sum(CO.LAND.FRACTION, na.rm =TRUE), 
+            maxstate.peaks = max(number.spongy.peaks))|>
+  ggplot()+geom_point(aes(x = total.land.fraction, y = maxstate.peaks, color = STATE_NAME))+
+  facet_wrap(~Species)+
+  ylab("Max. # of peaks during remper")+
+  xlab("Total fraction of state with > 1%/year mortality risk")
+
+county.mort.gi.remper %>% left_join(.,co.remper.years)%>%
+  filter(Species %in% c("chestnut oak"))%>%
+  st_as_sf()|>
+  ggplot()+geom_sf(aes(fill = number.spongy.peaks))+
+  scale_fill_distiller(palette = "Spectral")
+
+county.mort.gi.remper %>% left_join(.,co.remper.years)%>%
+  filter(Species %in% c("paper birch"))%>%
+  st_as_sf()|>
+  ggplot()+geom_sf(aes(fill = max.defoliation))+
+  scale_fill_distiller(palette = "Spectral")
+
+county.mort.gi.remper %>% left_join(.,co.remper.years)%>%
+  filter(Species %in% c("chestnut oak"))%>%
+  st_as_sf()|>
+  ggplot()+geom_sf(aes(fill =volfac_county_pmort*100))+
+  scale_fill_distiller(palette = "Spectral")
+
+county.mort.gi.remper %>% left_join(.,co.remper.years)|>
+  ggplot()+geom_point(aes(y = volfac_county_pmort, x= max.defoliation))+
+  facet_wrap(~Species, scales = "free_y")
+
+
+county.mort.gi.remper %>% left_join(.,co.remper.years)|>
+  ggplot()+geom_point(aes(y = volfac_county_pmort, x= max.defoliation))+
+  facet_wrap(~Species, scales = "free_y")
+
+# get total land and convert to hectares
+# according to tigris census.gov all units are in square meters
+state.area <- counties %>% mutate(ALAND.ha = ALAND/10000) %>%
+  group_by(State, STUSPS)%>% summarise(total.land.ha = sum(ALAND.ha))
+# join county area up to spongy moth and convert spongy moth defoliation to hectares too
+spongy <- spongy %>% left_join(., state.area) %>% 
+  mutate(HA.Defoliated = Acres.Defoliated/2.47105381)%>% #conversion
+  mutate(fraction.Defoliated = HA.Defoliated/total.land.ha)
+
+
+
+# compare spruce budworm records to mortality:--
+state.area <- counties %>% mutate(ALAND.ha = ALAND/10000) %>%
+  mutate(State = STATE_NAME)%>%
+  group_by(State, STUSPS)%>% summarise(total.land.ha = sum(ALAND.ha))
+
+# join county area up to budworm moth and convert budworm moth defoliation to hectares too
+
+budworm <- read.csv("data/NE_spruce_budworm_outbreaks.csv") %>%
+  mutate(HA.Defoliated = Spruce.Budworm.Acres.Defoliated/2.47105381)%>%
+  left_join(., state.area) %>% 
+  mutate(fraction.Defoliated = HA.Defoliated/total.land.ha)%>%
+  filter(!is.na(STUSPS))%>%
+  rename("year" = "Year")
+
+
+budworm %>% group_by(State)%>%
+  summarise(max(fraction.Defoliated, na.rm =TRUE), 
+            max(HA.Defoliated/1000000, na.rm =TRUE))
+
+st.name.id <- "New York"
+state.defoliation.peaks.list <- list()
+
+for(i in 1:length(unique(budworm$State))){
+  
+  st.name.id <- unique(budworm$State)[i]
+  
+  
+
+  
+  
+  # make and save some plots of the budworm moth defoliation records and the mortality by species:
+  state.species.budworm <- county.mort.gi.remper %>% 
+    filter(!is.na(gi) & STATE_NAME %in% st.name.id) %>% 
+    filter(Species %in% c("balsam fir", "red spruce","eastern white pine", "eastern hemlock"))
+  
+  if(nrow(state.species.budworm) >0){
+    
+    min(state.species.budworm$T1.avg.year)
+    max(state.species.budworm$T2.avg.year)
+    
+    state.budworm <- ggplot(budworm %>% filter(State %in% st.name.id), 
+                           aes(x = year, y = HA.Defoliated/1000000))+
+      geom_line()+
+      geom_vline(aes(xintercept =  min(state.species.budworm$T1.avg.year)), color = "red", linetype = "dashed")+
+      geom_vline(aes(xintercept = max(state.species.budworm$T2.avg.year)), color = "red", linetype = "dashed")+
+      facet_wrap(~State, scales = "free_y")+
+      theme_bw()+
+      xlim(1950, 2015)+
+      #ylim(0,4)+
+      ylab("State Defoliation\n(millions of Hectares")
+    
+    
+    state.fraction.budworm <- ggplot(budworm %>% filter(State %in% st.name.id), 
+                            aes(x = year, y = fraction.Defoliated))+
+      geom_line()+
+      geom_vline(aes(xintercept =  min(state.species.budworm$T1.avg.year)), color = "red", linetype = "dashed")+
+      geom_vline(aes(xintercept = max(state.species.budworm$T2.avg.year)), color = "red", linetype = "dashed")+
+      facet_wrap(~State, scales = "free_y")+
+      theme_bw()+
+      xlim(1950, 2015)+
+      #ylim(0,4)+
+      ylab("State Defoliation\n(millions of Hectares")
+    
+    
+    
+    state.mort <- ggplot(data =state.species.budworm )+
+      geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = volfac_county_pmort*100, color = Species), alpha = 0.75)+
+      #scale_color_viridis_d()+
+      species_color+
+      facet_wrap(~STATE_NAME, scales = "free_y")+
+      theme_bw()+
+      xlim(1925, 2015)+
+      ylim(0, 5.5)+
+      ylab("mortality probability\n(%/year)")+
+      xlab("year")
+    
+    ggsave(filename = paste0(output.dir, "images/hotspots/hotspots_budworm_species_", st.name.id, ".png"), 
+           plot =   cowplot::plot_grid(state.mort, state.budworm, align = "hv", ncol = 1), 
+           height = 4, width = 5, units = "in")
+    
+  }
+  
+  
+  NY.data <- budworm %>% filter(State %in% st.name.id)%>%
+    arrange(year) %>% mutate(fraction.Defoliated = ifelse(is.na(fraction.Defoliated), 0, fraction.Defoliated))
+  peaks_info <- findpeaks(NY.data$fraction)
+  
+  state.defoliation.peaks <- data.frame(
+    STATE_NAME = st.name.id, 
+    # height peak defoliation
+    height = peaks_info[,1],
+    
+    # year of peak defoliation
+    year.peak = NY.data[peaks_info[,2],]$year,
+    
+    # start and end of the peak defoliation
+    start.year = NY.data[peaks_info[,3],]$year,
+    end.year = NY.data[peaks_info[,4],]$year
+  )
+  
+  state.defoliation.peaks.list[[i]] <- state.defoliation.peaks
+}
+budworm.defoliation.state <- do.call(rbind, state.defoliation.peaks.list)
+
+# compare # of defoliation peaks in the remper to pmort
+co.remper.years <- co.remper.years %>% 
+  mutate(number.budworm.peaks = NA, 
+         max.budworm.defoliation = NA, 
+         number.budworm.peaks.10.prior = NA, 
+         max.budworm.defoliation.10.prior = NA)
+
+for(i in 1:length(co.remper.years$STATE_NAME)){
+  peaks.in.remper <- budworm.defoliation.state %>% 
+    filter(STATE_NAME %in% co.remper.years[i,]$STATE_NAME) %>%
+    filter( year.peak >= co.remper.years[i,]$T1.avg.year & 
+              year.peak <= co.remper.years[i,]$T2.avg.year)
+  npeaks = nrow(peaks.in.remper)
+  
+  
+  # get the peaks 10 years prior to the remper:
+  peaks.10.prior.remper <- budworm.defoliation.state %>% 
+    filter(STATE_NAME %in% co.remper.years[i,]$STATE_NAME) %>%
+    filter( year.peak >= co.remper.years[i,]$T1.avg.year-10 & 
+              year.peak < co.remper.years[i,]$T1.avg.year)
+  npeaks.10.prior = nrow(peaks.10.prior.remper)
+  
+ 
+  
+  
+  if(nrow(peaks.in.remper)> 0){
+    co.remper.years[i,]$number.budworm.peaks = nrow(peaks.in.remper)
+    co.remper.years[i,]$max.budworm.defoliation = max(peaks.in.remper$height, na.rm =TRUE)
+  }else{
+    co.remper.years[i,]$number.budworm.peaks = 0
+    
+  }
+  
+  if(nrow(peaks.10.prior.remper)> 0){
+    co.remper.years[i,]$number.budworm.peaks.10.prior = nrow(peaks.10.prior.remper)
+    co.remper.years[i,]$max.budworm.defoliation.10.prior = max(peaks.10.prior.remper$height, na.rm =TRUE)
+  }else{
+    co.remper.years[i,]$number.budworm.peaks.10.prior = 0
+    
+  }
+  
+}
+
+co.remper.years <- co.remper.years %>% group_by(STATE_NAME)%>%
+  mutate(Total_state_ALAND = sum(ALAND, na.rm =TRUE)) %>% ungroup()
+
+county.mort.gi.remper %>% left_join(.,co.remper.years) %>% 
+  filter(Species %in% c("balsam fir", "red spruce", "eastern white pine", "eastern hemlock"))%>%
+  ungroup()%>%
+  mutate(CO.LAND.FRACTION = ALAND/Total_state_ALAND)%>%
+  filter(!is.na(volfac_county_pmort) & volfac_county_pmort*100 >= 0.7)%>%
+  group_by(STATE_NAME, Species)%>%
+  summarise(total.land.fraction = sum(CO.LAND.FRACTION, na.rm =TRUE), 
+            maxstate.defoliation = mean(max.budworm.defoliation))|>
+  ggplot()+geom_point(aes(x = total.land.fraction, y = maxstate.defoliation, color = STATE_NAME))+
+  facet_wrap(~Species)+
+  ylab("Maximum Defoliation Fraction")+
+  xlab("Total fraction of state with > 0.7%/year mortality risk")
+
+
+county.mort.gi.remper %>% left_join(.,co.remper.years) %>% 
+  filter(Species %in% c("balsam fir", "red spruce", "eastern white pine", "eastern hemlock"))%>%
+  ungroup()%>%
+  mutate(CO.LAND.FRACTION = ALAND/Total_state_ALAND)%>%
+  filter(!is.na(volfac_county_pmort))|>
+  ggplot()+geom_boxplot(aes(x = number.budworm.peaks + number.budworm.peaks.10.prior, y = volfac_county_pmort, group = number.spongy.peaks))+
+  facet_wrap(~Species, scales = "free_y")
+
+co.with.budworm <- county.mort.gi.remper %>% left_join(.,co.remper.years) %>% 
+  filter(Species %in% c("balsam fir", "red spruce", "eastern white pine", "eastern hemlock"))%>%
+  ungroup()%>%
+  mutate(CO.LAND.FRACTION = ALAND/Total_state_ALAND)%>%
+  filter(!is.na(volfac_county_pmort)) %>%
+  mutate(CO.withpeak = ifelse(number.budworm.peaks == 0, "no budworm defoliation peaks", "1+ defoliation peaks"))
+
+co.with.budworm |> ggplot()+geom_boxplot(aes(x = CO.withpeak, y = volfac_county_pmort*100, group = CO.withpeak, fill = Species))+
+  facet_wrap(~Species, scales = "free_y")
+
+
+co.with.budworm %>% group_by(Species, CO.withpeak)%>%
+  summarise(median.volfac = median(volfac_county_pmort*100))
+
+
+
+
+defoliation.peaks <- co.with.budworm %>% filter(CO.withpeak %in% "1+ defoliation peaks")
+no.defoliation.peaks <- co.with.budworm %>% filter(!CO.withpeak %in% "1+ defoliation peaks")
+
+# differences in mortality:
+t.test(defoliation.peaks$volfac_county_pmort, no.defoliation.peaks$volfac_county_pmort)
+
+# differences in mortality for balsam fir:
+defoliation.peaks.balsam <- co.with.budworm %>% 
+  filter(CO.withpeak %in% "1+ defoliation peaks")%>%
+  filter(Species %in% "balsam fir")
+no.defoliation.peaks.balsam <- co.with.budworm %>% 
+  filter(!CO.withpeak %in% "1+ defoliation peaks")%>%
+  filter(Species %in% "balsam fir")
+
+t.test(defoliation.peaks.balsam$volfac_county_pmort, 
+       no.defoliation.peaks.balsam$volfac_county_pmort)
+
+
+# differences in mortality for red spruce:
+defoliation.peaks.redspruce <- co.with.budworm %>% 
+  filter(CO.withpeak %in% "1+ defoliation peaks")%>%
+  filter(Species %in% "red spruce")
+no.defoliation.peaks.redspruce <- co.with.budworm %>% 
+  filter(!CO.withpeak %in% "1+ defoliation peaks")%>%
+  filter(Species %in% "red spruce")
+
+t.test(defoliation.peaks.redspruce$volfac_county_pmort, 
+       no.defoliation.peaks.redspruce$volfac_county_pmort)
+
+
+# differences in mortality for eastern white pine:
+defoliation.peaks.wp <- co.with.budworm %>% 
+  filter(CO.withpeak %in% "1+ defoliation peaks")%>%
+  filter(Species %in% "eastern white pine")
+no.defoliation.peaks.wp <- co.with.budworm %>% 
+  filter(!CO.withpeak %in% "1+ defoliation peaks")%>%
+  filter(Species %in% "eastern white pine")
+
+t.test(defoliation.peaks.wp$volfac_county_pmort, 
+       no.defoliation.peaks.wp$volfac_county_pmort)
+
+# differences in mortality for eastern white pine:
+defoliation.peaks.hemlock <- co.with.budworm %>% 
+  filter(CO.withpeak %in% "1+ defoliation peaks")%>%
+  filter(Species %in% "eastern white pine")
+no.defoliation.peaks.hemlock <- co.with.budworm %>% 
+  filter(!CO.withpeak %in% "1+ defoliation peaks")%>%
+  filter(Species %in% "eastern white pine")
+
+t.test(defoliation.peaks.hemlock$volfac_county_pmort, 
+       no.defoliation.peaks.hemlock$volfac_county_pmort)
+
+co.with.budworm %>% filter(Species %in% "balsam fir")%>%st_as_sf()|>
+  ggplot()+geom_sf(aes(fill =  number.budworm.peaks + number.budworm.peaks.10.prior))
+
+state.num.peaks <- co.with.budworm %>% group_by(STATE_NAME)%>%
+  summarise(remper.peaks = median(number.budworm.peaks), 
+            prior.10.peaks = median(number.budworm.peaks.10.prior))%>%
+  mutate(total = remper.peaks + prior.10.peaks)%>%
+  arrange(total)
+
+co.with.budworm$STATE_NAME <- factor(co.with.budworm$STATE_NAME, levels = state.num.peaks$STATE_NAME)
+remper.prior.peaks.volfac <- co.with.budworm %>%
+  mutate(total.peak.budworm.defoliation = as.character(as.integer(number.budworm.peaks + number.budworm.peaks.10.prior)))|>
+  ggplot()+
+  geom_jitter(aes(x = STATE_NAME, y = volfac_county_pmort*100, color = total.peak.budworm.defoliation))+
+  geom_boxplot(aes(x = STATE_NAME, y = volfac_county_pmort*100, color =total.peak.budworm.defoliation), fill = NA)+
+  scale_color_manual(values = c("4" = "#d7191c",
+                                
+                                "3" ="#fc8d59",
+                                "2" ="#fee090",
+                
+                                "1" ="#abd9e9",
+                                "0" ="#2c7bb6"),
+                     name = "budworm defoliation peaks\n(10 years prior to T1 - T2)")+
+  facet_wrap(~Species, scales = "free_y", ncol = 4)+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+        panel.grid = element_blank())+
+  ylab("Mortality probability (%/year)")+
+  xlab("")
+
+
+remper.peaks.volfac <- co.with.budworm %>%
+  mutate(total.peak.budworm.defoliation = as.character(as.integer(number.budworm.peaks + number.budworm.peaks.10.prior)), 
+         peak.budworm.defolation.remper = as.character(as.integer(number.budworm.peaks)), 
+         peak.budworm.defoliation.prior = as.character(as.integer(number.budworm.peaks.10.prior)))|>
+  ggplot()+
+  geom_jitter(aes(x = STATE_NAME, y = volfac_county_pmort*100, color = peak.budworm.defolation.remper))+
+  geom_boxplot(aes(x = STATE_NAME, y = volfac_county_pmort*100, color =peak.budworm.defolation.remper), fill = NA)+
+  scale_color_manual(values = c("4" = "#d7191c",
+                                
+                                "3" ="#fc8d59",
+                                "2" ="#fee090",
+                                
+                                "1" ="#abd9e9",
+                                "0" ="#2c7bb6"),
+                     name = "budworm defoliation peaks\n(T1 - T2)")+
+  facet_wrap(~Species, scales = "free_y", ncol = 4)+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+        panel.grid = element_blank())+
+  ylab("Mortality probability (%/year)")+
+  xlab("")
+
+
+prior.peaks.volfac <- co.with.budworm %>%
+  mutate(total.peak.budworm.defoliation = as.character(as.integer(number.budworm.peaks + number.budworm.peaks.10.prior)), 
+         peak.budworm.defolation.remper = as.character(as.integer(number.budworm.peaks)), 
+         peak.budworm.defoliation.prior = as.character(as.integer(number.budworm.peaks.10.prior)))|>
+  ggplot()+
+  geom_jitter(aes(x = STATE_NAME, y = volfac_county_pmort*100, color = peak.budworm.defoliation.prior), size = 0.1)+
+  geom_boxplot(aes(x = STATE_NAME, y = volfac_county_pmort*100, color =peak.budworm.defoliation.prior), fill = NA)+
+  scale_color_manual(values = c("4" = "#d7191c",
+                                
+                                "3" ="#fc8d59",
+                                "2" ="#fee090",
+                                
+                                "1" ="#abd9e9",
+                                "0" ="#2c7bb6"),
+                     name = "budworm defoliation peaks\n(T1 - T2)")+
+  facet_wrap(~Species, scales = "free_y", ncol = 4)+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+        panel.grid = element_blank())+
+  ylab("Mortality probability (%/year)")+
+  xlab("")
+
+
+ggsave(filename = paste0(output.dir, "images/county_pMort_budworm_species_num_peaks_remper_prior.png"), 
+       plot = remper.prior.peaks.volfac , 
+       height = 4, width = 12, units = "in", 
+       dpi = 350)
+
+budworm.mort.num.peaks.plt <- co.with.budworm %>% 
+  mutate(budworm.peaks = ifelse(CO.withpeak %in% "1+ defoliation peaks", "1+", 
+                                ifelse(CO.withpeak %in% "no budworm defoliation peaks", "none", NA)))|> ggplot()+
+  geom_jitter(aes(x =budworm.peaks, y = volfac_county_pmort*100, group = budworm.peaks, color = Species))+
+  geom_boxplot(aes(x =budworm.peaks, y = volfac_county_pmort*100, group = budworm.peaks), fill = NA, outliers = FALSE)+
+  facet_wrap(~Species, scales = "free_y", ncol = 5)+
+  species_color+
+  ylab("Mortality probability (%/year)")+
+  xlab("Number of budworm moth defoliation peaks")+
+  theme_bw()+
+  theme(panel.grid = element_blank())
+
+ggsave(filename = paste0(output.dir, "images/county_pMort_budworm_species_num_peaks.png"), 
+       plot = budworm.mort.num.peaks.plt , 
+       height = 4, width = 9, units = "in", 
+       dpi = 350)
+
+co.with.budworm %>% group_by(STATE_NAME)%>%
+  summarise(max(number.budworm.peaks), 
+            max(max.budworm.defoliation, na.rm =TRUE))
+
+
+co.with.budworm %>% 
+  mutate(budworm.peaks = ifelse(CO.withpeak %in% "1+ defoliation peaks", "1+", 
+                                ifelse(CO.withpeak %in% "no budworm defoliation peaks", "none", NA)))|> 
+  ggplot()+
+  geom_jitter(aes(x =STATE_NAME, y = volfac_county_pmort*100, group = Species, color = Species))+
+  geom_boxplot(aes(x =STATE_NAME, y = volfac_county_pmort*100, group = STATE_NAME), fill = NA, outliers = FALSE)+
+  facet_wrap(~Species, scales = "free_y", ncol = 5)+
+  species_color+
+  ylab("Mortality probability (%/year)")+
+  xlab("Number of budworm moth defoliation peaks")+
+  theme_bw()+
+  theme(panel.grid = element_blank(), 
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
 
 # Is there spatial overlap across species on county pmort?--- 
 
