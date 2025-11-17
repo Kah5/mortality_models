@@ -3402,10 +3402,11 @@ full.model <- data.frame(Covariates = colnames(mod.data$xM),
                          id = 1:length(colnames(mod.data$xM)))
 
 # read in the betas, marginal responses, and variance parsing summaries ---
-betas.df <- readRDS(paste0(input.folder, "SPCD_stanoutput_joint_v3/samples/u_betas_model_", model.no, "_5000samples.rds"))
-marginal_response_df <- readRDS(paste0(input.folder, "SPCD_stanoutput_joint_v3/all_marginal_responses.RDS"))
-interaction_response_df <- readRDS(paste0(input.folder, "SPCD_stanoutput_joint_v3/interaction_responses.RDS"))
-var_summary <- read.csv(paste0(output.folder, "SPCD_stanoutput_joint_v3/predicted_mort/regional_var/variance_partitioning_summary_by_predictor_all.csv"))
+betas.df <- readRDS(paste0(input.folder, "samples/u_betas_model_", model.no, "_5000samples.rds"))
+marginal_response_df <- readRDS(paste0(input.folder, "all_marginal_responses.RDS"))
+interaction_response_df <- readRDS(paste0(input.folder, "interaction_responses.RDS"))
+var_summary <- read.csv(paste0(output.folder, "predicted_mort/regional_var/variance_partitioning_summary_by_predictor_all.csv"))
+var_summary <- readRDS(paste0(output.folder, "predicted_mort/var_summary_regional.rds"))
 
 
 betas.quant <- betas.df %>% summarise_draws(median, ~quantile(., probs = c(0.025, 0.975))) %>%
@@ -3784,6 +3785,159 @@ var.summary.region %>% group_by(COMMON) %>% arrange(COMMON, desc(mean_logit)) %>
   arrange(desc(total_cat), desc(logit_percent)) %>% 
   filter(total_cat >1)%>% View()
 
+# tree size:--
+
+
+var.summary.region %>% group_by(COMMON) %>% arrange(COMMON, desc(mean_logit)) %>% 
+  #filter(!predictor.class2 %in% c("Size", "Change in Size", "Growth x Size"))%>%
+  mutate(logit_percent = round(mean_logit*100, digits = 2))%>%
+  group_by(predictor.class2, COMMON)%>%
+  mutate(total_cat = sum(mean_logit)*100)%>%
+  select(Covariate, logit_percent, total_cat,  predictor.class2, COMMON) %>%
+  filter(predictor.class2 %in%  "Size")%>%
+  #filter(total_cat > 5) %>% 
+  arrange(desc(total_cat), desc(logit_percent)) %>% 
+  filter(logit_percent >1)%>% select(COMMON)
+
+# delta diameter--
+var.summary.region %>% group_by(COMMON) %>% arrange(COMMON, desc(mean_logit)) %>% 
+  #filter(!predictor.class2 %in% c("Size", "Change in Size", "Growth x Size"))%>%
+  mutate(logit_percent = round(mean_logit*100, digits = 2))%>%
+  group_by(predictor.class2, COMMON)%>%
+  mutate(total_cat = sum(mean_logit)*100)%>%
+  select(Covariate, logit_percent, total_cat,  predictor.class2, COMMON) %>%
+  filter(predictor.class2 %in%  "Change in Size")%>%
+  #filter(total_cat > 5) %>% 
+  arrange(desc(total_cat), desc(logit_percent)) %>% 
+  filter(logit_percent >1)%>% View()
+
+# diameter x delta diameter--
+var.summary.region %>% group_by(COMMON) %>% arrange(COMMON, desc(mean_logit)) %>% 
+  #filter(!predictor.class2 %in% c("Size", "Change in Size", "Growth x Size"))%>%
+  mutate(logit_percent = round(mean_logit*100, digits = 2))%>%
+  group_by(predictor.class2, COMMON)%>%
+  mutate(total_cat = sum(mean_logit)*100)%>%
+  select(Covariate, logit_percent, total_cat,  predictor.class2, COMMON) %>%
+  filter(predictor.class2 %in%  "Growth x Size")%>%
+  #filter(total_cat > 5) %>% 
+  arrange(desc(total_cat), desc(logit_percent)) %>% 
+  filter(logit_percent >1)%>% View()
+
+# climate---
+var.summary.region %>% group_by(COMMON) %>% arrange(COMMON, desc(mean_logit)) %>% 
+  #filter(!predictor.class2 %in% c("Size", "Change in Size", "Growth x Size"))%>%
+  mutate(logit_percent = round(mean_logit*100, digits = 2))%>%
+  group_by(predictor.class2, COMMON)%>%
+  mutate(total_cat = sum(mean_logit)*100)%>%
+  select(Covariate, logit_percent, total_cat,  predictor.class2, COMMON) %>%
+  filter(predictor.class2 %in%  "Climate")%>%
+  #filter(total_cat > 5) %>% 
+  arrange(desc(total_cat), desc(logit_percent)) %>% 
+  filter(logit_percent >1)%>% View()
+
+var.summary.region %>% group_by(COMMON) %>% arrange(COMMON, desc(mean_logit)) %>% 
+  #filter(!predictor.class2 %in% c("Size", "Change in Size", "Growth x Size"))%>%
+  mutate(logit_percent = round(mean_logit*100, digits = 2))%>%
+  group_by(predictor.class2, COMMON)%>%
+  mutate(total_cat = sum(mean_logit)*100)%>%
+  select(Covariate, logit_percent, total_cat,  predictor.class2, COMMON) %>%
+  filter(predictor.class2 %in%  "Climate x G & S")%>%
+  #filter(total_cat > 5) %>% 
+  arrange(desc(total_cat), desc(logit_percent)) %>% 
+  filter(logit_percent >1)%>% View()
+
+# damage --
+var.summary.region %>% group_by(COMMON) %>% arrange(COMMON, desc(mean_logit)) %>% 
+  #filter(!predictor.class2 %in% c("Size", "Change in Size", "Growth x Size"))%>%
+  mutate(logit_percent = round(mean_logit*100, digits = 2))%>%
+  group_by(predictor.class2, COMMON)%>%
+  mutate(total_cat = sum(mean_logit)*100)%>%
+  select(Covariate, logit_percent, total_cat,  predictor.class2, COMMON) %>%
+  filter(predictor.class2 %in%  "% Damage")%>%
+  #filter(total_cat > 5) %>% 
+  arrange(desc(total_cat), desc(logit_percent)) %>% 
+  filter(logit_percent >1)%>% View()
+
+var.summary.region %>% group_by(COMMON) %>% arrange(COMMON, desc(mean_logit)) %>% 
+  #filter(!predictor.class2 %in% c("Size", "Change in Size", "Growth x Size"))%>%
+  mutate(logit_percent = round(mean_logit*100, digits = 2))%>%
+  group_by(predictor.class2, COMMON)%>%
+  mutate(total_cat = sum(mean_logit)*100)%>%
+  select(Covariate, logit_percent, total_cat,  predictor.class2, COMMON) %>%
+  filter(predictor.class2 %in%  "Damage x G & S")%>%
+  #filter(total_cat > 5) %>% 
+  arrange(desc(total_cat), desc(logit_percent)) %>% 
+  filter(logit_percent >1)%>% View()
+
+# neighborhood effects --
+var.summary.region %>% group_by(COMMON) %>% arrange(COMMON, desc(mean_logit)) %>% 
+  #filter(!predictor.class2 %in% c("Size", "Change in Size", "Growth x Size"))%>%
+  mutate(logit_percent = round(mean_logit*100, digits = 2))%>%
+  group_by(predictor.class2, COMMON)%>%
+  mutate(total_cat = sum(mean_logit)*100)%>%
+  select(Covariate, logit_percent, total_cat,  predictor.class2, COMMON) %>%
+  filter(predictor.class2 %in%  "Competition")%>%
+  #filter(total_cat > 5) %>% 
+  arrange(desc(total_cat), desc(logit_percent)) %>% 
+  filter(logit_percent >1)%>% View()
+
+var.summary.region %>% group_by(COMMON) %>% arrange(COMMON, desc(mean_logit)) %>% 
+  #filter(!predictor.class2 %in% c("Size", "Change in Size", "Growth x Size"))%>%
+  mutate(logit_percent = round(mean_logit*100, digits = 2))%>%
+  group_by(predictor.class2, COMMON)%>%
+  mutate(total_cat = sum(mean_logit)*100)%>%
+  select(Covariate, logit_percent, total_cat,  predictor.class2, COMMON) %>%
+  filter(predictor.class2 %in%  "Competition x G & S")%>%
+  #filter(total_cat > 5) %>% 
+  arrange(desc(total_cat), desc(logit_percent)) %>% 
+  filter(logit_percent >1)%>% View()
+
+# N deposition --
+var.summary.region %>% group_by(COMMON) %>% arrange(COMMON, desc(mean_logit)) %>% 
+  #filter(!predictor.class2 %in% c("Size", "Change in Size", "Growth x Size"))%>%
+  mutate(logit_percent = round(mean_logit*100, digits = 2))%>%
+  group_by(predictor.class2, COMMON)%>%
+  mutate(total_cat = sum(mean_logit)*100)%>%
+  select(Covariate, logit_percent, total_cat,  predictor.class2, COMMON) %>%
+  filter(predictor.class2 %in%  "N deposition")%>%
+  #filter(total_cat > 5) %>% 
+  arrange(desc(total_cat), desc(logit_percent)) %>% 
+  filter(logit_percent >1)%>% View()
+
+var.summary.region %>% group_by(COMMON) %>% arrange(COMMON, desc(mean_logit)) %>% 
+  #filter(!predictor.class2 %in% c("Size", "Change in Size", "Growth x Size"))%>%
+  mutate(logit_percent = round(mean_logit*100, digits = 2))%>%
+  group_by(predictor.class2, COMMON)%>%
+  mutate(total_cat = sum(mean_logit)*100)%>%
+  select(Covariate, logit_percent, total_cat,  predictor.class2, COMMON) %>%
+  filter(predictor.class2 %in%  "Ndep x G & S")%>%
+  #filter(total_cat > 5) %>% 
+  arrange(desc(total_cat), desc(logit_percent)) %>% 
+  filter(logit_percent >1)%>% View()
+
+
+# site conditions --
+var.summary.region %>% group_by(COMMON) %>% arrange(COMMON, desc(mean_logit)) %>% 
+  #filter(!predictor.class2 %in% c("Size", "Change in Size", "Growth x Size"))%>%
+  mutate(logit_percent = round(mean_logit*100, digits = 2))%>%
+  group_by(predictor.class2, COMMON)%>%
+  mutate(total_cat = sum(mean_logit)*100)%>%
+  select(Covariate, logit_percent, total_cat,  predictor.class2, COMMON) %>%
+  filter(predictor.class2 %in%  "Site Conditions")%>%
+  #filter(total_cat > 5) %>% 
+  arrange(desc(total_cat), desc(logit_percent)) %>% 
+  filter(logit_percent >1)%>% View()
+
+var.summary.region %>% group_by(COMMON) %>% arrange(COMMON, desc(mean_logit)) %>% 
+  #filter(!predictor.class2 %in% c("Size", "Change in Size", "Growth x Size"))%>%
+  mutate(logit_percent = round(mean_logit*100, digits = 2))%>%
+  group_by(predictor.class2, COMMON)%>%
+  mutate(total_cat = sum(mean_logit)*100)%>%
+  select(Covariate, logit_percent, total_cat,  predictor.class2, COMMON) %>%
+  filter(predictor.class2 %in%  "Site x G & S")%>%
+  #filter(total_cat > 5) %>% 
+  arrange(desc(total_cat), desc(logit_percent)) %>% 
+  filter(logit_percent >1)%>% View()
 #########################################################################
 # Marginal effects, but plotting effects for species in affected by different pests
 
@@ -3866,6 +4020,27 @@ species_color <- scale_color_manual(values = sppColors)
 marginal_response_df
 
 # covariates that are scaled by species:
+train.data <- readRDS (
+
+  paste0(
+    output.folder,
+    "train_data_all_SPCD_model_",
+    model.no,
+    ".RDS"
+  )
+)
+
+test.data <- readRDS (
+
+  paste0(
+    output.folder,
+    "test_data_all_SPCD_model_",
+    model.no,
+    ".RDS"
+  )
+)
+
+
 #Ndep_Diff_per_yr
 species.scaling <- train.data %>% select(Species, SPCD, Ndep_Diff_per_yr.median, Ndep_Diff_per_yr.sd) %>% distinct()%>%
   mutate(Covariate = "Ndep.scaled", 
@@ -3977,12 +4152,12 @@ plot_main_region_effects <- function(species.group, covar, ymax.spp){
     df.species <- marginal_response_df_unscaled %>% filter(Species %in%  species.group & Covariate %in% covar)
     strip.fill <- as.character(color.pred.class.2[unique(df.species$predictor.class2)])
     
-    #Ndepx growth= -2.23104221
-    # Ndep = 
+    
     
     p1 <-  ggplot(df.species , aes(x = Raw.value, y = 1-(mean)^10, color = Species)) +
       geom_line(size = 1) +
-      geom_ribbon(aes(ymin = 1-(ci.lo)^10, ymax = 1-(ci.hi)^10, fill = Species), alpha = 0.2, color = NA) +
+      geom_ribbon(aes(ymin = 1-(ci.lo)^10, ymax = 1-(ci.hi)^10, fill = Species), alpha = 0.1, color = NA) +
+      #geom_label(aes(label = Species, color = Species))+
       facet_wrap(~Predictor) +
       labs(
         x = paste(df.species$predictor.class2, "(", unique(df.species$Units),")"),
@@ -4012,7 +4187,7 @@ plot_main_region_effects <- function(species.group, covar, ymax.spp){
       
       p1 <-  ggplot(data = df.species) +
         geom_line(aes(x = Raw.value, y = 1-(mean)^10, color = Species, group = interaction(Species, p2.rank), linetype = p2.rank), size = 1) +
-        geom_ribbon(aes(x = Raw.value, ymin = 1-(ci.lo.10)^10, ymax = 1-(ci.hi.90)^10, fill = Species, group = interaction(Species, p2.rank)), color = NA, alpha = 0.25) +
+        geom_ribbon(aes(x = Raw.value, ymin = 1-(ci.lo.10)^10, ymax = 1-(ci.hi.90)^10, fill = Species, group = interaction(Species, p2.rank)), color = NA, alpha = 0.1) +
         #facet_grid(cols = vars(predictor.class2), rows = vars(Predictor)) +
         facet_wrap(~Predictor)+
         labs(
@@ -4020,8 +4195,8 @@ plot_main_region_effects <- function(species.group, covar, ymax.spp){
           y = "10-year Mortality Probability",
           #title = "Effect of Predictors on Probability of Mortality"
         ) + scale_linetype_manual(values = c("low"= "dotted" ,
-                                             "median" = "dashed",
-                                             "high"= "solid" ), 
+                                             "median" = "solid",
+                                             "high"= "dashed" ), 
                                   name = expression(Delta ~ "Diameter"))+
         species_color + species_fill+
         # scale_fill_manual(values = c("low"="#a1dab4" ,
@@ -4041,7 +4216,7 @@ plot_main_region_effects <- function(species.group, covar, ymax.spp){
       
       p1 <-  ggplot(data = df.species) +
         geom_line(aes(x = Raw.value, y = 1-(mean)^10, color = Species, group = interaction(Species, p2.rank), linetype = p2.rank, size = p2.rank)) +
-        geom_ribbon(aes(x = Raw.value, ymin = 1-(ci.lo.10)^10, ymax = 1-(ci.hi.90)^10, fill = Species, group = interaction(Species, p2.rank)), color = NA, alpha = 0.25) +
+        geom_ribbon(aes(x = Raw.value, ymin = 1-(ci.lo.10)^10, ymax = 1-(ci.hi.90)^10, fill = Species, group = interaction(Species, p2.rank)), color = NA, alpha = 0.1) +
         #facet_grid(cols = vars(predictor.class2), rows = vars(Predictor)) +
         facet_wrap(~Predictor)+
         labs(
@@ -4057,8 +4232,8 @@ plot_main_region_effects <- function(species.group, covar, ymax.spp){
                           labels = c("low" = "small", 
                                      "median" = "medium", 
                                      "high" = "large"))+
-        scale_linetype_manual(values = c("low"="solid" ,
-                                         "median" = "dashed",
+        scale_linetype_manual(values = c("low"="dashed" ,
+                                         "median" = "solid",
                                          "high"= "longdash" ), 
                               name = "Diameter", 
                               labels = c("low" = "small", 
@@ -4082,17 +4257,190 @@ plot_main_region_effects <- function(species.group, covar, ymax.spp){
 }
 
 
+unique(marginal_response_df_unscaled$Covariate)
+
+
+# generate plots for variables with significant contribution to prop variance---
+
+
+# Diameter
+dia.marg.p <- plot_main_region_effects(species.group = 
+                           c("hickory spp.", "balsam fir", "chestnut oak", "northern white-cedar", 
+                             "northern red oak", "eastern hemlock", "white oak", "eastern white pine", 
+                             "red maple", "white ash", "yellow poplar", "sugar maple", "red spruce"), 
+                         covar = "DIA_scaled", 
+                         ymax.spp = 0.05)
+
+marginal_response_df_unscaled %>%
+  filter(Covariate %in% "DIA_scaled") %>%
+  filter( Raw.value <= 16 & Raw.value >= 15) %>%
+  filter(Species %in% unique(marginal_response_df_unscaled$Species)) %>%
+  mutate(ten.mort.mean = 1-(mean)^10) %>%
+  select(Species, ten.mort.mean)
+
+# Diameter_diff
+dia.diff.marg.p <- plot_main_region_effects(species.group = 
+                           unique(marginal_response_df_unscaled$Species), 
+                         covar = "DIA_DIFF_scaled", 
+                         ymax.spp = 0.2)
+
+# marginal_response_df_unscaled %>% 
+#   filter(Covariate %in% "DIA_DIFF_scaled") %>% 
+#   filter( Raw.value <= 2 & Raw.value >= 1.8) %>% 
+#   filter(Species %in% unique(marginal_response_df_unscaled$Species)) %>%
+#   mutate(ten.mort.mean = 1-(mean)^10) %>% 
+#   select(Species, ten.mort.mean)
+
+# Diameter_diff x growth interaction
+dia_dia.diff.marg.p <- plot_main_region_effects(species.group = 
+                           c("northern white-cedar", "black cherry", 
+                             "northern red oak", "yellow poplar", "red maple", "sugar maple", 
+                             "white ash"), 
+                         covar = "DIA_scaled_growth.int", 
+                         ymax.spp = 0.075)+theme(legend.position = "none")
+
+
+dia_dia.diff.balsam.fir.marg.p <- plot_main_region_effects(species.group = 
+                                                  c("balsam fir"), 
+                                                covar = "DIA_scaled_growth.int", 
+                                                ymax.spp = 0.5)+theme(legend.position = "none")
+
+# matmax scaled:
+matmax.marg.p <- plot_main_region_effects(species.group = 
+                           c("American beech", 
+                             "northern red oak", "eastern white pine"), 
+                         covar = "MATmax.scaled", 
+                         ymax.spp = 0.075)
+
+# matmax x dia differeces
+# more mortality at higher temps
+matmax_dia.diff.marg.p <- plot_main_region_effects(species.group = 
+                           c( "northern white-cedar", 
+                             "yellow-poplar"), 
+                         covar = "MATmax.scaled_growth.int", 
+                         ymax.spp = 0.075)+theme(legend.position = "none")
+
+
+# more mortality at cooler temps
+matmax_dia.diff.marg.p.cooler <- plot_main_region_effects(species.group = 
+                           c("yellow birch", "red spruce", "sugar maple"), 
+                         covar = "MATmax.scaled_growth.int", 
+                         ymax.spp = 0.1)+theme(legend.position = "none")
+
+
+tmax_dia.marg.p <- plot_main_region_effects(species.group = 
+                           c("hickory spp."), 
+                         covar = "tmax.anom_DIA.int", 
+                         ymax.spp = 0.025)+theme(legend.position = "none")
+
+# percent damage
+pct.damage.marg.p <- plot_main_region_effects(species.group = 
+                           c("northern white-cedar", 
+                             "white oak","yellow birch", "red spruce"), 
+                         covar = "damage.scaled", 
+                         ymax.spp = 0.075)
+
+marginal_response_df_unscaled %>% 
+  filter(Covariate %in% "damage.scaled") %>% 
+  filter(Raw.value >= 20 & Raw.value <= 21) %>% 
+  filter(Species %in% c("northern white-cedar",  "white oak","yellow birch", "red spruce")) %>%
+  mutate(ten.mort.mean = 1-(mean)^10) %>% 
+  select(Species, ten.mort.mean)
+
+
+
+# Neighborhood 
+ba.marg.p <- plot_main_region_effects(species.group = 
+                           c("yellow birch"), 
+                         covar = "ba.scaled", 
+                         ymax.spp = 0.075)
+
+bal.marg.p <- plot_main_region_effects(species.group = 
+                           c("yellow birch", "red spruce", "American beech"), 
+                         covar = "BAL.scaled", 
+                         ymax.spp = 0.05)
+
+ba.dia.marg.p <- plot_main_region_effects(species.group = 
+                           c("white oak"), 
+                         covar = "ba.scaled_DIA.int", 
+                         ymax.spp = 0.015)+theme(legend.position = "none")
+
+
+# N deposition
+
+ndep.marg.p <-plot_main_region_effects(species.group = 
+                           c("chestnut oak"), 
+                         covar = "Ndep.scaled", 
+                         ymax.spp = 0.05)
+
+ndep.dia.diff.marg.p<- plot_main_region_effects(species.group = 
+                           c("eastern white pine"), 
+                         covar = "Ndep.scaled_growth.int", 
+                         ymax.spp = 0.05)+theme(legend.position = "none")
+
+
+# site conditions
+
+slop.marg.p <- plot_main_region_effects(species.group = 
+                           c("eastern hemlock", "chestnut oak"), 
+                         covar = "slope.scaled", 
+                         ymax.spp = 0.02)+
+  xlab("Slope (%)")
+
+# plot up in a big figure:
+dia_plots_marg <- dia.marg.p + dia.diff.marg.p + dia_dia.diff.marg.p  + dia_dia.diff.balsam.fir.marg.p + plot_layout(ncol = 4)
+ggsave(paste0(output.dir,"images/diameter_effects_marginal_top_var.png"), 
+       plot = dia_plots_marg, width = 10, height = 4, dpi = 300)
+
+
+#dia_plots_marg <- plot_grid(dia.marg.p, dia.diff.marg.p, dia_dia.diff.marg.p, dia_dia.diff.balsam.fir.marg.p, 
+ #                           align = "hv", ncol = 4)
+
+
+
+climate_plots_marg <- tmax_dia.marg.p + matmax.marg.p +  matmax_dia.diff.marg.p + matmax_dia.diff.marg.p.cooler  + plot_layout(ncol = 4)
+
+ggsave(paste0(output.dir,"images/climate_effects_marginal_top_var.png"), 
+       plot = climate_plots_marg, width = 10, height = 4, dpi = 300)
+
+hood.vars.marg.p <- pct.damage.marg.p + ba.marg.p + bal.marg.p + ba.dia.marg.p + plot_layout(ncol = 4)
+
+ggsave(paste0(output.dir,"images/neighborhood_effects_marginal_top_var.png"), 
+       plot = hood.vars.marg.p, width = 10, height = 4, dpi = 300)
+
+site.vars.marg.p <- slop.marg.p + ndep.marg.p + ndep.dia.diff.marg.p+ plot_layout(ncol = 4)
+
+ggsave(paste0(output.dir,"images/site_effects_marginal_top_var.png"), 
+       plot = site.vars.marg.p, width = 10, height = 4, dpi = 300)
+
+# just the important main effects
+
+main_plots_marg <- dia.marg.p + dia.diff.marg.p + matmax.marg.p + pct.damage.marg.p + ba.marg.p + bal.marg.p + slop.marg.p + ndep.marg.p + plot_layout(ncol = 4)
+ggsave(paste0(output.dir,"images/main_effects_marginal_top_var.png"), 
+       plot = main_plots_marg, width = 10, height = 8, dpi = 300)
+
+ggsave(paste0(output.dir,"images/main_effects_marginal_top_var.svg"), 
+       plot = main_plots_marg, width = 10, height = 8, dpi = 300)
+
+# just the important interaction effects
+interaction_plots_marg <- dia_dia.diff.marg.p + dia_dia.diff.balsam.fir.marg.p + matmax_dia.diff.marg.p + matmax_dia.diff.marg.p.cooler +
+  tmax_dia.marg.p + ndep.dia.diff.marg.p + ba.dia.marg.p +plot_layout(ncol = 4)
+ggsave(paste0(output.dir,"images/interaction_effects_marginal_top_var.png"), 
+       plot = interaction_plots_marg, width = 10, height = 8, dpi = 300)
+
+ggsave(paste0(output.dir,"images/interaction_effects_marginal_top_var.svg"), 
+       plot = interaction_plots_marg, width = 10, height = 8, dpi = 300)
+# just the important interaction effects:
+
 # Plot up the important marginal effects for different groups of species---
 # select main effects and interactions to plot for each species group:
 # read in the variance partitioning summary by species
 #var_summary <- readRDS(paste0(output.folder, "variance_partitioning_summary_region_species.RDS"))
 
+# plot up all of the 
 
 
 
-plot_main_region_effects(species.group = c("northern red oak"), 
-                         covar = "MAP.scaled_DIA.int", 
-                         ymax.spp = 0.01)
 
 plot_main_region_effects(species.group = c("northern red oak", "hickory spp."), 
                          covar = c("tmax.anom_DIA.int"),
