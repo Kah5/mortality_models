@@ -2083,7 +2083,7 @@ pathogen.plot.secondary <- secondary.pathogens%>%
                                "yellow birch" =   "#fdbf6f",
                                "paper birch"="#fccde5", 
                                "hardwoods" = "#7f3b08"
-  ), name = "Decline complexes")+
+  ), name = "Hosts affected")+
   scale_x_continuous(
     breaks = min(FHM_host_state_enriched$Year):max(FHM_host_state_enriched$Year) # Sets breaks for every year
   ) +
@@ -2151,7 +2151,7 @@ conifer.defoliators.species
 
 ggsave(filename = paste0(output.dir, "images/conifer_defoliators_impacts_by_year_NE.png"), 
        conifer.defoliators.species, 
-       height = 5, width = 8)
+       height = 5, width = 9)
 
 # get other defoliators impacting our species of interest:
 hardwood.defoliators <- Region.pest.species %>% 
@@ -2165,6 +2165,71 @@ hardwood.defoliators <- Region.pest.species %>%
 unique(hardwood.defoliators$Agent_std)
 write.csv(hardwood.defoliators, "data/hardwood_insects.csv")
 
+## read through these and selected several for plotting:
+hardwood.insects.c <- read.csv("data/hardwood_insects_checked.csv")
+
+
+hardwood.insects.c %>% filter(Include == TRUE) |> ggplot()+
+  geom_bar(aes(x = Year, fill = Agent_std))
+
+hardwood.defoliators.species <- hardwood.insects.c %>% 
+  filter(Include == TRUE) %>%
+  filter(nstates >1) %>% 
+  select(Start, End, Agent_std, Host, Type_host, Group)%>% 
+  distinct()%>%
+  mutate(Host_collapse = ifelse(Host %in% c("white oak", "red oak"), "oak", 
+                                            ifelse(Host %in% c("red maple", "sugar maple"), "maple", 
+                                                    ifelse(Host %in% c("yellow poplar"), "poplar", 
+                                                           ifelse(Host %in% c("paper birch", "yellow birch"), "birch", Host)))))%>%
+  select(Start, End, Agent_std, Host_collapse, Type_host, Group) %>%
+  mutate(Host_collapse = fct_relevel(Host_collapse, 
+                          rev(c("hardwoods", "american beech", 
+                                "birch", "black cherry", 
+                                "hickory", "maple", "oak", "poplar"))))%>%
+   mutate(Group_std = fct_relevel(Group, 
+                                  rev(c("Spongy Moth", "Saddled Prominent", 
+                                        "Forest Tent Caterpillar", 
+                                        "Bruce Spanworm",
+                                        "Eastern Tent Caterpillar", 
+                                        "Loopers",
+                                        "Cherry Scallop Shell Moth", 
+                                        "Birch Leafminer", 
+                                        "Oak Leafroller, Oak Leaftier",
+                                        "Orange Striped Oakworm", 
+                                        "Oystershell Scale", 
+                                        "Maple Skeletonizer", 
+                                        "Browntail moth",
+                                        "Fall Webworm", "Thrips"))))|> 
+  
+  ggplot()+
+  geom_segment(aes(x = Start, xend = End, y = Group_std, color = Host_collapse),
+               position = position_dodge(width = 0.75), 
+               #linejoin = "round", 
+               lineend = "round", size = 1.5)+
+  theme_bw(base_size = 12)+
+  scale_color_manual(values = c(
+     "american beech"= "#1f78b4", # balsam fir
+     "birch"="#fccde5", # hemlock
+     "black cherry"= "#4d4d4d", # red spruce
+     "hardwoods"= "#33a02c", # eastern white pine
+     "hickory"=  "#7f3b08", # eastern white pine
+     "maple"=  "#e31a1c", # eastern white pine
+     "oak"= "#6a3d9a", # eastern white pine
+     "poplar"=   "#ff7f00" 
+     
+   ), name = "Host")+
+  #scale_alpha_manual(values = c("secondary" = 0.65, "primary" = 1))+
+ # scale_linetype_manual(values = c("secondary" = "11", "primary" = "solid"))+
+  ylab("Important Hardwood Insect Defoliators")+xlab("Year")+
+  scale_x_continuous(
+    breaks = min(FHM_host_state_enriched$Year):max(FHM_host_state_enriched$Year) # Sets breaks for every year
+  ) 
+hardwood.defoliators.species
+
+
+ggsave(filename = paste0(output.dir, "images/hardwood_defoliators_impacts_by_year_NE.png"), 
+       hardwood.defoliators.species, 
+       height = 5, width = 9)
 
 insects.region %>%
   #filter(increasing == TRUE | mortality == TRUE)%>%
