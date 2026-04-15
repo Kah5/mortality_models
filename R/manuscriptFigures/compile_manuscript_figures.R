@@ -3,9 +3,11 @@ library(ggplot2)
 library(cowplot)
 library(posterior)
 library(FIESTA)
-library(spdep)
+#library(spdep)
 library(sfdep)
 library(sf)
+library(spdep)
+
 output.dir <- output.folder <- "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
 
 # # get the complete species list
@@ -99,10 +101,235 @@ disturb.species.order <- c(
   "yellow-poplar"
 )
 
-# summaries the mortality rates (observed) by species:-----
+# summaries of the mortality rates (observed) by species:-----
 
 # unfiltered tree remeasurement data
 TREE.remeas <- readRDS( "data/unfiltered_TREE.remeas.rds")
+TREE.remeas$SCIENTIFIC_NAME <- ref_species[match(TREE.remeas$SPCD, ref_species$SPCD),]$SCIENTIFIC_NAME
+
+
+# Table S1: Count of trees above and below a diameter threshold
+TREE.remeas %>% filter(!is.na(dbhold))%>%
+  filter(SPCD %in% nspp[1:17,]$spp) %>%
+  filter(remper > 0 & 
+  !is.na(remper)) %>% 
+  
+  group_by(SCIENTIFIC_NAME, Species, SPCD, dbhold >= 5& dbhcur >=5) %>%
+  summarise(n()) %>% 
+  group_by(SCIENTIFIC_NAME, Species, SPCD) %>%
+  spread(`dbhold >= 5 & dbhcur >= 5`, `n()`) %>%
+  ungroup()%>%
+  rename("DBH >= 12.7 cm" = "FALSE", 
+         "DBH < 12.7 cm" = "TRUE", 
+         "Scientific Name" = "SCIENTIFIC_NAME")|>
+  gt() %>%
+  tab_style(
+    style = cell_text(style = "italic"),
+    locations = cells_body(
+      columns = `Scientific Name`
+    )
+  ) %>% grand_summary_rows(
+    columns = c(`DBH >= 12.7 cm`, `DBH < 12.7 cm`),
+    fns = list(
+     Total ~ sum(.)
+    ),
+    fmt = ~ fmt_number(., use_seps = FALSE,decimals = 0)
+  )|>gtsave(filename = paste0(output.dir, "images/tables/Ntrees_by_diameter_threshold.png"))
+
+# Table S2: Count of trees > 12.7 cm by Status code and 
+# diameter change between measurements (DIAMETER_diff).
+TREE.remeas %>% filter(!is.na(dbhold))%>%
+  filter(SPCD %in% nspp[1:17,]$spp) %>%
+  filter(remper > 0 & 
+           !is.na(remper)) %>% 
+  filter(dbhold >=5 & dbhcur >=5) %>%
+  filter(!is.na(DIA_DIFF))%>%
+  mutate(status = ifelse(status == 6, 5, status))%>%
+  
+  group_by(status, DIA_DIFF <= 0) %>%
+  summarise(n()) %>% 
+  group_by(`DIA_DIFF <= 0`) %>%
+  spread(status, `n()`) %>%
+  ungroup()%>%
+  mutate(`DIA_DIFF <= 0` = ifelse(`DIA_DIFF <= 0` == FALSE, "Greater than 0", "less than or equal to 0"))%>%
+  mutate(Totals = `1`+`2`+`3`+`4`+`5`)%>%
+  mutate(`Total (non-cut)` = `1`+`2`+`4`+`5`)%>%
+  rename("Live" = `1`, 
+         "Salvagable Dead" = `2`, 
+         "Cut" = `3`,
+         "Non-Salvagable Dead" = `4`, 
+         "Snags" = `5`,
+         "Diameter Difference" = `DIA_DIFF <= 0`) %>%
+  #select(`Scientific Name`, Species, SPCD, Live,`Salvagable Dead`,`Non-Salvagable Dead`, `Snags`, Cut)|>
+  gt() |>gtsave(filename = paste0(output.dir, "images/tables/Ntrees_DIA_DIFF_by_status.png"))
+
+
+
+
+# Table S3: Total number of trees used in this analysis
+TREE.remeas %>% filter(!is.na(dbhold))%>%
+  filter(SPCD %in% nspp[1:17,]$spp) %>%
+  filter(remper > 0 & 
+           !is.na(remper)) %>% 
+  filter(dbhold >=5 & dbhcur >=5) %>%
+  filter(DIA_DIFF > 0) %>%
+  mutate(status = ifelse(status == 6, 5, status))%>%
+  
+  group_by(SCIENTIFIC_NAME, Species, SPCD, status) %>%
+  summarise(n()) %>% 
+  group_by(SCIENTIFIC_NAME, Species, SPCD) %>%
+  spread(status, `n()`) %>%
+  ungroup()%>%
+  rename("Live" = `1`, 
+         "Salvagable Dead" = `2`, 
+         "Cut" = `3`,
+         "Non-Salvagable Dead" = `4`, 
+         "Snags" = `5`,
+         "Scientific Name" = "SCIENTIFIC_NAME") %>%
+  mutate(`Non-cut Dead` = `Salvagable Dead`+`Non-Salvagable Dead`+`Snags`) %>%
+  select(`Scientific Name`, Species, SPCD, Cut, `Salvagable Dead`,`Non-Salvagable Dead`, `Snags`, `Non-cut Dead`, Live)|>
+  gt() %>%
+  tab_style(
+    style = cell_text(style = "italic"),
+    locations = cells_body(
+      columns = `Scientific Name`
+    )
+  ) %>% grand_summary_rows(
+    columns = c("Live","Non-cut Dead", "Salvagable Dead", "Non-Salvagable Dead", "Snags","Cut"),
+    fns = list(
+      Total ~ sum(.)
+    ),
+    fmt = ~ fmt_number(., use_seps = FALSE,decimals = 0)
+  )|>
+  gtsave(filename = paste0(output.dir, "images/tables/Ntrees_in_analysis_5in_by_status_.png"),vwidth = 1500, vheight = 1000)
+
+
+
+TREE.remeas %>% filter(Species %in% "northern white-cedar") %>% 
+  group_by(status >= 2, stname, date, damage) %>%
+  summarise(n()) %>% filter(stname %in% "ME" & date == 1995)
+
+TREE.remeas %>% filter(Species %in% "northern white-cedar") %>% 
+  filter(date == 1995 & damage == 70) %>%
+  group_by(county, stname, date, damage) %>%
+  summarise(n())
+
+TREE.remeas %>% 
+  filter(SPCD %in% nspp$SPCD & 
+           dbhold >=5 & 
+           dbhcur >= 5 &
+           DIA_DIFF > 0 &
+           remper > 0 & 
+           !is.na(remper) &
+           !status == 3 ) %>%
+  mutate(Mstatus = ifelse(status == 1, "live", "dead"))%>%
+  mutate(Average.growth = DIA_DIFF/remper)%>% 
+  group_by(SPCD, Species, Mstatus) |>
+  ggplot()+geom_histogram(aes(x = DIA_DIFF, fill= Mstatus), alpha = 0.5, position = "identity")+
+  facet_wrap(~Species, scales = "free")
+  
+TREE.remeas %>% 
+  filter(SPCD %in% nspp$SPCD & 
+           dbhold >=5 & 
+           dbhcur >= 5 &
+           DIA_DIFF > 0 &
+           remper > 0 & 
+           !is.na(remper) &
+           !status == 3 ) %>%
+  mutate(Mstatus = ifelse(status == 1, "live", "dead"))%>%
+  mutate(Average.growth = ifelse(Mstatus %in% "live",DIA_DIFF/remper, DIA_DIFF/(remper/2)))%>% 
+  group_by(SPCD, Species, Mstatus) %>%
+  
+  summarise(mean.DIA_DIFF = mean(DIA_DIFF, na.rm = TRUE), 
+            sd.DIA_DIFF = sd(DIA_DIFF, na.rm =TRUE),
+            mean.growth = mean(Average.growth, na.rm =TRUE), 
+            sd.growth = sd(Average.growth, na.rm = TRUE))|>
+  ggplot()+
+  geom_bar(aes(x = Species, y = mean.growth, group = Mstatus, fill = Mstatus), stat = "identity", position = "dodge")+
+  geom_errorbar(aes(x = Species, ymin = mean.growth - sd.growth, ymax = mean.growth + sd.growth, group = Mstatus, color = Mstatus), stat = "identity", position = "dodge")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+ylab("Average growth rate (assuming midpoint dead for dead trees)")
+  
+
+
+TREE.remeas %>% 
+  filter(SPCD %in% nspp$SPCD & 
+           dbhold >=5 & 
+           dbhcur >= 5 &
+           DIA_DIFF > 0 &
+           remper > 0 & 
+           !is.na(remper) &
+           !status == 3 ) %>%
+  mutate(Mstatus = ifelse(status == 1, "live", "dead"))%>%
+  mutate(Average.growth = ifelse(Mstatus %in% "live",DIA_DIFF/remper, DIA_DIFF/(remper/2)))%>% 
+  group_by(SPCD, Species, Mstatus) %>%
+  
+  summarise(mean.DIA_DIFF = mean(DIA_DIFF, na.rm = TRUE), 
+            sd.DIA_DIFF = sd(DIA_DIFF, na.rm =TRUE),
+            mean.growth = mean(Average.growth, na.rm =TRUE), 
+            sd.growth = sd(Average.growth, na.rm = TRUE))|>
+  ggplot()+
+  geom_bar(aes(x = Species, y = mean.DIA_DIFF, group = Mstatus, fill = Mstatus), stat = "identity", position = "dodge")+
+  geom_errorbar(aes(x = Species, ymin = mean.DIA_DIFF - sd.DIA_DIFF, ymax = mean.DIA_DIFF + sd.DIA_DIFF, group = Mstatus, color = Mstatus), stat = "identity", position = "dodge")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+ylab("Diameter difference")
+
+
+TREE.df <- TREE.remeas %>% 
+  filter(SPCD %in% nspp$SPCD & 
+           dbhold >=5 & 
+           dbhcur >= 5 &
+           DIA_DIFF > 0 &
+           remper > 0 & 
+           !is.na(remper) &
+           !status == 3 ) %>%
+  mutate(Mstatus = ifelse(status == 1, "live", "dead"))%>%
+  mutate(Average.growth = ifelse(Mstatus %in% "live",DIA_DIFF/remper, DIA_DIFF/(remper/2)))%>% 
+  group_by(SPCD, Species, Mstatus)
+
+
+# plot diameter differences across space and time:
+TREE.remeas.df <- TREE.remeas %>% 
+  filter(SPCD %in% nspp$SPCD & 
+           dbhold >=5 & 
+           dbhcur >= 5 &
+           DIA_DIFF > 0 &
+           remper > 0 & 
+           !is.na(remper) &
+           !status == 3 ) %>%
+  mutate(Mstatus = ifelse(status == 1, "live", "dead"))%>%
+  mutate(Average.growth = ifelse(Mstatus %in% "live",DIA_DIFF/remper, DIA_DIFF/(remper/2)), 
+         Midpoint.year = date - (remper/2), 
+         T1.year = date - remper, 
+         T2.year = date)
+
+# plot up live tree diameter differences
+ggplot(data = TREE.remeas.df %>% filter(Mstatus %in% "live"))+
+  geom_point(aes(LONG_FIADB, LAT_FIADB, color = DIA_DIFF))+
+  scale_color_distiller(palette = "Spectral")+facet_wrap(~Species)
+  
+ggplot(data = TREE.remeas.df %>% filter(Species %in% "balsam fir"))+
+  geom_point(aes(LONG_FIADB, DIA_DIFF, color = Mstatus))
+
+ggplot(data = TREE.remeas.df)+
+  geom_point(aes(LAT_FIADB, DIA_DIFF, color = Mstatus))+
+  facet_wrap(~Species)
+
+
+ggplot(data = TREE.remeas.df)+
+  geom_point(aes(LAT_FIADB, DIA_DIFF, color = Mstatus))+
+  facet_wrap(~Species)
+
+ggplot(data = TREE.remeas.df %>% filter(Species %in% "balsam fir"))+
+  geom_jitter(aes(T1.year, DIA_DIFF, color = Mstatus))+
+  facet_wrap(~Species)
+
+ggplot(data = TREE.remeas.df %>% filter(Species %in% "balsam fir"))+
+  geom_boxplot(aes(as.factor(as.character(T1.year)), DIA_DIFF, color = Mstatus, group = Mstatus), position = position_dodge())+
+  facet_wrap(~T1.year)
+
+# distribution of diameter differences
+
+# calculate inferred growth rate for dead trees based on each mortality year
+# calculate inferred growth rate for live trees for that number of years 
 
 # BA.issues <- TREE.remeas %>% 
 # mutate(ba_sq_ft_cur = ((dbhcur^2))*0.005454, 
@@ -162,42 +389,117 @@ all.remeas <- TREE.remeas %>%
 # 
 
 # mortality rates across the whole species distributions:----
-total.tree.sums <- all.remeas %>% group_by(SPCD, Species, remper)%>%
+
+# fraction of trees surviving to time 2 is psurv
+# psurv = (Nlivingt1-(Ndeadt2+Ncut))/Nlivingt1 
+# psurv = (Nlivingt1/Nlivingt1)-(Ndeadt2/Nlivingt1)-(Ncutt2/Nlivingt2)
+# psurv_annual = (1 - pdead - pcut)^(1/remper)
+# pmort_annual = 1-((1-pdead-pcut)^(1/remper))
+# pmort_cut_annual = 
+
+
+# total number of trees in each plot, by species:
+total.tree.sums <- all.remeas %>% 
+  group_by(SPCD, Species, remper, county, state)%>%
   summarise(total_trees_volfac = sum(volfac, na.rm = TRUE), 
             total_n = n())
 
+all.tree.sums <- all.remeas %>% 
+  group_by(remper, county, state)%>%
+  summarise(total_trees_volfac = sum(volfac, na.rm = TRUE), 
+            total_n = n())
+
+total.non.log.tree.sums <- all.remeas %>% 
+  filter(!status ==3)%>%
+  group_by(SPCD, Species, remper, county, state)%>%
+  summarise(total_nonlog_trees_volfac = sum(volfac, na.rm = TRUE), 
+            total_nonlog_n = n())
+
 
 # logging only
-all.remeas %>% group_by(SPCD, Species, remper)%>% filter(status == 3) %>%
+all.remeas %>% group_by(SPCD, Species, remper, county, state)%>% 
+  filter(status == 3) %>%
   summarise(logged_trees_volfac = sum(volfac, na.rm = TRUE),
             n_cut = n())%>%
   left_join(., total.tree.sums) %>%# join to total trees
   
   # for each remper period, get the mortality rate per year 
-  mutate(all_cut_rate_volfac = ((logged_trees_volfac/total_trees_volfac)*100)/remper, 
-         all_cut_rate = ((n_cut/total_n)*100)/remper)%>%
+  mutate(all_cut_rate_volfac = (1-((total_trees_volfac-logged_trees_volfac)/total_trees_volfac)^(1/remper))*100, 
+         all_cut_rate = (1-((total_n-n_cut)/total_n)^(1/remper))*100)%>%
   ungroup()%>%
   
   # average all the remper mortality rates together to get a single species value
   group_by(SPCD, Species)%>%
   summarise(cut_volfac_mort = mean(all_cut_rate_volfac, na.rm =TRUE), 
+            cut_volfac_mort_med = median(all_cut_rate_volfac, na.rm =TRUE),
             cut_n_mort = mean(all_cut_rate, na.rm =TRUE))
 
-# mortality rates by species: non logging dead trees
-mort.rate.species <- all.remeas %>% group_by(SPCD, Species, remper)%>% filter(status %in% c(2, 4, 5, 6)) %>%
+
+
+total.tree.nonlong.sums <- all.remeas %>% 
+  group_by(SPCD, Species, remper, county, state)%>%
+  filter(!status == 3)%>%
+  summarise(total_trees_volfac = sum(volfac, na.rm = TRUE), 
+            total_n = n())
+
+# mortality rates by species: mortality rates (not via logging)
+mort.rate.species <- all.remeas %>% 
+  group_by(SPCD, Species, remper, county, state)%>% 
+  filter(status %in% c(2, 4, 5, 6)) %>%
   summarise(nonlog_dead_trees_volfac = sum(volfac, na.rm = TRUE), 
             n_nonlog_dead = n()) %>%
   left_join(., total.tree.sums) %>%# join to total trees
   
-  # for each remper period, get the mortality rate per year 
+  # # calculate survival fraction over time period
+  # mutate(psurv = (total_trees_volfac-nonlog_dead_trees_volfac)/total_trees_volfac) %>%
+  # mutate(psurv_annual = (psurv)^(1/remper)) %>%
+  # mutate(pmort_annual = 1-psurv_annual)%>%
+  
   mutate(nonlog_mort_rate_volfac = ((nonlog_dead_trees_volfac/total_trees_volfac)*100)/remper, 
          nonlog_mort_rate = ((n_nonlog_dead/total_n)*100)/remper)%>%
-  ungroup()%>%
   
-  # average all the remper mortality rates together to get a single species value
+  ungroup()%>%
   group_by(SPCD, Species)%>%
+  
+  
+
   summarise(species_volfac_mort = mean(nonlog_mort_rate_volfac, na.rm =TRUE), 
-            species_n_mort = mean(nonlog_mort_rate, na.rm =TRUE))
+            species_n_mort = mean(nonlog_mort_rate, na.rm =TRUE), 
+            nplots = n())
+
+
+# mortality rates total:
+mort.rate.total <- all.remeas %>% 
+  group_by(remper, county, state)%>% 
+  filter(status %in% c(2, 4, 5, 6)) %>%
+  summarise(nonlog_dead_trees_volfac = sum(volfac, na.rm = TRUE), 
+            n_nonlog_dead = n()) %>%
+  left_join(., all.tree.sums) %>%# join to total trees
+  
+  mutate(nonlog_mort_rate_volfac = ((nonlog_dead_trees_volfac/total_trees_volfac)*100)/remper, 
+         nonlog_mort_rate = ((n_nonlog_dead/total_n)*100)/remper)%>%
+  
+  ungroup()%>%
+  #group_by(SPCD, Species)%>%
+  
+  
+  
+  summarise(species_volfac_mort = mean(nonlog_mort_rate_volfac, na.rm =TRUE), 
+            species_n_mort = mean(nonlog_mort_rate, na.rm =TRUE), 
+            nplots = n())
+
+
+
+  # for each remper period, get the mortality rate per year 
+  # mutate(nonlog_mort_rate_volfac = (1-((total_nonlog_trees_volfac-nonlog_dead_trees_volfac)/total_nonlog_trees_volfac)^(1/remper))*100, 
+  #        nonlog_mort_rate = (1-((total_nonlog_n-n_nonlog_dead)/total_nonlog_n)^(1/remper))*100)%>%
+  # ungroup()%>%
+  # 
+  # average all the remper mortality rates together to get a single species value
+  # group_by(SPCD, Species)%>%
+  # summarise(species_volfac_mort = mean(nonlog_mort_rate_volfac, na.rm =TRUE), 
+  #           species_n_mort = mean(nonlog_mort_rate, na.rm =TRUE), 
+  #           nplots = n())
 
 mort.rate.species$Species <- factor(mort.rate.species$Species, levels = disturb.species.order)
 
@@ -461,8 +763,6 @@ mort.maps.species <- plot_grid(
 ggsave(paste0(output.dir, "images/map_mortality_rate_state.png"), plot = mort.maps.species, 
        width = 12, height = 13, units = "in")
 
-ggsave(paste0(output.dir, "images/map_mortality_rate_state.svg"), plot = mort.maps.species, 
-       width = 12, height = 13, units = "in")
 
 # observed vs predicted mortality rates -----
 # predictions compiled in R/hierarchicalModel/posterior_prediction_joint_longchains.R
@@ -483,8 +783,8 @@ spp.tree.pred.mort.volfac <- left_join(spp.tree.pred.mort,
                                        all.remeas %>% select(state, county, pltnum, cndtn, point, tree, SPCD,status, dbhcur, dbhold, volfac, LAT_FIADB, LONG_FIADB)%>% distinct())
 
 # map up probability of survival for each species
-ggplot(data = spp.tree.pred.mort.volfac %>% filter(COMMON %in% c("balsam fir", "red spruce", "northern white-cedar")), aes(x =LONG_FIADB,  y = LAT_FIADB, color = 1-p10year.med), size = 0.1)+
-  geom_point()+facet_wrap(~COMMON)+ scale_color_viridis_c(option = "magma")
+ggplot(data = spp.tree.pred.mort.volfac %>% filter(COMMON %in% c("balsam fir", "red spruce", "northern white-cedar")), aes(x =LONG_FIADB,  y = LAT_FIADB, color = 1-p10year.med))+
+  geom_point(size = 0.1)+facet_wrap(~COMMON)+ scale_color_viridis_c(option = "magma")
 
 # get the median 1 year mortality rate for each tree:
 spp.tree.mort.probs <- spp.tree.pred.mort.volfac %>% mutate(p1year.survival = p10year.med^(1/10))%>%
@@ -909,7 +1209,8 @@ uniformity.summary$Species <- factor(uniformity.summary$Species, levels = distur
     group_by(geometry)%>%
     spread(Species, gi)
  
- 
+ library(Hmisc)
+ library(reshape2)
  county.corr.gi <- rcorr(as.matrix( gi.matrix[,2:ncol( gi.matrix)]), type = "pearson" ) # or "spearman"
  colnames( county.corr.gi$r)
  # Get upper triangle of the correlation matrix
@@ -1014,8 +1315,9 @@ ggsave(filename = paste0(output.dir, "images/posterior_county_pmort_over_time.pn
        height = 6, width = 8, units = "in", 
        dpi = 350)
 
-
-
+# Do hotspots correspond to temporal trends in sampling
+# plot gistar values for hotspots against midpoint of remeausrement year:
+#-Yes, for beech, sugar maple, eastern white pine, possibly black cherry and White oak
 
 temporal_gistar <- ggplot(data = county.mort.gi.remper %>% filter(!is.na(gi)))+
   geom_jitter(aes(x = midpoint.remper, y = gi, color = classification), alpha = 0.75)+
@@ -1173,7 +1475,7 @@ hemlock.co.mort.gi %>% filter(!is.na(volfac_county_pmort*100)) %>%
 ggplot()+
   geom_sf(data = st_as_sf(hemlock.co.mort.gi), aes(fill = present))+
   geom_sf(data = st_as_sf(hemlock.co.mort.gi) %>% filter(volfac_county_pmort*100 >= 0.45), aes(fill = present), color =  "red")+
-  scale_fill_brewer(palette = "Spectral")
+  scale_fill_brewer(palette = "Spectral")+theme_minimal()
 
 
 hemlock.co.mort.gi %>% filter(is.na(present)& !is.na(volfac_county_pmort))
@@ -1261,6 +1563,7 @@ spongy %>% group_by(State)%>%
   summarise(state.max.fraction.defolated = max(fraction.Defoliated*100))%>%
   arrange(desc(state.max.fraction.defolated))
 
+library(pracma)
 st.name.id <- "New York"
 state.defoliation.peaks.list <- list()
 for(i in 1:length(unique(spongy$State))){
@@ -1470,10 +1773,10 @@ t.test.spongy("chestnut oak")# significant
 t.test.spongy("northern red oak") # NS
 t.test.spongy("white oak")# signfficant
 t.test.spongy("yellow birch")# NS
-t.test.spongy("paper birch")
+#t.test.spongy("paper birch")# not enough counties witn no defoliation observations
 
 # for the resistant species:
-t.test.spongy("balsam fir") # no counties with no defoliatino
+#t.test.spongy("balsam fir") # no counties with no defoliatino
 t.test.spongy("red spruce") # NS
 t.test.spongy("eastern hemlock") # signifcantly higher
 t.test.spongy("American beech")# significantly higher
@@ -1483,7 +1786,7 @@ t.test.spongy("red maple") # signifcantly higher
 t.test.spongy("sugar maple") # signficantly higher
 
 # for the immune species:
-t.test.spongy("northern white-cedar")
+#t.test.spongy("northern white-cedar") # not enough data
 t.test.spongy("black cherry") # significantly hihger
 t.test.spongy("white ash")
 t.test.spongy("yellow-poplar")
@@ -1530,7 +1833,22 @@ ggsave(filename = paste0(output.dir, "images/county_pMort_spongy_species_num_pea
        height = 4, width = 9, units = "in", 
        dpi = 350)
 
+spongysusceptible.mort.num.peaks.plt <- co.with.spongy %>% filter(Species %in% c("chestnut oak", "white oak", "northern red oak", "yellow birch", "paper birch"))%>%
+  mutate(spongy.peaks = ifelse(CO.withpeak %in% "1+ defoliation peaks", "1+", 
+                                                                             ifelse(CO.withpeak %in% "no spongy defoliation peaks", "none", NA)))|> ggplot()+
+  geom_jitter(aes(x =spongy.peaks, y = volfac_county_pmort*100, group = spongy.peaks, color = Species), alpha = 0.65)+
+  geom_boxplot(aes(x =spongy.peaks, y = volfac_county_pmort*100, group = spongy.peaks), fill = NA, outliers = FALSE)+
+  facet_wrap(~Species, scales = "free_y", ncol = 5)+
+  species_color+
+  ylab("Mortality probability (%/year)")+
+  xlab("Number of spongy moth defoliation peaks")+
+  theme_bw()+
+  theme(panel.grid = element_blank())
 
+ggsave(filename = paste0(output.dir, "images/county_pMort_spongy_species_num_peaks.png"), 
+       plot = spongysusceptible.mort.num.peaks.plt , 
+       height = 3.5, width = 9, units = "in", 
+       dpi = 350)
 
 county.mort.gi.remper %>% left_join(.,co.remper.years) %>% 
   filter(Species %in% c("chestnut oak", "northern red oak", "white oak", "yellow birch", "paper birch"))%>%
@@ -1909,7 +2227,7 @@ ggsave(filename = paste0(output.dir, "images/county_pMort_budworm_species_num_pe
 budworm.mort.num.peaks.plt <- co.with.budworm %>% 
   mutate(budworm.peaks = ifelse(CO.withpeak %in% "1+ defoliation peaks", "1+", 
                                 ifelse(CO.withpeak %in% "no budworm defoliation peaks", "none", NA)))|> ggplot()+
-  geom_jitter(aes(x =budworm.peaks, y = volfac_county_pmort*100, group = budworm.peaks, color = Species))+
+  geom_jitter(aes(x =budworm.peaks, y = volfac_county_pmort*100, group = budworm.peaks, color = Species), alpha = 0.65)+
   geom_boxplot(aes(x =budworm.peaks, y = volfac_county_pmort*100, group = budworm.peaks), fill = NA, outliers = FALSE)+
   facet_wrap(~Species, scales = "free_y", ncol = 5)+
   species_color+
@@ -1920,7 +2238,7 @@ budworm.mort.num.peaks.plt <- co.with.budworm %>%
 
 ggsave(filename = paste0(output.dir, "images/county_pMort_budworm_species_num_peaks.png"), 
        plot = budworm.mort.num.peaks.plt , 
-       height = 4, width = 9, units = "in", 
+       height = 3.5, width = 9, units = "in", 
        dpi = 350)
 
 co.with.budworm %>% group_by(STATE_NAME)%>%
@@ -1943,6 +2261,7 @@ co.with.budworm %>%
         axis.text.x = element_text(angle = 45, hjust = 1))
 
 
+# Quantifying Specificity:--------
 # Is there spatial overlap across species on county pmort?--- 
 
 species.data.all <- county.pmort.sf %>% mutate(
@@ -2110,7 +2429,6 @@ county.high.pmort.species %>% group_by(Species)%>%
   mutate(pct.counties.high = round(n.over.threshold/ncounties*100, 1))
 
 
-pct.counties.high
 
 
 species.ranked.percentiles <- species.data.all %>% as.data.frame()%>% 
@@ -2119,7 +2437,7 @@ species.ranked.percentiles <- species.data.all %>% as.data.frame()%>%
   # calculate species mean pmort 
   group_by(Species) %>%
   mutate(mean.mort = mean(volfac_county_pmort*100, na.rm =TRUE), 
-         sd.mort = median(volfac_county_pmort*100, na.rm =TRUE))%>%
+         sd.mort = sd(volfac_county_pmort*100, na.rm =TRUE))%>%
   #mutate(mort.percentile = percent_rank(volfac_county_pmort, na.rm =TRUE))%>%
   ungroup()%>%
   group_by(STATEFP, STATE_NAME, COUNTYFP, CONAME, geometry, Species)%>%
@@ -2134,9 +2452,70 @@ species.ranked.percentiles <- species.data.all %>% as.data.frame()%>%
   ungroup()#%>% data.frame()
   
 
+# Correlation of county standardized species mortality probabilities----
 # get correlations by species:
 county.corr.log.pmort <- rcorr(as.matrix(species.ranked.percentiles[,6:ncol(species.ranked.percentiles)]), type = "spearman" ) # or "spearman"
 colnames(county.corr.log.pmort$r)
+
+
+# assign any NA values to 0:
+
+county.corr.log.pmort$r[is.na(county.corr.log.pmort$r)] <- 0
+# also assign non-significant values to zero
+county.corr.log.pmort$r[county.corr.log.pmort$P > 0.05] <- 0
+
+distance_matrix <- as.dist(1 - county.corr.log.pmort$r)
+
+hc_result <- hclust(distance_matrix, method = "ward.D2") 
+hc_result_cormat <- hclust(as.dist(county.corr.log.pmort$r), 
+                           method = "ward.D2")
+# Plot the dendrogram
+plot(hc_result, main = "Hierarchical Clustering based on Correlation")
+plot(hc_result_cormat, main = "Hierarchical Clustering based on Correlation")
+
+# ordering by shared hosts?
+library(vegan)
+
+pest.metadata <- read.csv(paste0(output.dir, "data/pest_metadata_new_england.csv"))
+host.pests.general <- read.csv(paste0(output.dir, "data/host_pests_general.csv"), check.names = F)
+host.pests.mat <- host.pests.general%>% column_to_rownames("Species") %>% as.matrix()
+
+
+# cluster the species (rows)
+host.pests.general.dist <- vegdist(host.pests.mat, method ="euclidian")
+species_clust <- hclust(host.pests.general.dist, method = "ward.D2") 
+plot(species_clust, main = "Hierarchical Clustering based on forest pests")
+species_order <- species_clust$labels[species_clust$order]
+
+species_order <-  c("northern red oak",
+                    "white oak",
+                    "chestnut oak" ,
+                    "yellow birch", 
+                    "paper birch" ,
+                    "sugar maple" , 
+                    "red maple" , 
+                    "black cherry",
+                    "American beech",
+                    "white ash",
+                    "hickory spp.",
+                    "yellow-poplar",
+                    "eastern white pine",
+                    "eastern hemlock",
+                    "northern white-cedar", 
+                    "red spruce", 
+                    "balsam fir") 
+
+pests.dist <- vegdist(t(host.pests.mat), method ="euclidian")
+pest_clust <- hclust(pests.dist , method = "ward.D2") 
+plot(pest_clust, main = "Hierarchical Clustering based on forest pests")
+pest_order <- pest_clust$labels[pest_clust$order]
+
+
+
+
+county.corr.log.pmort <- rcorr(as.matrix(species.ranked.percentiles[,6:ncol(species.ranked.percentiles)]), type = "spearman" ) # or "spearman"
+
+
 # Get upper triangle of the correlation matrix
 get_upper_tri <- function(cormat){
   cormat[lower.tri(cormat)]<- NA
@@ -2147,12 +2526,76 @@ get_lower_tri<-function(cormat){
   cormat[upper.tri(cormat)] <- NA
   return(cormat)
 }
-melted.correlation <- get_lower_tri(county.corr.log.pmort$r[disturb.species.order,disturb.species.order]) %>% reshape2::melt()%>%
+species_order
+disturb.species.order
+hc$labels[hc$order]
+
+correlations <- get_upper_tri(county.corr.log.pmort$r)
+host_weights <- get_upper_tri(weighted_hosts)
+
+# species with shared hosts are have more correlated county level mortality
+cor.test(host_weights, correlations)
+
+
+
+#id which pests may be at play:
+
+host.pests.m <- host.pests.general %>% melt(., id.vars = "Species") %>% 
+  mutate(susceptible = ifelse(value == 0, NA, ifelse(value == 1,"occasional host", ifelse(value == 2, "preferred host", NA)))) %>%
+  mutate(pest = tolower(variable)) 
+
+correlations.m <- correlations %>% melt(.) %>% rename("mort.cor"="value") 
+
+host.pests.m$Species <- factor(host.pests.m$Species, levels =species_order)
+host.pests.m$variable <- factor(host.pests.m$variable, levels =pest_order)
+
+
+forest.host.bar <- ggplot(data = host.pests.m)+geom_col(aes(x = variable, y = value, fill = Species))+
+  species_fill+
+  theme_bw()+
+  ylab("Impact on species")+xlab("")+
+  theme(axis.text.x = element_text(angle = 90, hjust =1, vjust = 0.5))
+
+ggsave(filename = paste0(output.dir, "images/forest_pests_by_host.png"), 
+       plot = forest.host.bar, 
+       height = 6, width = 6, units = "in", 
+       dpi = 350)
+
+
+
+forest.host.bar.preferred <- ggplot(data = host.pests.m %>% filter(value == 2))+geom_col(aes(x = variable, y = value, fill = Species))+
+  species_fill+
+  theme_bw()+
+  ylab("Impact on species")+xlab("")+
+  theme(axis.text.x = element_text(angle = 90, hjust =1, vjust = 0.5))
+
+ggsave(filename = paste0(output.dir, "images/forest_pests_by_host_preferred.png"), 
+       plot = forest.host.bar.preferred, 
+       height = 6, width = 6, units = "in", 
+       dpi = 350)
+
+
+
+
+
+host.species.tile <- ggplot(data =host.pests.m )+geom_tile(aes(x = Species, y = variable, fill = susceptible))+
+  
+  theme_bw()+
+  ylab("")+xlab("")+
+  theme(axis.text.x = element_text(angle = 90, hjust =1, vjust = 0.5))
+
+ggsave(filename = paste0(output.dir, "images/host_pest_tile.png"), 
+       plot = host.species.tile, 
+       height = 6, width = 6, units = "in")
+
+
+
+melted.correlation <- get_lower_tri(county.corr.log.pmort$r[species_order,species_order]) %>% reshape2::melt()%>%
   rename("r"="value") %>% left_join(., 
-                                    get_lower_tri(county.corr.log.pmort$n[disturb.species.order,disturb.species.order]) %>% reshape2::melt())%>%
+                                    get_lower_tri(county.corr.log.pmort$n[species_order,species_order]) %>% reshape2::melt())%>%
   rename("n" = "value")%>%
   left_join(., 
-            get_lower_tri(county.corr.log.pmort$P[disturb.species.order,disturb.species.order]) %>% reshape2::melt())%>%
+            get_lower_tri(county.corr.log.pmort$P[species_order,species_order]) %>% reshape2::melt())%>%
   rename("pval" = "value")%>%
   mutate(R_revised = ifelse(n>=50, round(r, digits = 1), NA), 
          P_revised = ifelse(n >=50, pval, NA))%>%
@@ -2168,9 +2611,9 @@ pmort_correlation_county <-  ggplot(data = melted.correlation, aes(Var2, Var1, f
                        name="Spearman\nCorrelation") +
   theme_bw(base_size = 16)+ 
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
-                                   hjust = 0))+
+                                   hjust = 1))+
   coord_fixed()+
-  scale_x_discrete(position = "top",
+  scale_x_discrete(position = "bottom",
                    limits = levels(melted.correlation$Var2))+
   scale_y_discrete(position = "left",
                    limits = rev(levels(melted.correlation$Var1)))+
@@ -2188,18 +2631,121 @@ pmort_correlation_county <-  ggplot(data = melted.correlation, aes(Var2, Var1, f
     legend.direction = "horizontal")+
   guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
                                title.position = "top", title.hjust = 0.5))#+coord_flip()
-
+pmort_correlation_county
 
 ggsave(filename = paste0(output.dir, "images/posterior_county_pMort_species_correlations.png"), 
-       plot = pmort_correlation, 
+       plot = pmort_correlation_county, 
        height = 6, width = 6, units = "in", 
        dpi = 350)
 
-# 
+# Visualize correlations for highly correlated species on the map:
 
-#ggpairs(data = species.ranked.percentiles, columns = 6:ncol(species.ranked.percentiles))
+# identify significantly positive correlated species:
+cor.pairs <- melted.correlation %>% filter(R_revised >=0.2 & P_revised <=0.05)
 
-# Visualize the variable on the map
+for(i in 1:nrow(cor.pairs)){
+  species1 <- cor.pairs[i,]$Var1
+  species2 <- cor.pairs[i,]$Var2
+  
+  overlap <- species.ranked.percentiles[,species1] > 1 & species.ranked.percentiles[,species2] >1
+  cat(as.character(species1), "-", as.character(species2), ":", sum(overlap, na.rm =TRUE), "overlappping high counties \n")
+  
+  }
+
+# get index for all high values for 
+hot <- species.ranked.percentiles[,species_order] >= 1
+storage.mode(hot) <- "integer"
+
+pair_overlap_long <- purrr::map_dfr(seq_len(nrow(cor.pairs)), function(i){
+  Species1 <- cor.pairs[i,]$Var1
+  Species2 <- cor.pairs[i,]$Var2
+  
+  tibble(species.ranked.percentiles %>% select(STATEFP, COUNTYFP, STATE_NAME, CONAME, geometry), 
+         Spp1 = Species1, 
+         Spp2 = Species2, 
+         integer.overlap = as.integer(hot[, Species1] & hot[,Species2]),
+         continous.overlap = (species.ranked.percentiles[,Species1]*species.ranked.percentiles[,Species2])[,1])
+})
+
+# map the burden for each county:
+
+burden_county.sf <- pair_overlap_long %>% group_by(STATEFP, COUNTYFP, STATE_NAME, CONAME, geometry) %>%
+  summarise(n_pairs_overlapping = sum(integer.overlap, na.rm =TRUE), 
+            burden_overlapping = sum(continous.overlap, na.rm =TRUE)) %>% st_as_sf()
+
+any.overlaps <- burden_county.sf %>% arrange(desc(n_pairs_overlapping)) %>% 
+  filter(n_pairs_overlapping >=1)
+
+ggplot(burden_county.sf)+geom_sf(aes(fill = n_pairs_overlapping))+
+  scale_fill_viridis_c()
+
+ggplot(burden_county.sf)+geom_sf(aes(fill = burden_overlapping))+
+  scale_fill_viridis_c()
+
+# get the overlaps between sugar maple and other species:
+
+plot.overlapping <- function(species){
+
+  overlapping.pair <- pair_overlap_long %>% 
+    filter(Spp1 %in% species | Spp2 %in% species) %>%
+    mutate(pair = paste0(Spp1, " x ", Spp2)) %>% 
+    st_as_sf() 
+  
+  overlapping.pair|>
+    ggplot()+geom_sf(aes(fill = integer.overlap))+
+    facet_wrap(~pair, drop = TRUE)+scale_fill_viridis_c()
+  
+  # overlapping.pair %>% group_by(STATEFP, COUNTYFP, STATE_NAME, CONAME, geometry) %>%
+  #   summarise(n_pairs_overlapping = sum(integer.overlap, na.rm =TRUE)) %>% st_as_sf()|>
+  #   ggplot()+geom_sf(aes(fill = n_pairs_overlapping))+
+  #  scale_fill_viridis_c()
+  
+  # overlapping.pair %>% as.data.frame()%>% filter(integer.overlap == 1) %>% 
+  #   group_by(STATEFP, COUNTYFP, STATE_NAME, CONAME, geometry) %>% 
+  #   summarise(n_high_species = sum(integer.overlap, na.rm =TRUE), 
+  #             high_species = str_c(unique(unlist(across(c(Spp1, Spp2)))), collapse = ", ")) %>% 
+  #   ungroup()%>%
+  #   arrange(desc(n_high_species)) %>% select(STATE_NAME, CONAME, n_high_species, high_species)|>
+  #   gt()
+
+}
+
+# oaks: 
+plot.overlapping(species = "white oak")
+plot.overlapping(species = "chestnut oak")
+plot.overlapping(species = "northern red oak")
+
+# maples:
+plot.overlapping(species = "sugar maple")
+plot.overlapping(species = "red maple")
+
+# eastern hemlock
+plot.overlapping(species = "eastern hemlock")
+plot.overlapping(species = "black cherry") # over laps with red maple & beech: half wing geometer (r maple, )
+
+plot.overlapping(species = "paper birch") 
+
+plot.overlapping(species = "white ash") 
+
+# alternative approach: id the common species for each pest and see which counties these have high mortality in
+
+
+pair_overlap_long %>% filter(Spp2 %in% "red maple") %>%
+  st_as_sf() |>
+  ggplot()+geom_sf(aes(fill = integer.overlap))+
+  facet_wrap(~Spp1)
+
+
+pair_overlap_long %>% filter(Spp1 %in% "chestnut oak") %>%
+  st_as_sf() |>
+  ggplot()+geom_sf(aes(fill = integer.overlap))+
+  facet_wrap(~Spp2)
+
+pair_overlap_long %>% filter(Spp1 %in% "chestnut oak") %>%
+  st_as_sf() |>
+  ggplot()+geom_sf(aes(fill = integer.overlap))+
+  facet_wrap(~Spp2)
+
 #species.data.all |>
 spp.map.pmort <- ggplot() +
   geom_sf(data = species.data.all, aes(fill = mortality.rate),color = "black", lwd = 0.1, show.legend = TRUE) +
@@ -2233,27 +2779,7 @@ ggplot(data = county.pmort.sf %>% filter(Species %in% "eastern hemlock")
   geom_sf(aes(fill = volfac_county_pmort), color = NA)+scale_fill_viridis_c()+
   facet_wrap(~Species)
 
-ggplot(data = county.vofac.sf)+
-  geom_sf(aes(fill = `balsam fir`), color = NA)+scale_fill_viridis_c()
 
-ggplot(data = county.nplots.sf)+
-  geom_sf(aes(fill = `balsam fir`), color = NA)+scale_fill_viridis_c()
-
-
-ggplot(data = county.ntree.sf  )+
-  geom_sf(aes(fill = `balsam fir`), color = NA)+scale_fill_viridis_c()
-
-ggplot(data = county.ntree.sf  )+
-  geom_sf(aes(fill = `northern white-cedar`), color = NA)+scale_fill_viridis_c()
-
-
-
-
-ggplot(data = county.annual.mort )+
-  geom_sf(aes(fill = weight_plt_prob), color = NA)+facet_wrap(~Species)+scale_fill_viridis_c()
-
-ggplot(data = county.annual.mort )+
-  geom_sf(aes(fill = weight_plot_volfac_prob), color = NA)+facet_wrap(~Species)+scale_fill_viridis_c()
 
 
 
@@ -3398,6 +3924,8 @@ model.no <- 6
 mod.data <- readRDS(paste0(input.folder, "all_SPCD_model_",model.no,".RDS"))
 ncovar <- length(colnames(mod.data$xM))
 
+
+
 full.model <- data.frame(Covariates = colnames(mod.data$xM), 
                          id = 1:length(colnames(mod.data$xM)))
 
@@ -4081,6 +4609,398 @@ species.scaling <- train.data %>% select(Species, SPCD, Ndep_Diff_per_yr.median,
   )%>%
   select(Species, SPCD, Covariate, Val.mean, Val.sd, Clean_Name, Units)
 
+
+#--------------------------------------------------------------------------------
+# generate marginal predictions for specific sizes by species (diameter marking thresholds)
+#--------------------------------------------------------------------------------
+size.raw.scaling <- train.data %>% select(Species, SPCD, DIA.median, DIA.sd) %>% distinct()%>%
+  mutate(Covariate = "DIA_scaled", 
+         Clean_Name = "Diameter",
+         Units = "Inches")%>% 
+  rename("Val.mean" = "DIA.median",
+         "Val.sd" = "DIA.sd")
+
+# get the posterior samples of betas and alphas:
+alpha.fit <- readRDS(paste0(input.folder, "samples/alpha.spp_model_", model.no, "_5000samples.rds"))
+alpha_df <- as_draws_df(alpha.fit) 
+
+
+
+# get all the covariates using posterior package
+betas.df <- readRDS(paste0(input.folder, "samples/u_betas_model_", model.no, "_5000samples.rds"))
+betas.quant <- betas.df %>% summarise_draws(median, ~quantile(., probs = c(0.025, 0.975))) %>%
+  rename(`ci.lo` = "2.5%", `ci.hi` = "97.5%") %>%
+  mutate(remper.cor = 0.5)
+# relabel u_betas to meaningful species ids names
+betas.quant$spp <- rep(1:17, ncovar)
+betas.quant$cov <- rep(1:ncovar, each = 17)
+
+
+covariate_names <- c(colnames(mod.data$xM))  # Replace with your covariate names
+betas.quant$Covariate <- rep(covariate_names, each = 17)
+betas.quant$Species <- rep(nspp[1:17,]$COMMON, ncovar)
+
+
+nspp <- data.frame(SPCD = c(316, 318, 833, 832, 261, 531, 802, 129, 762,  12, 541,  97, 621, 400, 371, 241, 375))
+nspp$Species <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$GENUS, FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$SPECIES)
+# link up to the species table:
+nspp$COMMON <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$COMMON
+
+spp.table <- data.frame(SPCD.id = nspp[1:17,]$SPCD, 
+                        spp = 1:17, 
+                        COMMON = nspp[1:17,]$COMMON)
+
+
+# this function predicts posterior samples of main effects (only does single main effects):
+posterior.predict.single <- function(SPCD.id, Beta.var, raw.value, raw.scaling = size.raw.scaling){
+      
+      
+      i <- spp.table[which(spp.table$SPCD.id %in% SPCD.id),]$spp
+     
+      scaled.value <- raw.scaling %>% 
+        filter(Covariate %in% Beta.var) %>%
+        filter(SPCD %in% SPCD.id)%>%
+        mutate(scaled.value = (raw.value - Val.mean)/Val.sd)
+      
+      
+      beta.species.names <- betas.quant %>% filter(spp %in% i) %>% select(variable)
+      # select only the betas and intercepts for the species of interest:
+      beta <- subset_draws(betas.df, variable = beta.species.names$variable) %>% select(-.chain, -.iteration, -.draw) 
+      beta_0 <- data.frame(subset_draws(alpha_df, variable = paste0("alpha_SPP[",i,"]"))) %>% select(-.chain, -.iteration, -.draw)  # Intercept
+      # read in the species data and covariates to get the min and max and get ranges
+      mod.data <-
+        readRDS (
+          paste0(
+            input.folder,
+            "all_SPCD_model_",
+            model.no,
+            ".RDS"
+          )
+        )
+      
+      
+      
+      covariate_names <- c(colnames(mod.data$xM))  
+      # set up a matrxi of zeros with the covariate ranges
+      covariate_ranges_df <- data.frame(names = covariate_names, 
+                                        medians = 0) %>%
+                                    mutate(medians = ifelse(names %in% Beta.var, scaled.value$scaled.value, 0))
+                                        
+      covariate_matrix <- covariate_matrix <- matrix(covariate_ranges_df$medians, 
+                                                     nrow = length(raw.value), 
+                                                     ncol = length(covariate_names), 
+                                                     byrow = TRUE)
+      # set up a function calculate probabilities
+      inv_logit_fxn <- function(x) {
+        1 / (1 + exp(-x))
+      }
+      # probabilities <- list()
+      
+        linear_predictor <- beta_0[,1] + rowSums( as.matrix(beta)%*% covariate_matrix[1,] )
+        probabilities <-  as.vector(inv_logit_fxn(linear_predictor))
+    
+      
+      # output the simple survival probabilities:
+posterior.pred.out <- data.frame(psurv = probabilities, 
+                                 iter = 1:length(probabilities),
+                                 SPCD = SPCD.id, 
+                                 COMMON = spp.table[which(spp.table$SPCD.id %in% SPCD.id),]$COMMON,
+                                 Covariate = Beta.var, 
+                                 Raw = raw.value, 
+                                 scaled = scaled.value$scaled.value)
+return(posterior.pred.out)
+}
+
+
+# for each species, thresholds, get the posterior samples:
+species.econ.maturity <- data.frame(COMMON = 
+                      # those with 16-18 inches
+                    c(rep(c("red maple",
+                           "American beech",
+                       "sugar maple", 
+                      
+                       "yellow birch",
+                       
+                       "northern red oak", 
+                       
+                       "white ash"), each = 2 
+), "paper birch", "paper birch", 
+"red spruce", "red spruce",
+"eastern hemlock", "eastern hemlock",
+
+# those with 18-24 inch maturation for long-lived hardwoods
+c( "sugar maple", 
+      
+      "yellow birch",
+      
+      "northern red oak", 
+      
+      
+      "white ash"), 
+
+# balsam fir and red spruce maturation ages from silvics manaul:
+# balsam fir: 12-18in, red spruce = 12-24 in
+# balsam fir economic maturity from 12-14 inches
+ "balsam fir", "balsam fir", "balsam fir",
+
+# pulpwood merchantable: 5inch
+ "balsam fir",
+ "red spruce" ,
+
+# maple tapping ranges:
+"sugar maple", "sugar maple", "sugar maple", 
+"red maple", "red maple","red maple"
+), 
+           Diameter.val = c(rep(c(16, 18), times = 6), c(12,14), c(12,16), c(18,24), rep(24, 4), c(12, 14, 18), c(5,5), 
+                            rep(c(10, 17, 25), 2)), 
+           Diameter.type = c(rep(c("low", "high"), times = 9), rep("high-high", 4), c("low", "high", "high-high"), c("pulp", "pulp"), 
+                             rep(c("single tap", "single tap high", "two taps"),2))
+) %>% left_join(.,spp.table)
+
+
+post.samp.dias <- list()
+for(k in 1:length(species.econ.maturity$COMMON)){
+  post.samp.dias[[k]] <- posterior.predict.single(SPCD.id = species.econ.maturity[k,]$SPCD.id, 
+                           Beta.var = "DIA_scaled", 
+                           raw.value = species.econ.maturity[k,]$Diameter.val)
+}
+
+post.samp.dias.df <- do.call(rbind, post.samp.dias) %>% 
+  group_by(SPCD, COMMON, Raw) %>% summarise(pmort_10 = median(1-psurv^10), 
+                                    pmort_10.lo = quantile(1-psurv^10, 0.05), 
+                                    pmort_10.hi = quantile(1-psurv^10, 0.95))%>% 
+  rename("Diameter.val" = "Raw")%>%
+  left_join(.,species.econ.maturity)
+
+ggplot(data = post.samp.dias.df, aes(x = Diameter.val, y = pmort_10, fill = COMMON))+
+  geom_bar(stat = "identity")+
+  geom_errorbar(data = post.samp.dias.df, aes(x = Diameter.val, ymin = pmort_10.lo, ymax = pmort_10.hi))+
+  facet_wrap(~COMMON, scales = "free_y")+
+  species_fill
+
+
+# just do it for the any or moderate ranges:
+ranges.spp <- species.econ.maturity %>% filter(Diameter.type %in% c("low", "high"))%>%
+  mutate(Diameter.val.cm = round(Diameter.val*2.54, digits = 1)) %>%
+  select(COMMON, Diameter.type, Diameter.val.cm)%>% 
+  group_by(COMMON) %>% 
+  spread(Diameter.type, Diameter.val.cm) %>%
+  mutate(Range = paste0("(", low,"cm - ", high, " cm)"))%>%
+  select(COMMON, Range)
+
+post.samp.dias.df%>% select(COMMON, SPCD, Diameter.type, pmort_10) %>%
+  group_by(COMMON, SPCD) %>% spread(Diameter.type, pmort_10) %>%
+  mutate(delta.low.high = high - low, 
+         pct.delta.low.high = ((high - low)/low)*100, 
+         pct.detla.low.high.high = ((`high-high` - low)/low)*100) %>% 
+  select(COMMON, SPCD, low, high, pct.delta.low.high) %>%
+  left_join(., ranges.spp)%>%
+  rename("Species" = "COMMON", 
+         "% change (high-low)"= "pct.delta.low.high", 
+         "Diameter Range" = "Range") %>% 
+  arrange(desc(`% change (high-low)`))
+
+post.samp.dias.df%>% select(COMMON, SPCD, Diameter.type, pmort_10) %>%
+  group_by(COMMON, SPCD) %>% filter(COMMON %in% c("balsam fir", "red spruce"))#%>% 
+  #filter(Diameter.type %in% "pulp")
+
+post.samp.dias.df%>% select(COMMON, SPCD, Diameter.type, pmort_10) %>%
+  group_by(COMMON, SPCD) %>% filter(COMMON %in% c("sugar maple", "red maple"))
+
+
+post.samp.dias.df.longevity <- do.call(rbind, post.samp.dias) %>% 
+  group_by(SPCD, COMMON, Raw) %>% 
+  mutate(pmort_annual = 1-psurv) %>% summarise(pmort_1 = median(pmort_annual), 
+                                            longevity = median(1/pmort_annual), 
+                                            longevity.lo =quantile(1/pmort_annual, 0.05),
+                                            longevity.hi = quantile(1/pmort_annual, 0.95),
+                                            pmort_10 = median(1-psurv^10), 
+                                            pmort_10.lo = quantile(1-psurv^10, 0.05), 
+                                            pmort_10.hi = quantile(1-psurv^10, 0.95))%>% 
+  rename("Diameter.val" = "Raw")%>%
+  left_join(.,species.econ.maturity)
+
+post.samp.dias.df.longevity %>% #select(COMMON, SPCD, Diameter.type, longevity, pmort_10) %>%
+  group_by(COMMON, SPCD) %>% filter(COMMON %in% c("sugar maple", "red maple"))
+
+
+post.samp.dias.df.longevity %>% select(COMMON, SPCD, Diameter.type, longevity, pmort_10) %>%
+  group_by(COMMON, SPCD) %>% filter(COMMON %in% c("balsam fir", "red spruce"))
+
+
+
+####################################################################################
+# marginal response to diameter differences:
+size_diff.raw.scaling <- train.data %>% select(Species, SPCD, DIA.DIFF.median, DIA.DIFF.sd) %>% distinct()%>%
+  mutate(Covariate = "DIA_DIFF_scaled", 
+         Clean_Name = "Diameter_DIFF",
+         Units = "Inches")%>% 
+  rename("Val.mean" = "DIA.DIFF.median",
+         "Val.sd" = "DIA.DIFF.sd")
+
+
+
+species.dia.diff.medians <- train.data %>% left_join(., size_diff.raw.scaling) %>% 
+  group_by(M, Species, SPCD, remper) %>% 
+  mutate(avg.growth.in = DIA_DIFF/remper) %>% 
+  ungroup()%>%
+  group_by(M, SPCD, Species)%>%
+  summarise(avg.growth.cm = mean(avg.growth.in)*2.54,
+            mean.dia.diff.cm = mean(DIA_DIFF)*2.54, 
+            mean.dia.scaled = mean(DIA_DIFF_scaled),
+            #calc.mean.dia.scaled = mean((DIA_DIFF-DIA.DIFF.median)/DIA.DIFF.sd),
+            DIA.DIFF.median = mean(DIA.DIFF.median), 
+            DIA.DIFF.sd  = mean(DIA.DIFF.sd),
+            remper = mean(remper)) %>%
+  mutate(mean.dia.in = (mean.dia.scaled*DIA.DIFF.sd) + DIA.DIFF.median) %>%
+  mutate(mean.dia.cm = mean.dia.in*2.54) %>%
+  rename(
+    "SPCD.id" = "SPCD"
+  )%>%
+  left_join(., spp.table)
+
+spp.table
+
+train.data %>% 
+  group_by(M, Species, SPCD, remper) %>% 
+  mutate(avg.growth.in = DIA_DIFF/remper) %>% 
+  ungroup()%>%
+  group_by(M)%>%
+  summarise(avg.growth.cm = mean(avg.growth.in)*2.54,
+            mean.dia.diff.cm = mean(DIA_DIFF)*2.54, 
+            mean(remper))
+
+# specific predictions for diameter differences
+
+
+post.samp.diadiffs <- list()
+for(k in 1:length(species.dia.diff.medians$COMMON)){
+  post.samp.diadiffs[[k]] <- posterior.predict.single(SPCD.id = species.dia.diff.medians[k,]$SPCD.id,
+                                                  Beta.var = "DIA_DIFF_scaled",
+                                                  raw.value = species.dia.diff.medians[k,]$mean.dia.in, 
+                                                  raw.scaling = size_diff.raw.scaling)
+}
+
+post.samp.diadifs.df <- do.call(rbind, post.samp.diadiffs) %>%
+  group_by(SPCD, COMMON, Raw) %>% summarise(pmort_1 = median(1-psurv),
+                                            pmort_1.lo = quantile(1-psurv, 0.05),
+                                            pmort_1.hi = quantile(1-psurv, 0.95),
+                                            
+                                            pmort_10 = median(1-psurv^10),
+                                            pmort_10.lo = quantile(1-psurv^10, 0.05),
+                                            pmort_10.hi = quantile(1-psurv^10, 0.95))%>%
+  rename("mean.dia.in" = "Raw")%>%
+  left_join(.,species.dia.diff.medians)
+
+
+# for raw diameter diferences
+
+# 
+ggplot(data = post.samp.diadifs.df, aes(x = mean.dia.in, y = pmort_10, fill = COMMON))+
+  geom_bar(stat = "identity")+
+  geom_errorbar(data = post.samp.diadifs.df, aes(x = mean.dia.in, ymin = pmort_10.lo, ymax = pmort_10.hi))+
+  facet_wrap(~COMMON)+
+  species_fill
+
+ggplot(data = post.samp.diadifs.df, aes(x = mean.dia.in*2.54, y = pmort_1, color = COMMON))+
+  geom_point()+
+  geom_errorbar(data = post.samp.diadifs.df, aes(x = mean.dia.in*2.54, ymin = pmort_1.lo, ymax = pmort_1.hi))+
+  species_color
+
+ggplot(data = post.samp.diadifs.df, aes(x = mean.dia.in*2.54, y = pmort_10, color = COMMON))+
+  geom_point()+
+  geom_errorbar(data = post.samp.diadifs.df, aes(x = mean.dia.in*2.54, ymin = pmort_10.lo, ymax = pmort_10.hi))+
+  species_color
+
+marginal_response_df_unscaled %>% 
+  filter(Clean_Name %in% "Diameter")%>%
+  mutate(Raw.value.cm = Raw.value*2.54)%>%
+  filter(Species %in% c("sugar maple", "northern red oak", "white ash", "yellow birch"))|>
+  ggplot()+geom_line(aes(x = Raw.value.cm, y = 1-(mean)^10, color = Species))+
+  geom_ribbon(aes(x = Raw.value.cm, ymin = 1-(ci.lo)^10, ymax = 1-(ci.hi)^10, fill = Species), alpha = 0.1, color = NA)+
+  theme_bw()+species_color+species_fill+
+  geom_vline(aes(xintercept  = (16*2.54)))+
+  geom_vline(aes(xintercept = (18*2.54)))+
+  geom_vline(aes(xintercept = (24*2.54)))
+
+# low end of diameter thresholds for these species
+
+# find the closest diameter target value for each species:
+
+
+
+marginal_response_df_unscaled %>% 
+  filter(Clean_Name %in% "Diameter")%>%
+  mutate(Raw.value.cm = Raw.value*2.54)%>%
+  filter(Species %in% c("sugar maple", "northern red oak", "white ash", "yellow birch"))%>%
+  filter(Raw.value >= 16 & Raw.value < 17)%>%
+  mutate(mort_10_yr.med = 1-(mean)^10, 
+         mort_10yr.ci.lo = 1-(ci.lo)^10, 
+         mort_10yr.ci.hi = 1-(ci.hi)^10)
+
+species.name <- "sugar maple"
+target.Diameter.in <- 16
+get_est_mort_target <- function(species.name, target.Diameter.in){
+  marginal_response_df_unscaled %>% 
+    filter(Clean_Name %in% "Diameter")%>%
+    mutate(Raw.value.cm = Raw.value*2.54)%>%
+    filter(Species %in% species.name)%>%
+    group_by(Species)%>%
+    filter(abs(Raw.value - target.Diameter.in) == min(abs(Raw.value - target.Diameter.in)))%>%
+    mutate(mort_10_yr.med = 1-(mean)^10, 
+           mort_10yr.ci.lo = 1-(ci.lo)^10, 
+           mort_10yr.ci.hi = 1-(ci.hi)^10)%>%
+      mutate(Target.diam = target.Diameter.in)
+}
+
+D.16 <- get_est_mort_target(species.name = c( "sugar maple", 
+                                      "yellow birch",
+                                      "white ash",
+                                      "northern red oak",
+                                      "red maple",
+                                     "American beech", 
+                                     "red spruce"), 
+                    target.Diameter.in = 16)
+
+D.18 <- get_est_mort_target(species.name = c( "sugar maple", 
+                                              "yellow birch",
+                                              "white ash",
+                                              "northern red oak",
+                                              "red maple",
+                                              "American beech", 
+                                              "eastern hemlock"), 
+                            target.Diameter.in = 18)
+
+D.24 <- get_est_mort_target(species.name = c( "sugar maple", 
+                                              "yellow birch",
+                                              "white ash",
+                                              "northern red oak",
+                                              "eastern hemlock"), 
+                            target.Diameter.in = 24)
+
+D.12 <- get_est_mort_target(species.name = c( "paper birch", "red spruce"), 
+                            target.Diameter.in = 12)
+D.14 <- get_est_mort_target(species.name = c( "paper birch"), 
+                            target.Diameter.in = 14)
+
+
+# combine all of these together:
+D.threshold.pmort = rbind(D.12, D.14, D.16, D.18, D.24)
+
+D.threshold.pmort|>
+  ggplot()+geom_bar(aes(x = Target.diam, y = mort_10_yr.med), stat = "identity")+
+  geom_errorbar(aes(x = Target.diam, ymin = mort_10yr.ci.lo, ymax = mort_10yr.ci.hi), width = 0.1)+
+  facet_wrap(~Species, scales = "free_y")
+
+marginal_response_df_unscaled %>% 
+  filter(Clean_Name %in% "Diameter")%>%
+  mutate(Raw.value.cm = Raw.value*2.54)%>%
+  filter(Species %in% c("sugar maple", "northern red oak", "white ash", "yellow birch"))%>%
+  filter(Raw.value >= 24 & Raw.value < 25)%>%
+  mutate(mort_10_yr.med = 1-(mean)^10, 
+         mort_10yr.ci.lo = 1-(ci.lo)^10, 
+         mort_10yr.ci.hi = 1-(ci.hi)^10)
+
 # covariates scaled across space:
 plot.medians <- readRDS("data/plot.medians_SPCD_all.rds")
 plot.scaled <- plot.medians %>% select(damage.median, damage.sd) %>% 
@@ -4123,7 +5043,7 @@ combined.scaled.main <- rbind(plot.scaled, species.scaling)
 marginal_response_df_unscaled <- marginal_response_df %>% left_join(., combined.scaled.main)%>%
   mutate(Raw.value = ifelse(!is.na(Val.mean), (Value*Val.sd) + Val.mean, Value))
 
-
+# marginal_response_df_unscaled
 #Ndep X dia_diff
 #p1.value   p2.value p2.rank             covariate     Pred.1          Pred.2
 #1  -1.12091712  0.1224049 
