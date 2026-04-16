@@ -7,6 +7,7 @@ library(FIESTA)
 library(sfdep)
 library(sf)
 library(spdep)
+library(gt)
 
 output.dir <- output.folder <- "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
 
@@ -202,6 +203,77 @@ TREE.remeas %>% filter(!is.na(dbhold))%>%
     fmt = ~ fmt_number(., use_seps = FALSE,decimals = 0)
   )|>
   gtsave(filename = paste0(output.dir, "images/tables/Ntrees_in_analysis_5in_by_status_.png"),vwidth = 1500, vheight = 1000)
+
+# Table S4: covariate predictor variables explored in GLM models
+
+tribble(
+  ~Class, ~Covariate, ~Definition, ~Source, ~Scaling,  ~Included,
+  "Size-Related", "DIA_DIFF", "Diameter difference betwen remeasurement", "Periodic NFI",  "by species","included",
+  "Size-Related", "Diameter", "Inital tree diameter at breast height", "Periodic NFI", "by species","included",
+ 
+  "Site Conditions", "slope", "slope of plot", "Periodic NFI", "by species","included",
+  "Site Conditions","aspect", "aspect of plot", "Periodic NFI", "by species","included",
+  "Site Conditions","elev", "Elevation",  "PRISM", "all plots","included",
+  "Site Conditions","SI",        "Site Index",  "Periodic NFI", "by species","excluded",
+  "Site Conditions","PHYSIO", "Physiographic class of plot", "Periodic NFI", "none","excluded",
+  
+  "Climate Normals","MAP", "Annual Precipitation Normal",  "PRISM", "all plots","included",
+  "Climate Normals", "MATmax", "Annual Maximum Temperature Normal", "PRISM", "all plots","included",
+  "Climate Normals","MATmin", "Annual Minimum Temperature Normal",  "PRISM", "all plots","excluded",
+  "Climate Anomalies","MAPanom", "Annual Precipitation anomaly over the remeasurement period",  "PRISM", "by species","included",
+  "Climate Anomalies","MATmaxanom", "Maximum temperature anomaly over the remeasurement period",  "PRISM", "all plots","included",
+  "Climate Anomalies","MATminanom", "Minimum temperature anomaly over the remeasurement period",  "PRISM", "all plots","excluded",
+  "Pollution","Ndep", "Nitrogen Deposition change over the remeasurement period",  "all plots","TREND-Nitrogen data","included",
+  
+  "Neighborhood Characteristics","damage", "Percent of trees with damage or mortality agent listed on the plot", "Periodic NFI - derived", "by species","included",
+  "Neighborhood Characteristics","BAL", "Basal Area Larger Than (tree-level)", "Periodic NFI - derived", "by species","included",
+  "Neighborhood Characteristics","BA", "Basal Area (Plot)", "Periodic NFI - derived", "by species","included",
+  "Neighborhood Characteristics","RD", "Relative Density of plot", "Periodic NFI - derived", "by species","excluded",
+  
+  
+  "Neighborhood Characteristics","SPCD.BA", "Basal area of focal species on plot", "Periodic NFI - derived", "by species","excluded",
+  "Neighborhood Characteristics","non_SPCD.BA", "Basal area of non-focal species on plot", "Periodic NFI - derived", "by species","excluded",
+  "Neighborhood Characteristics","prop.focal.BA", "Porportion basal area on plot made up by focal species", "Periodic NFI - derived", "by species","excluded"
+)%>%
+  group_by(Class)|>
+  gt()%>%
+  tab_style(
+    style = cell_text(weight = "bold", color = "black"),
+    locations = cells_row_groups()
+  ) %>%tab_style(
+    style = cell_fill(color = "lightgrey"),
+    locations = cells_row_groups()
+   ) %>%
+  # 
+  # # 5. Additional Styling
+  opt_stylize(style = 6, color = 'gray') %>%
+   tab_options(
+     row_group.padding = px(5)
+   )|>gtsave(filename = paste0(output.dir, "images/tables/Covariates_considered_in_analysis.png"),vwidth = 1500)
+
+# Table S5: GLM models fit:
+read.csv("SPCD_glm_output/GLM_reduced_table.csv") %>%
+  rename("Model Number" = "Model.Number", 
+         "Model Type" = "Model.Type")|>
+  gt()%>%
+  tab_style(
+    style = cell_fill(color = "#00BFC4"),
+    locations = cells_body(rows = c(1:14)) # Colors 2nd, 4th, and 6th rows
+  )%>%
+  tab_style(
+    style = cell_fill(color = "#7CAE00"),
+    locations = cells_body(rows = c(15:27)) # Colors 2nd, 4th, and 6th rows
+  )%>%
+  tab_style(
+    style = cell_fill(color = "#F8766D"),
+    locations = cells_body(rows = c(28:39)) # Colors 2nd, 4th, and 6th rows
+  ) %>%
+  tab_options(
+    table_body.vlines.color  = "white",
+    column_labels.border.top.color = "black",
+    column_labels.border.bottom.color = "black",
+    table_body.border.bottom.color = "black"
+  )|>gtsave(filename = paste0(output.dir, "images/tables/GLM_model_building.png"),vheight = 1500)
 
 
 
