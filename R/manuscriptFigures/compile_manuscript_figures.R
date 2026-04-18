@@ -111,7 +111,7 @@ TREE.remeas$SCIENTIFIC_NAME <- ref_species[match(TREE.remeas$SPCD, ref_species$S
 
 # Table S1: Count of trees above and below a diameter threshold
 TREE.remeas %>% filter(!is.na(dbhold))%>%
-  filter(SPCD %in% nspp[1:17,]$spp) %>%
+  filter(SPCD %in% spp.table[1:17,]$SPCD.id) %>%
   filter(remper > 0 & 
   !is.na(remper)) %>% 
   
@@ -140,7 +140,7 @@ TREE.remeas %>% filter(!is.na(dbhold))%>%
 # Table S2: Count of trees > 12.7 cm by Status code and 
 # diameter change between measurements (DIAMETER_diff).
 TREE.remeas %>% filter(!is.na(dbhold))%>%
-  filter(SPCD %in% nspp[1:17,]$spp) %>%
+  filter(SPCD %in% spp.table[1:17,]$SPCD.id) %>%
   filter(remper > 0 & 
            !is.na(remper)) %>% 
   filter(dbhold >=5 & dbhcur >=5) %>%
@@ -169,7 +169,7 @@ TREE.remeas %>% filter(!is.na(dbhold))%>%
 
 # Table S3: Total number of trees used in this analysis
 TREE.remeas %>% filter(!is.na(dbhold))%>%
-  filter(SPCD %in% nspp[1:17,]$spp) %>%
+  filter(SPCD %in% spp.table[1:17,]$SPCD.id) %>%
   filter(remper > 0 & 
            !is.na(remper)) %>% 
   filter(dbhold >=5 & dbhcur >=5) %>%
@@ -275,6 +275,62 @@ read.csv("SPCD_glm_output/GLM_reduced_table.csv") %>%
     table_body.border.bottom.color = "black"
   )|>gtsave(filename = paste0(output.dir, "images/tables/GLM_model_building.png"),vheight = 1500)
 
+# get the predicted mortality rates across the region, weighted by the number of trees each tree represented:
+
+
+pMort_region_weighted_samples_list <- list() 
+
+for(i in 17:1){
+  pMort_region_weighted_samples_list[[i]] <- readRDS(
+
+  paste0(
+    output.folder,
+    "SPCD_stanoutput_joint_v3/predicted_mort/Mort_weighted_region_mortality_samps_",nspp[i,]$SPCD,".rds"
+  )
+
+)
+}
+
+pMort_region_df <- do.call(rbind, pMort_region_weighted_samples_list) %>%
+  group_by(SPCD) %>% 
+  summarise(pmort_1year.med = median(pmort_co_1year, na.rm =TRUE), 
+            pmort_1year.ci.lo = quantile(pmort_co_1year, 0.1, na.rm =TRUE),
+            pmort_1year.hi.lo = quantile(pmort_co_1year, 0.9, na.rm =TRUE), 
+            
+            pmort_10year.med = median(pmort_co_10year, na.rm =TRUE), 
+            pmort_10year.ci.lo = quantile(pmort_co_10year, 0.1, na.rm =TRUE),
+            pmort_10year.hi.lo = quantile(pmort_co_10year, 0.9, na.rm =TRUE))
+pMort_region_df$COMMON <- ref_species[match(pMort_region_df$SPCD, ref_species$SPCD),]$COMMON_NAME
+
+pMort_region_df|>
+  ggplot()+geom_point(aes(x = COMMON, y = pmort_1year.med*100))+
+  geom_errorbar(aes(x = COMMON, ymin = pmort_1year.ci.lo*100, ymax = pmort_1year.hi.lo*100))
+
+
+# get the county-level estimates with uncertainty
+pMort_county_weighted_averages_list <- list() 
+
+for(i in 17:1){
+  pMort_county_weighted_averages_list[[i]] <- readRDS(
+    
+    paste0(
+      output.folder,
+      "SPCD_stanoutput_joint_v3/predicted_mort/Mort_weighted_county_mortality_averages_",nspp[i,]$SPCD,".rds"
+    )
+    
+  )
+}
+
+pMort_county_df <- do.call(rbind, pMort_county_weighted_averages_list) %>%
+  group_by(SPCD) 
+pMort_county_df$COMMON <- ref_species[match(pMort_county_df$SPCD, ref_species$SPCD),]$COMMON_NAME
+
+pMort_county_df %>% filter(COMMON %in% "American beech")|>
+  ggplot()+geom_point(aes(x = county, y = pmort_weighted_1*100, color = COMMON))+
+  geom_errorbar(aes(x = county, ymin = pmort_weighted_1.ci.lo*100, ymax = pmort_weighted_1.ci.hi*100,color = COMMON))+
+  facet_wrap(~state)+species_color
+
+pMort_county_df %>% filter(COMMON %in% "American beech")%>% group_by(state) %>% summarise(median(pmort_weighted_1)*100)
 
 
 TREE.remeas %>% filter(Species %in% "northern white-cedar") %>% 
@@ -835,9 +891,16 @@ mort.maps.species <- plot_grid(
 ggsave(paste0(output.dir, "images/map_mortality_rate_state.png"), plot = mort.maps.species, 
        width = 12, height = 13, units = "in")
 
-
+#########################################################################################
 # observed vs predicted mortality rates -----
 # predictions compiled in R/hierarchicalModel/posterior_prediction_joint_longchains.R
+spp.tree.pred.surv.annual_Srep <- do.call(rbind, lapply(list.files(path = paste0(
+  output.folder,
+  "SPCD_stanoutput_joint_v3/predicted_mort/Mort_10yr/"), 
+  pattern = "tree_10yr_mortality_", 
+  full.names = TRUE), 
+  readRDS))
+
 # read in predicted mortality by species by tree:
 spp.tree.pred.mort <- do.call(rbind, lapply(list.files(path = paste0(
   output.folder,
@@ -855,18 +918,29 @@ spp.tree.pred.mort.volfac <- left_join(spp.tree.pred.mort,
                                        all.remeas %>% select(state, county, pltnum, cndtn, point, tree, SPCD,status, dbhcur, dbhold, volfac, LAT_FIADB, LONG_FIADB)%>% distinct())
 
 # map up probability of survival for each species
-ggplot(data = spp.tree.pred.mort.volfac %>% filter(COMMON %in% c("balsam fir", "red spruce", "northern white-cedar")), aes(x =LONG_FIADB,  y = LAT_FIADB, color = 1-p10year.med))+
+ggplot(data = spp.tree.pred.mort.volfac %>% filter(COMMON %in% c("balsam fir", "red spruce", "northern white-cedar")), aes(x =LONG_FIADB,  y = LAT_FIADB, color = p10year.med))+
   geom_point(size = 0.1)+facet_wrap(~COMMON)+ scale_color_viridis_c(option = "magma")
 
 # get the median 1 year mortality rate for each tree:
-spp.tree.mort.probs <- spp.tree.pred.mort.volfac %>% mutate(p1year.survival = p10year.med^(1/10))%>%
-  mutate(p1year.mortality = 1- p1year.survival) %>%
+spp.tree.mort.probs <- spp.tree.pred.mort.volfac %>% 
+  mutate(p1year.survival = p10year.med^(1/10), 
+         p1year.survival.lo = p10year.ci.lo^(1/10), 
+         p1year.survival.hi = p10year.ci.hi^(1/10))%>%
+  mutate(p1year.mortality = 1 - p1year.survival,
+         p1year.mortality.lo = 1 - p1year.survival.lo, 
+         p1year.mortality.hi = 1 - p1year.survival.hi) %>%
   rename("Species"="COMMON")
 
 
+spp.tree.mort.probs %>% 
+  group_by(Species) %>% 
+  summarise(median((p1year.mortality))*100, 
+            median(p1year.mortality.lo*100), 
+            median(p1year.mortality.hi*100))
+
 ggplot(data = spp.tree.mort.probs)+
-  geom_density(aes(y = p1year.mortality*100, fill = Species))+
-  facet_wrap(~Species, scales = "free")+species_fill
+  geom_boxplot(aes(x = Species, y = p1year.mortality*100, fill = Species))+
+  species_fill
 
 # get plot-level averages of species rate estimates for the modelled rate:--
 avg.plt.mort.annual <- spp.tree.mort.probs %>% group_by(state, PLOT.ID, county, Species, SPCD, LONG_FIADB, LAT_FIADB)%>%
@@ -959,7 +1033,7 @@ n_plots_species_county_spread <- weight.annual.prob %>%
   spread(Species, plots_with_spcd, fill = 0)
 
 county.volfac.sf <-  counties %>% full_join(.,volfac_county_prob_spread) %>% 
-  reshape2::melt(., id.vars = id.var.counties)%>%rename("volfac_county_pmort" = "value", 
+  reshape2::melt(., id.vars = id.var.counties)%>%rename("pmort_weighted_1" = "value", 
                                                         "Species" = "variable")
 county.ntree.sf <-  counties %>% full_join(.,n_county_prob_spread) %>% 
   reshape2::melt(., id.vars = id.var.counties) %>%rename("n_county_pmort" = "value", 
@@ -968,14 +1042,38 @@ county.nplots.sf <-  counties %>% full_join(.,n_plots_species_county_spread) %>%
   reshape2::melt(., id.vars = id.var.counties) %>%rename("n_plots" = "value", 
                                                          "Species" = "variable")
 
+
+pMort_county_df <- pMort_county_df %>%mutate(COUNTYFP = str_pad(county, side = "left",3, pad = 0), 
+                          STATEFP = str_pad(state, side = "left", 2, pad = 0))
+pMort_county_df$Species <- ref_species[match(pMort_county_df$SPCD, ref_species$SPCD),]$COMMON_NAME
+
 county.pmort.sf <- left_join(county.nplots.sf, county.ntree.sf) %>% 
-  left_join(., county.volfac.sf)%>% st_as_sf()
+  left_join(., county.volfac.sf) %>% left_join(.,pMort_county_df)%>% st_as_sf()
 
 
 
 ggplot(data = county.pmort.sf %>% mutate(ncount_pmort_plot_3 = ifelse(n_plots > 3, n_county_pmort, NA)))+
   geom_sf(aes(fill = ncount_pmort_plot_3), color = NA)+scale_fill_viridis_c()+
   facet_wrap(~Species)
+
+ggplot(data = county.pmort.sf %>% mutate(ncount_pmort_plot_3 = ifelse(n_plots > 3, n_county_pmort, NA)))+
+  geom_sf(aes(fill = ncount_pmort_plot_3), color = NA)+scale_fill_viridis_c()+
+  facet_wrap(~Species)
+
+# get summaries of county-level mortality probability overall, by species:
+county.pmort.sf %>% as.data.frame(.) %>% group_by(Species) %>%
+  filter(n_plots >= 3) |>
+  ggplot()+geom_boxplot(aes(x = Species, y = pmort_weighted_1*100))
+
+county.pmort.sf %>% as.data.frame(.) %>% group_by(Species) %>%
+  filter(n_plots >= 3) |>
+  ggplot()+geom_boxplot(aes(x = Species, y = pmort_weighted_1*100))
+
+county.pmort.sf %>% as.data.frame(.) %>% group_by(Species) %>%
+   filter(n_plots >= 3) %>%
+  summarise(pmort_1_median = median(pmort_weighted_1*100, na.rm =TRUE), 
+            pmort_1_sd = sd(pmort_weighted_1*100, na.rm =TRUE), 
+            pmort_1_high = max(pmort_weighted_1*100, na.rm =TRUE))
 
 species.name <- "yellow birch"
 hotspot.variable <- "n_county_pmort"
@@ -1181,18 +1279,18 @@ hotspots.n_pmort <- lapply(unique(county.pmort.sf$Species),
 # do the same with the volfac estimates:
 hotspots.volfac_pmort <- lapply(unique(county.pmort.sf$Species), 
                            function(x){get.spatial.hotspots(species.name = x, 
-                                                            hotspot.variable = "volfac_county_pmort")})
+                                                            hotspot.variable = "pmort_weighted_1")})
 
 hotspots.volfac_pmort.df <- do.call(rbind, hotspots.volfac_pmort)
 # get summaries of gedis ord gi* and % of counties with > 1% probability mortality per year:
 
 
 n_counties_over_1pct <-  county.pmort.sf %>% as.data.frame()%>% 
-  filter(!is.na(volfac_county_pmort))%>%
+  filter(!is.na(pmort_weighted_1))%>%
   group_by(Species, COUNTYFP, STATEFP, STATE_NAME, geometry)%>%
   
-  mutate(over.0.75.pct = ifelse(volfac_county_pmort*100 >= 0.75,  1, 0), 
-         over.1.pct = ifelse(volfac_county_pmort*100 >= 1,  1, 0), 
+  mutate(over.0.75.pct = ifelse(pmort_weighted_1*100 >= 0.75,  1, 0), 
+         over.1.pct = ifelse(pmort_weighted_1*100 >= 1,  1, 0), 
          nplot.over.5 = ifelse(n_plots >= 2, 1, 0))%>%
   ungroup()%>%
   group_by(Species)%>%
@@ -1367,11 +1465,18 @@ county.mort.gi.remper <- county.pmort.sf %>% as.data.frame()%>%
   mutate(midpoint.remper = T2.avg.year -((T2.avg.year - T1.avg.year)/2))
 county.mort.gi.remper$Species <- factor(county.mort.gi.remper$Species, levels = disturb.species.order)
 
+ggplot(data = county.mort.gi.remper, aes(x = midpoint.remper, y = pmort_weighted_1*100, color = Species)) +
+  geom_pointrange(aes(ymin = pmort_weighted_1.ci.lo*100,ymax = pmort_weighted_1.ci.hi*100), 
+                  position=position_jitter(width=0.5), 
+                  linetype='dotted', alpha = 0.5) +
+  stat_smooth(aes(x = midpoint.remper, y = pmort_weighted_1*100), method = "lm", color = "black")+
+  theme_bw()+facet_wrap(~Species, scales = "free_y")
 
-
-temporal_pmort <- ggplot(data = county.mort.gi.remper)+
-  geom_jitter(aes(x = midpoint.remper, y = volfac_county_pmort*100, color = Species), alpha = 0.75)+
-  stat_smooth(aes(x = midpoint.remper, y = volfac_county_pmort*100, color = Species), method = "lm")+
+temporal_pmort <- ggplot(data = county.mort.gi.remper, aes(x = midpoint.remper, y = pmort_weighted_1*100, color = Species)) +
+  geom_pointrange(aes(ymin = pmort_weighted_1.ci.lo*100,ymax = pmort_weighted_1.ci.hi*100), 
+                  position=position_jitter(width=0.5), 
+                  linetype='dotted', alpha = 0.5) +
+  stat_smooth(aes(x = midpoint.remper, y = pmort_weighted_1*100), method = "lm", color = "black")+
   facet_wrap(~Species, scales = "free_y")+
   species_color+
   scale_x_continuous(breaks = seq(min(county.mort.gi.remper$midpoint.remper, na.rm =TRUE), 
@@ -1413,13 +1518,13 @@ ggsave(filename = paste0(output.dir, "images/posterior_county_Gi_star_over_time.
 
 # plot mortality rates over time and space
 ggplot(data = county.mort.gi.remper %>% filter(!is.na(gi)))+
-  geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = volfac_county_pmort*100, color = Species), alpha = 0.75)+
+  geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = pmort_weighted_1*100, color = Species), alpha = 0.75)+
   species_color+
   facet_wrap(~STATE_NAME, scales = "free_y")+
   theme_bw()
 
 ggplot(data = county.mort.gi.remper %>% filter(!is.na(gi)))+
-  geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = volfac_county_pmort*100, color = STATE_NAME), alpha = 0.75)+
+  geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = pmort_weighted_1*100, color = STATE_NAME), alpha = 0.75)+
   scale_color_viridis_d()+
   facet_wrap(~Species, scales = "free_y")+
   theme_bw()
@@ -1427,7 +1532,7 @@ ggplot(data = county.mort.gi.remper %>% filter(!is.na(gi)))+
 # spongy moth susceptible species:
 
 ggplot(data = county.mort.gi.remper %>% filter(!is.na(gi)) %>% filter(Species %in% c("chestnut oak", "white oak","northern red oak", "yellow birch", "paper birch")))+
-  geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = volfac_county_pmort*100, color = Species), alpha = 0.75)+
+  geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = pmort_weighted_1*100, color = Species), alpha = 0.75)+
   #scale_color_viridis_d()+
   species_color+
   facet_wrap(~STATE_NAME, scales = "free_y")+
@@ -1436,7 +1541,7 @@ ggplot(data = county.mort.gi.remper %>% filter(!is.na(gi)) %>% filter(Species %i
 # spruce budworm susceptible species:
 
 ggplot(data = county.mort.gi.remper %>% filter(!is.na(gi)) %>% filter(Species %in% c("balsam fir",  "red spruce")))+
-  geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = volfac_county_pmort*100, color = Species), alpha = 0.75)+
+  geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = pmort_weighted_1*100, color = Species), alpha = 0.75)+
   #scale_color_viridis_d()+
   species_color+
   facet_wrap(~STATE_NAME, scales = "free_y")+
@@ -1445,7 +1550,7 @@ ggplot(data = county.mort.gi.remper %>% filter(!is.na(gi)) %>% filter(Species %i
 # beech, hemlock, eastern white pine:
 ggplot(data = county.mort.gi.remper %>% filter(!is.na(gi)) %>% 
          filter(Species %in% c("American beech",  "eastern hemlock", "eastern white pine")))+
-  geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = volfac_county_pmort*100, color = Species), alpha = 0.75)+
+  geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = pmort_weighted_1*100, color = Species), alpha = 0.75)+
   #scale_color_viridis_d()+
   species_color+
   facet_wrap(~STATE_NAME)+
@@ -1453,7 +1558,7 @@ ggplot(data = county.mort.gi.remper %>% filter(!is.na(gi)) %>%
 
 ggplot(data = county.mort.gi.remper %>% filter(!is.na(gi)) %>% 
          filter(Species %in% c("eastern hemlock")))+
-  geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = volfac_county_pmort*100, color = Species), alpha = 0.75)+
+  geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = pmort_weighted_1*100, color = Species), alpha = 0.75)+
   #scale_color_viridis_d()+
   species_color+
   facet_wrap(~STATE_NAME)+
@@ -1474,14 +1579,15 @@ hemlock.co.mort.gi <- county.mort.gi.remper %>%
   mutate(no.years.present.T1 = T1.avg.year - YEARFIRST, 
          no.years.present.T2 = T2.avg.year - YEARFIRST)%>%
   mutate(present = ifelse(no.years.present.T2 >=-1, "present", 
-                          ifelse(is.na(no.years.present.T2) & !is.na(volfac_county_pmort), "not present", "not present")))
+                          ifelse(is.na(no.years.present.T2) & !is.na(pmort_weighted_1), "not present", "not present")))
   
 
 hemlock.co.mort.gi
 
 
-mort.hwa.detect <- ggplot(hemlock.co.mort.gi, aes(x = no.years.present.T2, y = volfac_county_pmort*100 ))+
-  geom_point()+theme_bw()+ylab("County average Hemlock \n mortality probability (%/year)")+
+mort.hwa.detect <- ggplot(data = hemlock.co.mort.gi, aes(x = no.years.present.T2, y = pmort_weighted_1*100 ))+
+  geom_point()+
+  geom_errorbar(aes(x = no.years.present.T2, ymin = pmort_weighted_1.ci.lo*100, ymax = pmort_weighted_1.ci.hi*100), width = 0.1, alpha = 0.5)+theme_bw()+ylab("County average Hemlock \n mortality probability (%/year)")+
   xlab("# of years of detected HWA")
 
 ggsave(filename = paste0(output.dir, "images/HWA_county_pmort_Hemlock.png"), 
@@ -1489,13 +1595,20 @@ ggsave(filename = paste0(output.dir, "images/HWA_county_pmort_Hemlock.png"),
        height = 4, width = 6, units = "in", 
        dpi = 350)
 
+hemlock.co.mort.gi %>% mutate(present.in.periodic = ifelse( is.na(no.years.present.T2) | no.years.present.T2 < 0, "not present", "present"))%>%
+  group_by(present.in.periodic) %>%
+  summarise(median_annual_mort = median(pmort_weighted_1*100, na.rm =TRUE), 
+            sd_annual_mort = sd(pmort_weighted_1*100, na.rm =TRUE))
 
+hemlock.co.mort.gi %>% mutate(present.in.periodic = ifelse( is.na(no.years.present.T2) | no.years.present.T2 < 0, "not present", "present"))%>%
+  group_by(present.in.periodic)|>
+  ggplot()+geom_boxplot(aes(x = present.in.periodic, y = pmort_weighted_1*100))
 
 ggplot(hemlock.co.mort.gi, aes(x = no.years.present.T2, y = gi, color = classification ))+
   geom_point()+
   scale_color_brewer(palette = "Spectral")
 
-ggplot(hemlock.co.mort.gi, aes(x = gi, y = volfac_county_pmort,color = classification  ))+
+ggplot(hemlock.co.mort.gi, aes(x = gi, y = pmort_weighted_1,color = classification  ))+
   geom_point()+
   scale_color_brewer(palette = "Spectral")
 
@@ -1504,7 +1617,7 @@ ggplot(data = st_as_sf(hemlock.co.mort.gi))+
   geom_sf(aes(fill = YEARFIRSTC))
 
 volfac.map.hemlock <- ggplot(data = st_as_sf(hemlock.co.mort.gi))+
-  geom_sf(aes(fill = volfac_county_pmort*100))+
+  geom_sf(aes(fill = pmort_weighted_1*100))+
   scale_fill_distiller(palette = "Spectral")
 
 years.present.HWA <- ggplot(data = st_as_sf(hemlock.co.mort.gi))+
@@ -1512,11 +1625,11 @@ years.present.HWA <- ggplot(data = st_as_sf(hemlock.co.mort.gi))+
   scale_fill_distiller(palette = "Spectral")
 
 
-hemlock.co.mort.gi[is.na(hemlock.co.mort.gi$present) & !is.na(hemlock.co.mort.gi$volfac_county_pmort),]$present <- "not present"
+hemlock.co.mort.gi[is.na(hemlock.co.mort.gi$present) & !is.na(hemlock.co.mort.gi$pmort_weighted_1),]$present <- "not present"
 
 HWA.presence.mort.barplot <- ggplot(data = hemlock.co.mort.gi %>% filter(!is.na(present)))+
-  geom_jitter(aes(x = present, y = volfac_county_pmort*100, color = Species))+
-  geom_boxplot(aes(x = present, y = volfac_county_pmort*100, color = Species), fill = NA, outliers = FALSE)+
+  geom_jitter(aes(x = present, y = pmort_weighted_1*100, color = Species))+
+  geom_boxplot(aes(x = present, y = pmort_weighted_1*100, color = Species), fill = NA, outliers = FALSE)+
   species_color+
   ylab("Eastern Hemlock\nmortality probability (%/year)")+
   xlab("Hemlock wooley adelgid presence in county")+
@@ -1528,7 +1641,7 @@ HWA.presence.mort.barplot <- ggplot(data = hemlock.co.mort.gi %>% filter(!is.na(
 present.hwa <- hemlock.co.mort.gi %>% filter(present %in% "present")
 notpresent.hwa <- hemlock.co.mort.gi %>% filter(present %in% "not present")
 
-t.test(notpresent.hwa$volfac_county_pmort, present.hwa$volfac_county_pmort)
+t.test(notpresent.hwa$pmort_weighted_1, present.hwa$pmort_weighted_1)
 
 ggsave(filename = paste0(output.dir, "images/box_plot_HWA_county_pmort_Hemlock.png"), 
        plot = HWA.presence.mort.barplot  , 
@@ -1536,21 +1649,21 @@ ggsave(filename = paste0(output.dir, "images/box_plot_HWA_county_pmort_Hemlock.p
        dpi = 350)
 
 
-hemlock.co.mort.gi %>% filter(volfac_county_pmort*100 >= 0.5) %>% 
+hemlock.co.mort.gi %>% filter(pmort_weighted_1*100 >= 0.5) %>% 
   group_by(present)%>% summarise(n())
 
-hemlock.co.mort.gi %>% filter(!is.na(volfac_county_pmort*100)) %>% 
+hemlock.co.mort.gi %>% filter(!is.na(pmort_weighted_1*100)) %>% 
   group_by(present)%>% summarise(n())
 
 
 
 ggplot()+
   geom_sf(data = st_as_sf(hemlock.co.mort.gi), aes(fill = present))+
-  geom_sf(data = st_as_sf(hemlock.co.mort.gi) %>% filter(volfac_county_pmort*100 >= 0.45), aes(fill = present), color =  "red")+
+  geom_sf(data = st_as_sf(hemlock.co.mort.gi) %>% filter(pmort_weighted_1*100 >= 0.45), aes(fill = present), color =  "red")+
   scale_fill_brewer(palette = "Spectral")+theme_minimal()
 
 
-hemlock.co.mort.gi %>% filter(is.na(present)& !is.na(volfac_county_pmort))
+hemlock.co.mort.gi %>% filter(is.na(present)& !is.na(pmort_weighted_1))
 
 maps.hwa.hemlock <- cowplot::plot_grid(volfac.map.hemlock, years.present.HWA, align = "hv")
 ggsave(filename = paste0(output.dir, "images/map_HWA_county_pmort_Hemlock.png"), 
@@ -1574,8 +1687,11 @@ beech.co.mort.gi <- county.mort.gi.remper %>%
 
 
 
-mort.bbd.detect <- ggplot(beech.co.mort.gi, aes(x = no.years.present.T2, y = volfac_county_pmort*100 ))+
-  geom_point()+theme_bw()+ylab("County average Beech \n mortality probability (%/year)")+
+mort.bbd.detect <- ggplot(beech.co.mort.gi, aes(x = no.years.present.T2, y = pmort_weighted_1*100 ))+
+  geom_point()+
+  geom_point()+
+  geom_errorbar(aes(x = no.years.present.T2, ymin = pmort_weighted_1.ci.lo*100, ymax = pmort_weighted_1.ci.hi*100), width = 0.1, alpha = 0.5)+
+  theme_bw()+ylab("County average Beech \n mortality probability (%/year)")+
   xlab("# of years of detected Beech Scale")
 
 ggsave(filename = paste0(output.dir, "images/BBD_county_pmort_Beech.png"), 
@@ -1589,18 +1705,18 @@ ggplot(beech.co.mort.gi, aes(x = no.years.present.T2, y = gi, color = classifica
   geom_point()+
   scale_color_brewer(palette = "Spectral")
 
-ggplot(beech.co.mort.gi, aes(x = gi, y = volfac_county_pmort,color = classification  ))+
+ggplot(beech.co.mort.gi, aes(x = gi, y = pmort_weighted_1,color = classification  ))+
   geom_point()+
   scale_color_brewer(palette = "Spectral")
 
-ggplot(beech.co.mort.gi, aes(x = no.years.present.T2, y = volfac_county_pmort,color = STATE_NAME  ))+
+ggplot(beech.co.mort.gi, aes(x = no.years.present.T2, y = pmort_weighted_1,color = STATE_NAME  ))+
   geom_point()+
   scale_color_brewer(palette = "Spectral")
 
 
 
 volfac.map.beech <- ggplot(data = st_as_sf(beech.co.mort.gi))+
-  geom_sf(aes(fill = volfac_county_pmort*100))+
+  geom_sf(aes(fill = pmort_weighted_1*100))+
   scale_fill_distiller(palette = "Spectral")
 
 years.present.BBD <- ggplot(data = st_as_sf(beech.co.mort.gi))+
@@ -1671,7 +1787,7 @@ for(i in 1:length(unique(spongy$State))){
   
   
   state.mort <- ggplot(data =state.species.spongy )+
-    geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = volfac_county_pmort*100, color = Species), alpha = 0.75)+
+    geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = pmort_weighted_1*100, color = Species), alpha = 0.75)+
     #scale_color_viridis_d()+
     species_color+
     facet_wrap(~STATE_NAME, scales = "free_y")+
@@ -1738,7 +1854,7 @@ county.mort.gi.remper %>% left_join(.,co.remper.years) %>%
   filter(Species %in% c("chestnut oak", "northern red oak", "white oak", "yellow birch", "paper birch"))%>%
   ungroup()%>%
   mutate(CO.LAND.FRACTION = ALAND/Total_state_ALAND)%>%
-  filter(!is.na(volfac_county_pmort) & volfac_county_pmort*100 >= 1)%>%
+  filter(!is.na(pmort_weighted_1) & pmort_weighted_1*100 >= 1)%>%
   group_by(STATE_NAME, Species)%>%
   summarise(total.land.fraction = sum(CO.LAND.FRACTION, na.rm =TRUE), 
             maxstate.defoliation = mean(max.defoliation))|>
@@ -1756,8 +1872,8 @@ county.mort.gi.remper %>% left_join(.,co.remper.years) %>%
                         "red spruce"))%>%
   ungroup()%>%
   mutate(CO.LAND.FRACTION = ALAND/Total_state_ALAND)%>%
-  filter(!is.na(volfac_county_pmort))|>
-  ggplot()+geom_boxplot(aes(x = number.spongy.peaks, y = volfac_county_pmort, group = number.spongy.peaks))+
+  filter(!is.na(pmort_weighted_1))|>
+  ggplot()+geom_boxplot(aes(x = number.spongy.peaks, y = pmort_weighted_1*100, group = number.spongy.peaks))+
   facet_wrap(~Species, scales = "free_y")
 
 # from table 2 here:https://www.fs.usda.gov/foresthealth/docs/fidls/FIDL-162-SpongyMoth.pdf
@@ -1788,27 +1904,27 @@ co.with.spongy <- county.mort.gi.remper %>% left_join(.,co.remper.years) %>%
   
   ungroup()%>%
   mutate(CO.LAND.FRACTION = ALAND/Total_state_ALAND)%>%
-  filter(!is.na(volfac_county_pmort)) %>%
+  filter(!is.na(pmort_weighted_1)) %>%
   mutate(CO.withpeak = ifelse(number.spongy.peaks == 0, "no spongy defoliation peaks", "1+ defoliation peaks"))
 
 co.with.spongy %>% filter(Spongy.susceptibility %in% "Susceptible")|> 
   ggplot()+
-  geom_boxplot(aes(x = CO.withpeak, y = volfac_county_pmort*100, group = CO.withpeak, fill = Species))+
+  geom_boxplot(aes(x = CO.withpeak, y = pmort_weighted_1*100, group = CO.withpeak, fill = Species))+
   facet_wrap(~ Species, scales = "free_y")
 
 co.with.spongy %>% filter(Spongy.susceptibility %in% "Resistant")|> 
   ggplot()+
-  geom_boxplot(aes(x = CO.withpeak, y = volfac_county_pmort*100, group = CO.withpeak, fill = Species))+
+  geom_boxplot(aes(x = CO.withpeak, y = pmort_weighted_1*100, group = CO.withpeak, fill = Species))+
   facet_wrap(~ Species, scales = "free_y")
 
 co.with.spongy %>% filter(Spongy.susceptibility %in% "Immune")|> 
   ggplot()+
-  geom_boxplot(aes(x = CO.withpeak, y = volfac_county_pmort*100, group = CO.withpeak, fill = Species))+
+  geom_boxplot(aes(x = CO.withpeak, y = pmort_weighted_1*100, group = CO.withpeak, fill = Species))+
   facet_wrap(~ Species, scales = "free_y")
 
 
 co.with.spongy %>% group_by(Species, CO.withpeak)%>%
-  summarise(median.volfac = median(volfac_county_pmort*100))
+  summarise(median.volfac = median(pmort_weighted_1*100))
 
 
 
@@ -1817,7 +1933,7 @@ defoliation.peaks <- co.with.spongy %>% filter(CO.withpeak %in% "1+ defoliation 
 no.defoliation.peaks <- co.with.spongy %>% filter(!CO.withpeak %in% "1+ defoliation peaks")
 
 # differences in mortality:
-t.test(defoliation.peaks$volfac_county_pmort, no.defoliation.peaks$volfac_county_pmort)
+t.test(defoliation.peaks$pmort_weighted_1*100, no.defoliation.peaks$pmort_weighted_1*100)
 
 # filter for counties with at least one primary host detected:
 spongy.host.present <- co.with.spongy %>% filter(Spongy.susceptibility %in% "Susceptible") %>% 
@@ -1837,7 +1953,7 @@ t.test.spongy <- function(Species.name){
                spongy.host.presence %in% "Yes")%>%
       filter(Species %in% Species.name)
     
-    t.test(defoliation.peaks.chestnut$volfac_county_pmort, no.defoliation.peaks.chestnut$volfac_county_pmort)
+    t.test(defoliation.peaks.chestnut$pmort_weighted_1*100, no.defoliation.peaks.chestnut$pmort_weighted_1*100)
 }
 
 # for the susceptible species:
@@ -1872,8 +1988,8 @@ no.defoliation.peaks.white <- co.with.spongy %>%
   filter(!CO.withpeak %in% "1+ defoliation peaks")%>%
   filter(Species %in% "white oak")
 
-t.test(defoliation.peaks.white$volfac_county_pmort, 
-       no.defoliation.peaks.white$volfac_county_pmort)
+t.test(defoliation.peaks.white$pmort_weighted_1, 
+       no.defoliation.peaks.white$pmort_weighted_1)
 # white oaks significantly different
 
 # differences in mortality for yellow birch:
@@ -1884,15 +2000,15 @@ no.defoliation.peaks.yb <- co.with.spongy %>%
   filter(!CO.withpeak %in% "1+ defoliation peaks")%>%
   filter(Species %in% "yellow birch")
 
-t.test(defoliation.peaks.yb$volfac_county_pmort, 
-       no.defoliation.peaks.yb$volfac_county_pmort)
+t.test(defoliation.peaks.yb$pmort_weighted_1, 
+       no.defoliation.peaks.yb$pmort_weighted_1)
 # yellow birch not significantly different
 
 
 spongy.mort.num.peaks.plt <- co.with.spongy %>% mutate(spongy.peaks = ifelse(CO.withpeak %in% "1+ defoliation peaks", "1+", 
                                                 ifelse(CO.withpeak %in% "no spongy defoliation peaks", "none", NA)))|> ggplot()+
-  geom_jitter(aes(x =spongy.peaks, y = volfac_county_pmort*100, group = spongy.peaks, color = Species))+
-  geom_boxplot(aes(x =spongy.peaks, y = volfac_county_pmort*100, group = spongy.peaks), fill = NA, outliers = FALSE)+
+  geom_jitter(aes(x =spongy.peaks, y = pmort_weighted_1*100, group = spongy.peaks, color = Species))+
+  geom_boxplot(aes(x =spongy.peaks, y = pmort_weighted_1*100, group = spongy.peaks), fill = NA, outliers = FALSE)+
   facet_wrap(~Species, scales = "free_y", ncol = 5)+
   species_color+
   ylab("Mortality probability (%/year)")+
@@ -1905,11 +2021,11 @@ ggsave(filename = paste0(output.dir, "images/county_pMort_spongy_species_num_pea
        height = 4, width = 9, units = "in", 
        dpi = 350)
 
-spongysusceptible.mort.num.peaks.plt <- co.with.spongy %>% filter(Species %in% c("chestnut oak", "white oak", "northern red oak", "yellow birch", "paper birch"))%>%
+spongysusceptible.mort.num.peaks.plt <- co.with.spongy %>% filter(!is.na(CO.withpeak)) %>% filter(Species %in% c("chestnut oak", "white oak", "northern red oak", "yellow birch", "paper birch"))%>%
   mutate(spongy.peaks = ifelse(CO.withpeak %in% "1+ defoliation peaks", "1+", 
                                                                              ifelse(CO.withpeak %in% "no spongy defoliation peaks", "none", NA)))|> ggplot()+
-  geom_jitter(aes(x =spongy.peaks, y = volfac_county_pmort*100, group = spongy.peaks, color = Species), alpha = 0.65)+
-  geom_boxplot(aes(x =spongy.peaks, y = volfac_county_pmort*100, group = spongy.peaks), fill = NA, outliers = FALSE)+
+  geom_jitter(aes(x =spongy.peaks, y = pmort_weighted_1*100, group = spongy.peaks, color = Species), alpha = 0.65)+
+  geom_boxplot(aes(x =spongy.peaks, y = pmort_weighted_1*100, group = spongy.peaks), fill = NA, outliers = FALSE)+
   facet_wrap(~Species, scales = "free_y", ncol = 5)+
   species_color+
   ylab("Mortality probability (%/year)")+
@@ -1926,7 +2042,7 @@ county.mort.gi.remper %>% left_join(.,co.remper.years) %>%
   filter(Species %in% c("chestnut oak", "northern red oak", "white oak", "yellow birch", "paper birch"))%>%
   ungroup()%>%
   mutate(CO.LAND.FRACTION = ALAND/Total_state_ALAND)%>%
-  filter(!is.na(volfac_county_pmort) & volfac_county_pmort*100 >= 1)%>%
+  filter(!is.na(pmort_weighted_1) & pmort_weighted_1*100 >= 1)%>%
   group_by(STATE_NAME, Species)%>%
   summarise(total.land.fraction = sum(CO.LAND.FRACTION, na.rm =TRUE), 
             maxstate.peaks = max(number.spongy.peaks))|>
@@ -1950,16 +2066,16 @@ county.mort.gi.remper %>% left_join(.,co.remper.years)%>%
 county.mort.gi.remper %>% left_join(.,co.remper.years)%>%
   filter(Species %in% c("chestnut oak"))%>%
   st_as_sf()|>
-  ggplot()+geom_sf(aes(fill =volfac_county_pmort*100))+
+  ggplot()+geom_sf(aes(fill =pmort_weighted_1*100))+
   scale_fill_distiller(palette = "Spectral")
 
 county.mort.gi.remper %>% left_join(.,co.remper.years)|>
-  ggplot()+geom_point(aes(y = volfac_county_pmort, x= max.defoliation))+
+  ggplot()+geom_point(aes(y = pmort_weighted_1, x= max.defoliation))+
   facet_wrap(~Species, scales = "free_y")
 
 
 county.mort.gi.remper %>% left_join(.,co.remper.years)|>
-  ggplot()+geom_point(aes(y = volfac_county_pmort, x= max.defoliation))+
+  ggplot()+geom_point(aes(y = pmort_weighted_1, x= max.defoliation))+
   facet_wrap(~Species, scales = "free_y")
 
 # get total land and convert to hectares
@@ -2039,7 +2155,7 @@ for(i in 1:length(unique(budworm$State))){
     
     
     state.mort <- ggplot(data =state.species.budworm )+
-      geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = volfac_county_pmort*100, color = Species), alpha = 0.75)+
+      geom_segment(aes(x = T1.avg.year, xend = T2.avg.year, y = pmort_weighted_1*100, color = Species), alpha = 0.75)+
       #scale_color_viridis_d()+
       species_color+
       facet_wrap(~STATE_NAME, scales = "free_y")+
@@ -2127,7 +2243,7 @@ county.mort.gi.remper %>% left_join(.,co.remper.years) %>%
   filter(Species %in% c("balsam fir", "red spruce", "eastern white pine", "eastern hemlock"))%>%
   ungroup()%>%
   mutate(CO.LAND.FRACTION = ALAND/Total_state_ALAND)%>%
-  filter(!is.na(volfac_county_pmort) & volfac_county_pmort*100 >= 0.7)%>%
+  filter(!is.na(pmort_weighted_1) & pmort_weighted_1*100 >= 0.7)%>%
   group_by(STATE_NAME, Species)%>%
   summarise(total.land.fraction = sum(CO.LAND.FRACTION, na.rm =TRUE), 
             maxstate.defoliation = mean(max.budworm.defoliation))|>
@@ -2141,23 +2257,23 @@ county.mort.gi.remper %>% left_join(.,co.remper.years) %>%
   filter(Species %in% c("balsam fir", "red spruce", "eastern white pine", "eastern hemlock"))%>%
   ungroup()%>%
   mutate(CO.LAND.FRACTION = ALAND/Total_state_ALAND)%>%
-  filter(!is.na(volfac_county_pmort))|>
-  ggplot()+geom_boxplot(aes(x = number.budworm.peaks + number.budworm.peaks.10.prior, y = volfac_county_pmort, group = number.spongy.peaks))+
+  filter(!is.na(pmort_weighted_1))|>
+  ggplot()+geom_boxplot(aes(x = number.budworm.peaks + number.budworm.peaks.10.prior, y = pmort_weighted_1, group = number.spongy.peaks))+
   facet_wrap(~Species, scales = "free_y")
 
 co.with.budworm <- county.mort.gi.remper %>% left_join(.,co.remper.years) %>% 
   filter(Species %in% c("balsam fir", "red spruce", "eastern white pine", "eastern hemlock"))%>%
   ungroup()%>%
   mutate(CO.LAND.FRACTION = ALAND/Total_state_ALAND)%>%
-  filter(!is.na(volfac_county_pmort)) %>%
+  filter(!is.na(pmort_weighted_1)) %>%
   mutate(CO.withpeak = ifelse(number.budworm.peaks == 0, "no budworm defoliation peaks", "1+ defoliation peaks"))
 
-co.with.budworm |> ggplot()+geom_boxplot(aes(x = CO.withpeak, y = volfac_county_pmort*100, group = CO.withpeak, fill = Species))+
+co.with.budworm |> ggplot()+geom_boxplot(aes(x = CO.withpeak, y = pmort_weighted_1*100, group = CO.withpeak, fill = Species))+
   facet_wrap(~Species, scales = "free_y")
 
 
 co.with.budworm %>% group_by(Species, CO.withpeak)%>%
-  summarise(median.volfac = median(volfac_county_pmort*100))
+  summarise(median.volfac = median(pmort_weighted_1*100))
 
 
 
@@ -2166,7 +2282,7 @@ defoliation.peaks <- co.with.budworm %>% filter(CO.withpeak %in% "1+ defoliation
 no.defoliation.peaks <- co.with.budworm %>% filter(!CO.withpeak %in% "1+ defoliation peaks")
 
 # differences in mortality:
-t.test(defoliation.peaks$volfac_county_pmort, no.defoliation.peaks$volfac_county_pmort)
+t.test(defoliation.peaks$pmort_weighted_1*100, no.defoliation.peaks$pmort_weighted_1*100)
 
 # differences in mortality for balsam fir:
 defoliation.peaks.balsam <- co.with.budworm %>% 
@@ -2176,8 +2292,8 @@ no.defoliation.peaks.balsam <- co.with.budworm %>%
   filter(!CO.withpeak %in% "1+ defoliation peaks")%>%
   filter(Species %in% "balsam fir")
 
-t.test(defoliation.peaks.balsam$volfac_county_pmort, 
-       no.defoliation.peaks.balsam$volfac_county_pmort)
+t.test(defoliation.peaks.balsam$pmort_weighted_1*100, 
+       no.defoliation.peaks.balsam$pmort_weighted_1*100)
 
 
 # differences in mortality for red spruce:
@@ -2188,8 +2304,8 @@ no.defoliation.peaks.redspruce <- co.with.budworm %>%
   filter(!CO.withpeak %in% "1+ defoliation peaks")%>%
   filter(Species %in% "red spruce")
 
-t.test(defoliation.peaks.redspruce$volfac_county_pmort, 
-       no.defoliation.peaks.redspruce$volfac_county_pmort)
+t.test(defoliation.peaks.redspruce$pmort_weighted_1, 
+       no.defoliation.peaks.redspruce$pmort_weighted_1)
 
 
 # differences in mortality for eastern white pine:
@@ -2200,8 +2316,8 @@ no.defoliation.peaks.wp <- co.with.budworm %>%
   filter(!CO.withpeak %in% "1+ defoliation peaks")%>%
   filter(Species %in% "eastern white pine")
 
-t.test(defoliation.peaks.wp$volfac_county_pmort, 
-       no.defoliation.peaks.wp$volfac_county_pmort)
+t.test(defoliation.peaks.wp$pmort_weighted_1, 
+       no.defoliation.peaks.wp$pmort_weighted_1)
 
 # differences in mortality for eastern white pine:
 defoliation.peaks.hemlock <- co.with.budworm %>% 
@@ -2211,8 +2327,8 @@ no.defoliation.peaks.hemlock <- co.with.budworm %>%
   filter(!CO.withpeak %in% "1+ defoliation peaks")%>%
   filter(Species %in% "eastern white pine")
 
-t.test(defoliation.peaks.hemlock$volfac_county_pmort, 
-       no.defoliation.peaks.hemlock$volfac_county_pmort)
+t.test(defoliation.peaks.hemlock$pmort_weighted_1*100, 
+       no.defoliation.peaks.hemlock$pmort_weighted_1*100)
 
 co.with.budworm %>% filter(Species %in% "balsam fir")%>%st_as_sf()|>
   ggplot()+geom_sf(aes(fill =  number.budworm.peaks + number.budworm.peaks.10.prior))
@@ -2227,8 +2343,8 @@ co.with.budworm$STATE_NAME <- factor(co.with.budworm$STATE_NAME, levels = state.
 remper.prior.peaks.volfac <- co.with.budworm %>%
   mutate(total.peak.budworm.defoliation = as.character(as.integer(number.budworm.peaks + number.budworm.peaks.10.prior)))|>
   ggplot()+
-  geom_jitter(aes(x = STATE_NAME, y = volfac_county_pmort*100, color = total.peak.budworm.defoliation))+
-  geom_boxplot(aes(x = STATE_NAME, y = volfac_county_pmort*100, color =total.peak.budworm.defoliation), fill = NA)+
+  geom_jitter(aes(x = STATE_NAME, y = pmort_weighted_1*100, color = total.peak.budworm.defoliation))+
+  geom_boxplot(aes(x = STATE_NAME, y = pmort_weighted_1*100, color =total.peak.budworm.defoliation), fill = NA)+
   scale_color_manual(values = c("4" = "#d7191c",
                                 
                                 "3" ="#fc8d59",
@@ -2250,8 +2366,8 @@ remper.peaks.volfac <- co.with.budworm %>%
          peak.budworm.defolation.remper = as.character(as.integer(number.budworm.peaks)), 
          peak.budworm.defoliation.prior = as.character(as.integer(number.budworm.peaks.10.prior)))|>
   ggplot()+
-  geom_jitter(aes(x = STATE_NAME, y = volfac_county_pmort*100, color = peak.budworm.defolation.remper))+
-  geom_boxplot(aes(x = STATE_NAME, y = volfac_county_pmort*100, color =peak.budworm.defolation.remper), fill = NA)+
+  geom_jitter(aes(x = STATE_NAME, y = pmort_weighted_1*100, color = peak.budworm.defolation.remper))+
+  geom_boxplot(aes(x = STATE_NAME, y = pmort_weighted_1*100, color =peak.budworm.defolation.remper), fill = NA)+
   scale_color_manual(values = c("4" = "#d7191c",
                                 
                                 "3" ="#fc8d59",
@@ -2273,8 +2389,8 @@ prior.peaks.volfac <- co.with.budworm %>%
          peak.budworm.defolation.remper = as.character(as.integer(number.budworm.peaks)), 
          peak.budworm.defoliation.prior = as.character(as.integer(number.budworm.peaks.10.prior)))|>
   ggplot()+
-  geom_jitter(aes(x = STATE_NAME, y = volfac_county_pmort*100, color = peak.budworm.defoliation.prior), size = 0.1)+
-  geom_boxplot(aes(x = STATE_NAME, y = volfac_county_pmort*100, color =peak.budworm.defoliation.prior), fill = NA)+
+  geom_jitter(aes(x = STATE_NAME, y = pmort_weighted_1*100, color = peak.budworm.defoliation.prior), size = 0.1)+
+  geom_boxplot(aes(x = STATE_NAME, y = pmort_weighted_1*100, color =peak.budworm.defoliation.prior), fill = NA)+
   scale_color_manual(values = c("4" = "#d7191c",
                                 
                                 "3" ="#fc8d59",
@@ -2299,8 +2415,8 @@ ggsave(filename = paste0(output.dir, "images/county_pMort_budworm_species_num_pe
 budworm.mort.num.peaks.plt <- co.with.budworm %>% 
   mutate(budworm.peaks = ifelse(CO.withpeak %in% "1+ defoliation peaks", "1+", 
                                 ifelse(CO.withpeak %in% "no budworm defoliation peaks", "none", NA)))|> ggplot()+
-  geom_jitter(aes(x =budworm.peaks, y = volfac_county_pmort*100, group = budworm.peaks, color = Species), alpha = 0.65)+
-  geom_boxplot(aes(x =budworm.peaks, y = volfac_county_pmort*100, group = budworm.peaks), fill = NA, outliers = FALSE)+
+  geom_jitter(aes(x =budworm.peaks, y = pmort_weighted_1*100, group = budworm.peaks, color = Species), alpha = 0.65)+
+  geom_boxplot(aes(x =budworm.peaks, y = pmort_weighted_1*100, group = budworm.peaks), fill = NA, outliers = FALSE)+
   facet_wrap(~Species, scales = "free_y", ncol = 5)+
   species_color+
   ylab("Mortality probability (%/year)")+
@@ -2322,8 +2438,8 @@ co.with.budworm %>%
   mutate(budworm.peaks = ifelse(CO.withpeak %in% "1+ defoliation peaks", "1+", 
                                 ifelse(CO.withpeak %in% "no budworm defoliation peaks", "none", NA)))|> 
   ggplot()+
-  geom_jitter(aes(x =STATE_NAME, y = volfac_county_pmort*100, group = Species, color = Species))+
-  geom_boxplot(aes(x =STATE_NAME, y = volfac_county_pmort*100, group = STATE_NAME), fill = NA, outliers = FALSE)+
+  geom_jitter(aes(x =STATE_NAME, y = pmort_weighted_1*100, group = Species, color = Species))+
+  geom_boxplot(aes(x =STATE_NAME, y = pmort_weighted_1*100, group = STATE_NAME), fill = NA, outliers = FALSE)+
   facet_wrap(~Species, scales = "free_y", ncol = 5)+
   species_color+
   ylab("Mortality probability (%/year)")+
@@ -2337,7 +2453,7 @@ co.with.budworm %>%
 # Is there spatial overlap across species on county pmort?--- 
 
 species.data.all <- county.pmort.sf %>% mutate(
-  cut.mort.rate = cut(volfac_county_pmort*100, breaks = c(0, 0.25, 0.5, 0.75, 1, 1.5, 2, 4, 100))
+  cut.mort.rate = cut(pmort_weighted_1*100, breaks = c(0, 0.25, 0.5, 0.75, 1, 1.5, 2, 4, 100))
 )
 cut.mort.values <- data.frame(
   cut.mort.rate = c("(0,0.25]", "(0.25,0.5]", "(0.5,0.75]", "(0.75,1]", "(1,1.5]", "(1.5,2]", "(2,4]", "(4,100]"), 
@@ -2377,15 +2493,15 @@ species.data.all$mortality.rate <- factor( species.data.all$mortality.rate, leve
 
 # if high mortality is >1% per year, sum up the # of counties with greater than that
 county.high.pmort.species <- species.data.all %>% as.data.frame()%>% 
-  filter(!is.na(volfac_county_pmort))%>%
+  filter(!is.na(pmort_weighted_1))%>%
   ungroup()%>%
   # calculate species mean pmort 
   group_by(Species)%>%
-  mutate(mean.pmort = mean(volfac_county_pmort, na.rm =TRUE), 
-         median.pmort = median(volfac_county_pmort, na.rm =TRUE), 
-         pmort.75 = quantile(volfac_county_pmort,0.75, na.rm =TRUE))%>%
+  mutate(mean.pmort = mean(pmort_weighted_1, na.rm =TRUE), 
+         median.pmort = median(pmort_weighted_1, na.rm =TRUE), 
+         pmort.75 = quantile(pmort_weighted_1,0.75, na.rm =TRUE))%>%
   ungroup()%>%
-  mutate(over.threshold = ifelse(volfac_county_pmort*100 >= pmort.75*100, 1, 0))%>%
+  mutate(over.threshold = ifelse(pmort_weighted_1*100 >= pmort.75*100, 1, 0))%>%
   ungroup()
 
 county.high.pmort.species  %>% 
@@ -2504,17 +2620,17 @@ county.high.pmort.species %>% group_by(Species)%>%
 
 
 species.ranked.percentiles <- species.data.all %>% as.data.frame()%>% 
-  filter(!is.na(volfac_county_pmort))%>%
+  filter(!is.na(pmort_weighted_1))%>%
   ungroup()%>%
   # calculate species mean pmort 
   group_by(Species) %>%
-  mutate(mean.mort = mean(volfac_county_pmort*100, na.rm =TRUE), 
-         sd.mort = sd(volfac_county_pmort*100, na.rm =TRUE))%>%
-  #mutate(mort.percentile = percent_rank(volfac_county_pmort, na.rm =TRUE))%>%
+  mutate(mean.mort = mean(pmort_weighted_1*100, na.rm =TRUE), 
+         sd.mort = sd(pmort_weighted_1*100, na.rm =TRUE))%>%
+  #mutate(mort.percentile = percent_rank(pmort_weighted_1, na.rm =TRUE))%>%
   ungroup()%>%
   group_by(STATEFP, STATE_NAME, COUNTYFP, CONAME, geometry, Species)%>%
-  mutate(standardized.pmort = ((volfac_county_pmort*100)-mean.mort)/sd.mort, 
-         log.pmort = log(volfac_county_pmort*100))%>%
+  mutate(standardized.pmort = ((pmort_weighted_1*100)-mean.mort)/sd.mort, 
+         log.pmort = log(pmort_weighted_1*100))%>%
   #View()
   ungroup()%>%
   dplyr::select(STATEFP, STATE_NAME, COUNTYFP, CONAME, geometry, Species, standardized.pmort)%>%
@@ -2848,7 +2964,7 @@ ggplot(data = county.pmort.sf %>% filter(Species %in% "eastern hemlock")%>%
 
 ggplot(data = county.pmort.sf %>% filter(Species %in% "eastern hemlock")
        %>% mutate(ncount_pmort_plot_3 = ifelse(n_plots > 5, n_county_pmort, 0)))+
-  geom_sf(aes(fill = volfac_county_pmort), color = NA)+scale_fill_viridis_c()+
+  geom_sf(aes(fill = pmort_weighted_1), color = NA)+scale_fill_viridis_c()+
   facet_wrap(~Species)
 
 

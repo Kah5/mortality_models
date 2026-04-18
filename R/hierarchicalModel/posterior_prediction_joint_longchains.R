@@ -353,12 +353,160 @@ saveRDS(
 ###############################################################
 # for each species, read in the in-sample and out-of-sample annual probability of mortality:
 # read in tree_remeas to get the volfac for each represented tree:
+TREE.remeas <- readRDS( "data/unfiltered_TREE.remeas.rds")
 
+all.remeas <- TREE.remeas %>%
+  # do the filtering section
+  filter( exprem > 0 & # if exprem == 0, these could be modeled plots?
+            dbhold >= 5 & # need an initial dbh greater than 5
+            ! remper == 0 & # if remper is listed as zero, filter out
+            DIA_DIFF >= 0 & # filter diameter differences >= 0
+            # !status == 3 & # keep the cut trees for this
+            SPCD %in% nspp[1:17,]$SPCD & # filter species in the top 17 of all species
+            !is.na(status) & # filter out trees with no status
+            !is.na(elev)) 
+
+i <- 14
+
+# just take the last 500 draws from each of 3 chains
+draws2keep <- c(2001:2500, 4501:5000, 7001:7500)
+
+for(i in 13:1){
+  
+cat("\n",paste0("estimating weighted county and region means for ", nspp[i,]$COMMON))
+  
+  # read in the in-sample and out of sample
+  pSannual_s <- readRDS(paste0(output.folder, "SPCD_stanoutput_joint_v3/samples/pSannual_spp_",i,".RDS"))[draws2keep,]%>%
+     reshape2::melt(.) %>% 
+    rename("tree.id"  = "Var2", 
+           "sample" = "Var1", 
+           "p1year" = "value")%>%
+    group_by(tree.id)%>%
+    mutate(spp = i) %>%
+    mutate(data.type = "in-sample")
+  
+  # read the out of sample data
+  pSannual_rep <- readRDS(paste0(output.folder, "SPCD_stanoutput_joint_v3/samples/pSannual_rep_spp_",i,".RDS"))[draws2keep,]%>%
+    reshape2::melt(.) %>% 
+    rename("tree.id"  = "Var2", 
+           "sample" = "Var1", 
+           "p1year" = "value")%>%
+    group_by(tree.id)%>%
+    mutate(spp = i) %>%
+    mutate(data.type = "in-sample")
+  
+  # get tree level volfac infromation
+  spp.state.id.is <- plot.data.train %>% filter(SPCD %in% spp.table[i,]$SPCD.id)%>%
+    mutate(tree.id = 1:length(county))%>%
+    dplyr::select(PLOT.ID, SPCD, tree.id, state, county, pltnum, cndtn, point, tree, cycle, dbhcur, dbhold, remper)%>%
+    mutate(data.type = "in-sample") %>% 
+    left_join(., all.remeas %>% dplyr::select(state, county, pltnum, point, tree, status, SPCD, dbhcur, dbhold, volfac) %>% distinct())
+  
+  spp.state.id.oos <- plot.data.test %>% filter(SPCD %in% spp.table[i,]$SPCD.id)%>%
+    mutate(tree.id = 1:length(county))%>%
+    dplyr::select(PLOT.ID, SPCD, tree.id, state, county, pltnum, cndtn, point, tree, cycle, dbhcur, dbhold, remper)%>%
+    mutate(data.type = "out-of-sample")%>% 
+    left_join(., all.remeas %>% dplyr::select(state, county, pltnum, point, tree, status, SPCD, dbhcur, dbhold, volfac) %>% distinct())
+  
+spp.state.ids.all  <- rbind(spp.state.id.is, spp.state.id.oos)
+  
+  # calculate county specific weights for all the trees
+weights.volfac <- spp.state.ids.all %>% group_by(state, county) %>%
+  mutate(total.volfac.spp.county = sum(volfac, na.rm =TRUE), 
+         ntrees = n())%>%
+  ungroup()%>%
+  group_by(PLOT.ID, tree.id, SPCD, state, county, pltnum, point, tree, data.type)%>%
+  mutate(weight_co_volfac = volfac/total.volfac.spp.county)%>%
+  dplyr::select(tree, PLOT.ID, tree.id, state, county, data.type, volfac, status, weight_co_volfac, total.volfac.spp.county,ntrees)
+  
+
+pannual_all <- rbind(pSannual_rep, pSannual_s) %>%
+  mutate(p_mort_1year = 1-p1year, 
+         p_surv_10year = p1year^10, 
+         p_mort_10year = 1-(p1year^10))%>% left_join(., weights.volfac) %>%
+  
+  # get weights based on volfac and counties
+  mutate(p_mort_1year_volfac = p_mort_1year*volfac, 
+         p_surv_10year_volfac = p_surv_10year*volfac, 
+         p_mort_10year_volfac = p_mort_10year*volfac)
+
+pMort_county_weighted_samples <- pannual_all %>% 
+  ungroup() %>% 
+  group_by(SPCD, sample, state, county) %>%
+  
+  # get the weighted average for each state-county-mcmc sample
+  summarise(pmort_co_1year = sum(p_mort_1year_volfac, na.rm =TRUE)/sum(volfac, na.rm =TRUE),
+            pmort_co_10year = sum(p_mort_10year_volfac, na.rm =TRUE)/sum(volfac, na.rm =TRUE)) #
+
+pMort_county_weighted <- pMort_county_weighted_samples %>% 
+  ungroup()%>%
+  group_by(SPCD, state, county)%>%
+  summarise(pmort_weighted_1 = median(pmort_co_1year, na.rm =TRUE), 
+            pmort_weighted_1.ci.lo = quantile(pmort_co_1year, 0.025, na.rm =TRUE), 
+            pmort_weighted_1.ci.hi = quantile(pmort_co_1year, 0.975, na.rm =TRUE), 
+            pmort_weighted_10 = median(pmort_co_10year, na.rm =TRUE), 
+            pmort_weighted_10.ci.lo = quantile(pmort_co_10year, 0.025, na.rm =TRUE), 
+            pmort_weighted_10.ci.hi = quantile(pmort_co_10year, 0.975, na.rm =TRUE))
+
+
+
+pMort_region_weighted_samples <- pannual_all %>% 
+  ungroup() %>% 
+  group_by(SPCD, sample) %>%
+  
+  # get the weighted average for each state-county-mcmc sample
+  summarise(pmort_co_1year = sum(p_mort_1year_volfac, na.rm =TRUE)/sum(volfac, na.rm =TRUE),
+            pmort_co_10year = sum(p_mort_10year_volfac, na.rm =TRUE)/sum(volfac, na.rm =TRUE)) #
+
+# save the samples weighted by volface of each species in the county
+saveRDS(
+  pMort_county_weighted_samples,
+  paste0(
+    output.folder,
+    "SPCD_stanoutput_joint_v3/predicted_mort/Mort_weighted_county_mortality_samps_",nspp[i,]$SPCD,".rds"
+  )
+)
+
+saveRDS(
+  pMort_county_weighted,
+  paste0(
+    output.folder,
+    "SPCD_stanoutput_joint_v3/predicted_mort/Mort_weighted_county_mortality_averages_",nspp[i,]$SPCD,".rds"
+  )
+)
+
+saveRDS(
+  pMort_region_weighted_samples,
+  paste0(
+    output.folder,
+    "SPCD_stanoutput_joint_v3/predicted_mort/Mort_weighted_region_mortality_samps_",nspp[i,]$SPCD,".rds"
+  )
+)
+
+rm(pMort_county_weighted, pMort_county_weighted_samples, pMort_region_weighted_samples, pSannual_s, pSannual_rep, pannual_all)
+
+}
+
+# do the summaries another way
 
 for(i in 17:1){
     
     # read in the in-sample and out of sample
     pSannual_s <- readRDS(paste0(output.folder, "SPCD_stanoutput_joint_v3/samples/pSannual_spp_",i,".RDS"))#%>%
+    
+   
+    
+    # get the tree annual survival probabilities:
+    pSannualyear_tree <- pSannual_s %>% reshape2::melt(.) %>% 
+      rename("tree.id"  = "Var2", 
+             "sample" = "Var1", 
+             "p1year" = "value")%>%
+      group_by(tree.id)%>%
+      summarise(p1year.med = median(p1year), 
+                p1year.ci.lo = quantile(p1year, 0.025), 
+                p1year.ci.hi = quantile(p1year, 0.975), 
+                p1year.sd = sd(p1year))%>%
+      mutate(spp = i) 
     
     # convert to 10 year survival probabilities:
     pS_10year <- pSannual_s^10
@@ -374,6 +522,7 @@ for(i in 17:1){
                 p10year.ci.hi = quantile(p10year, 0.975), 
                 p10year.sd = sd(p10year))%>%
       mutate(spp = i) %>%
+     # left_join(., pSannualyear_tree)%>%
       left_join(., spp.table) %>%
       group_by(tree.id)%>%
       # use pS_10median to get a survival for each tree over a ten year interval:
