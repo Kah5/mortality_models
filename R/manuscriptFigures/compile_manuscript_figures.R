@@ -333,6 +333,9 @@ pMort_county_df %>% filter(COMMON %in% "American beech")|>
 pMort_county_df %>% filter(COMMON %in% "American beech")%>% group_by(state) %>% summarise(median(pmort_weighted_1)*100)
 
 
+
+
+
 TREE.remeas %>% filter(Species %in% "northern white-cedar") %>% 
   group_by(status >= 2, stname, date, damage) %>%
   summarise(n()) %>% filter(stname %in% "ME" & date == 1995)
@@ -1033,7 +1036,7 @@ n_plots_species_county_spread <- weight.annual.prob %>%
   spread(Species, plots_with_spcd, fill = 0)
 
 county.volfac.sf <-  counties %>% full_join(.,volfac_county_prob_spread) %>% 
-  reshape2::melt(., id.vars = id.var.counties)%>%rename("pmort_weighted_1" = "value", 
+  reshape2::melt(., id.vars = id.var.counties)%>%rename("weight_plot_volfac_prob" = "value", 
                                                         "Species" = "variable")
 county.ntree.sf <-  counties %>% full_join(.,n_county_prob_spread) %>% 
   reshape2::melt(., id.vars = id.var.counties) %>%rename("n_county_pmort" = "value", 
@@ -1056,9 +1059,109 @@ ggplot(data = county.pmort.sf %>% mutate(ncount_pmort_plot_3 = ifelse(n_plots > 
   geom_sf(aes(fill = ncount_pmort_plot_3), color = NA)+scale_fill_viridis_c()+
   facet_wrap(~Species)
 
-ggplot(data = county.pmort.sf %>% mutate(ncount_pmort_plot_3 = ifelse(n_plots > 3, n_county_pmort, NA)))+
-  geom_sf(aes(fill = ncount_pmort_plot_3), color = NA)+scale_fill_viridis_c()+
-  facet_wrap(~Species)
+# make supplemental figures of county-level mortality by species:---
+cut.mort.values <- data.frame(
+  cut.mort.rate = c("(0,0.25]", "(0.25,0.5]", "(0.5,0.75]", "(0.75,1]", "(1,1.5]", "(1.5,2]", "(2,4]", "(4,100]"), 
+  mortality.rate = c("< 0.25", "0.25 - 0.5", "0.5 - 0.75", "0.75 - 1", "1 - 1.5", "1.5 - 2", "2 - 4", "> 4"), 
+  hex.colors = c("#fff7f3",
+                 "#fde0dd",
+                 "#fcc5c0",
+                 "#fa9fb5",
+                 "#f768a1",
+                 "#dd3497",
+                 "#ae017e",
+                 "#7a0177"))
+cut.county.pmort.sf <- county.pmort.sf %>% mutate(ncount_pmort_plot_3 = ifelse(n_plots > 3, n_county_pmort, NA))%>%
+  mutate(
+  cut.mort.rate = cut(pmort_weighted_1*100, breaks = c(0, 0.25, 0.5, 0.75, 1, 1.5, 2, 4, 100)),
+  cut.mort.rate.lo = cut(pmort_weighted_1.ci.lo*100, breaks = c(0, 0.25, 0.5, 0.75, 1, 1.5, 2, 4, 100)),
+  cut.mort.rate.hi = cut(pmort_weighted_1.ci.hi*100, breaks = c(0, 0.25, 0.5, 0.75, 1, 1.5, 2, 4, 100))
+)
+cut.county.pmort.sf$mortality.rate <- cut.mort.values[match(cut.county.pmort.sf$cut.mort.rate, cut.mort.values$cut.mort.rate),]$mortality.rate
+cut.county.pmort.sf$mortality.rate <- factor(cut.county.pmort.sf$mortality.rate, levels = c("< 0.25", "0.25 - 0.5", "0.5 - 0.75", "0.75 - 1", "1 - 1.5", "1.5 - 2", "2 - 4", "> 4"))
+
+cut.county.pmort.sf$mortality.rate.ci.lo <- cut.mort.values[match(cut.county.pmort.sf$cut.mort.rate.lo, cut.mort.values$cut.mort.rate),]$mortality.rate
+cut.county.pmort.sf$mortality.rate.ci.lo <- factor(cut.county.pmort.sf$mortality.rate.ci.lo, levels = c("< 0.25", "0.25 - 0.5", "0.5 - 0.75", "0.75 - 1", "1 - 1.5", "1.5 - 2", "2 - 4", "> 4"))
+
+cut.county.pmort.sf$mortality.rate.ci.hi <- cut.mort.values[match(cut.county.pmort.sf$cut.mort.rate.hi, cut.mort.values$cut.mort.rate),]$mortality.rate
+cut.county.pmort.sf$mortality.rate.ci.hi <- factor(cut.county.pmort.sf$mortality.rate.ci.hi, levels = c("< 0.25", "0.25 - 0.5", "0.5 - 0.75", "0.75 - 1", "1 - 1.5", "1.5 - 2", "2 - 4", "> 4"))
+
+val.vec <- as.vector(cut.mort.values$hex.colors)
+names(val.vec) <- as.vector(cut.mort.values$mortality.rate)
+fill_mort_rate <- scale_fill_manual(values = val.vec, name = "Mortality\nRisk\n(%/year)", drop = FALSE)
+
+
+# rearrange species order with factors:
+cut.county.pmort.sf$Species <- factor(cut.county.pmort.sf$Species, levels = c("balsam fir", 
+                                                                              "red spruce", 
+                                                                               "northern white-cedar", 
+                                                                               "eastern hemlock", 
+                                                                              "eastern white pine", 
+                                                                              
+                                                                               "white oak", 
+                                                                              "chestnut oak", 
+                                                                              "northern red oak",  
+                                                                              "yellow birch", 
+                                                                              "paper birch",
+                                                                               "American beech", 
+                                                                              "red maple", "sugar maple",  
+                                                                              "black cherry",
+                                                                              "white ash",
+                                                                              "hickory spp.", 
+                                                                              "yellow-poplar"
+                                                                              ))
+
+# make plots for all species
+allspecies.median <- ggplot(data =cut.county.pmort.sf )+
+    geom_sf(aes(fill = mortality.rate), color = "lightgrey")+
+  fill_mort_rate+
+  facet_wrap(~Species)+theme_minimal()+guides(fill = guide_legend(nrow = 1))+
+  theme(legend.position = "bottom", legend.direction = "horizontal")
+
+allspecies.low <- ggplot(data = cut.county.pmort.sf )+
+  geom_sf(aes(fill = mortality.rate.ci.lo), color = "lightgrey")+
+  fill_mort_rate+
+  facet_wrap(~Species)+theme_minimal()+guides(fill = guide_legend(nrow = 1))+
+  theme(legend.position = "bottom", legend.direction = "horizontal")
+
+allspecies.hi <- ggplot(data = cut.county.pmort.sf)+
+  geom_sf(aes(fill = mortality.rate.ci.hi), color = "lightgrey")+
+  fill_mort_rate+
+  facet_wrap(~Species)+theme_minimal()+guides(fill = guide_legend(nrow = 1))+
+  theme(legend.position = "bottom", legend.direction = "horizontal")
+
+
+ggsave(filename = paste0(output.dir, "images/Median_county_weighted_predicted_annual_Mortality_risks.png"), 
+       width = 9, height = 8,
+       allspecies.median)
+
+ggsave(filename = paste0(output.dir, "images/CI_2.5_county_weighted_predicted_annual_Mortality_risks.png"), 
+       width = 9, height = 8,
+       allspecies.low)
+
+ggsave(filename = paste0(output.dir, "images/CI_97.5_county_weighted_predicted_annual_Mortality_risks.png"), 
+       width = 9, height = 8,
+       allspecies.hi)
+
+# # do this for the 
+# spongy.median <- ggplot(data =cut.county.pmort.sf %>% 
+#                            filter(Species %in% c("chestnut oak", "white oak","northern red oak", 
+#                                                  "paper birch", "yellow birch")))+
+#   geom_sf(aes(fill = mortality.rate), color = "lightgrey")+
+#   fill_mort_rate+
+#   facet_wrap(~Species, ncol = 1)+theme_minimal()+ggtitle("Median")
+# 
+# conifer.low <- ggplot(data = cut.county.pmort.sf %>% filter(Species %in% c("balsam fir", "red spruce","northern white-cedar", "eastern hemlock", "eastern white pine")))+
+#   geom_sf(aes(fill = mortality.rate.ci.lo), color = "lightgrey")+
+#   fill_mort_rate+
+#   facet_wrap(~Species, ncol = 1)+theme_minimal()+ggtitle("2.5% CI")
+# 
+# conifer.hi <- ggplot(data = cut.county.pmort.sf%>% filter(Species %in% c("balsam fir", "red spruce","northern white-cedar", "eastern hemlock", "eastern white pine")))+
+#   geom_sf(aes(fill = mortality.rate.ci.hi), color = "lightgrey")+
+#   fill_mort_rate+
+#   facet_wrap(~Species, ncol = 1)+theme_minimal()+ggtitle("97.5% CI")
+
+
 
 # get summaries of county-level mortality probability overall, by species:
 county.pmort.sf %>% as.data.frame(.) %>% group_by(Species) %>%
@@ -1733,6 +1836,28 @@ ggsave(filename = paste0(output.dir, "images/map_BBD_county_pmort_beech.png"),
        height = 6, width = 12, units = "in", 
        dpi = 350)
 
+# looking at spatial variation in county level mortality for the maples----
+sugar.bush.county <- county.mort.gi.remper %>% 
+  filter(Species %in% c("sugar maple", "red maple"))%>%
+  filter(!is.na(pmort_weighted_10))%>%
+  mutate(high_sugarbush = ifelse(STUSPS %in% c("VT", "NH", "ME", "NY"), "sugarbush", "not high sugarbush"))
+
+
+sugar.bush.county.high.prod <- sugar.bush.county %>% filter(high_sugarbush %in% "sugarbush")
+sugar.bush.county.nothigh.prod <- sugar.bush.county %>% filter(high_sugarbush %in% "not high sugarbush")
+
+t.test(sugar.bush.county.high.prod$pmort_weighted_10*100, sugar.bush.county.nothigh.prod$pmort_weighted_10*100)
+
+sugar.bush.county|>
+  ggplot()+geom_pointrange(aes(x = STATE_NAME, y = pmort_weighted_10*100, ymin = pmort_weighted_10.ci.lo*100, ymax = pmort_weighted_10.ci.hi*100, color = Species), 
+                           position = "jitter", 
+                           alpha = 0.5)+species_color+theme_bw()+
+  ylab("Predicted 10-year mortality risks")+
+  facet_wrap(~high_sugarbush, scales = "free_x")
+
+county.mort.gi.remper %>% filter(STUSPS %in% "OH") %>%
+  filter(Species %in% c("sugar maple", "red maple"))%>%
+  filter(!is.na(pmort_weighted_10))%>% arrange(desc(pmort_weighted_10))
 
 # compare spongy moth records to mortality:--
 state.area <- counties %>% mutate(ALAND.ha = ALAND/10000) %>%
