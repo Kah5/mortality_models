@@ -660,6 +660,14 @@ ggsave(filename = paste0(output.folder,"images/ESS_Rhat_statistics_model6_heirar
        figureS9,
        height = 4, width =11, units = "in")
 
+# total maple syrup production value in US
+300396*1000/10e6
+
+# in region:
+((899 + 27690 + 2808+7972 +28933 + 3965 + 6989 + 95416 +570))*1000
+#/10e6
+
+
 # distribution of diameter differences
 
 # calculate inferred growth rate for dead trees based on each mortality year
@@ -1679,7 +1687,7 @@ uniformity.summary$Species <- factor(uniformity.summary$Species, levels = distur
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
   
 
-# do the hotspots for species overlap?
+# do the hotspots for species overlap?-----
  gi.matrix <-  hotspots.volfac_pmort.df %>% as.data.frame()%>%
     ungroup()%>% dplyr::select(gi, Species, geometry)%>%
     group_by(geometry)%>%
@@ -1748,6 +1756,70 @@ uniformity.summary$Species <- factor(uniformity.summary$Species, levels = distur
         plot = gi_correlation_county, 
         height = 6, width = 6, units = "in", 
         dpi = 350)
+ 
+ 
+ # is mortality correlated with one another----------------------
+ pmort.matrix <-  county.pmort.sf %>% as.data.frame()%>%
+   ungroup()%>% dplyr::select(pmort_weighted_1, Species, geometry)%>%
+   group_by(geometry)%>%
+   spread(Species, pmort_weighted_1)
+ 
+ county.corr.pmort <- rcorr(as.matrix( pmort.matrix[,2:ncol( pmort.matrix)]), type = "pearson" ) # or "spearman"
+ colnames( county.corr.pmort$r)
+ # Get upper triangle of the correlation matrix
+ get_upper_tri <- function(cormat){
+   cormat[lower.tri(cormat)]<- NA
+   return(cormat)
+ }
+ 
+ get_lower_tri<-function(cormat){
+   cormat[upper.tri(cormat)] <- NA
+   return(cormat)
+ }
+ melted.correlation <- get_lower_tri( county.corr.pmort$r[disturb.species.order,disturb.species.order]) %>% reshape2::melt()%>%
+   rename("r"="value") %>% left_join(., 
+                                     get_lower_tri( county.corr.pmort$n[disturb.species.order,disturb.species.order]) %>% reshape2::melt())%>%
+   rename("n" = "value")%>%
+   left_join(., 
+             get_lower_tri( county.corr.pmort$P[disturb.species.order,disturb.species.order]) %>% reshape2::melt())%>%
+   rename("pval" = "value")%>%
+   mutate(R_revised = ifelse(n>=25, round(r, digits = 1), NA), 
+          P_revised = ifelse(n >=25, pval, NA))%>%
+   mutate(R_revised = ifelse(R_revised == 1, NA, R_revised))%>%
+   mutate(sig.label = ifelse(P_revised <= 0.1, R_revised, NA))%>%
+   filter(!is.na(R_revised))# if the species are colocated in less than 10 plots omit the correlation
+ 
+ 
+ pmort_correlation_county <-  ggplot(data = melted.correlation, aes(Var2, Var1, fill = R_revised))+
+   geom_tile(color = "white")+
+   scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                        midpoint = 0, 
+                        limit = c(-1,1), 
+                        space = "Lab", 
+                        name="Pearson\nCorrelation") +
+   theme_bw(base_size = 16)+ 
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                    hjust = 0))+
+   coord_fixed()+
+   scale_x_discrete(position = "top",
+                    limits = levels(melted.correlation$Var2))+
+   scale_y_discrete(position = "left",
+                    limits = rev(levels(melted.correlation$Var1)))+
+   
+   geom_text(aes(Var2, Var1, label = sig.label), color = "black", size = 4) +
+   theme(
+     axis.title.x = element_blank(),
+     axis.title.y = element_blank(),
+     panel.grid.major = element_blank(),
+     #panel.border = element_blank(),
+     panel.background = element_blank(),
+     axis.ticks = element_blank(),
+     legend.justification = c(1, 0),
+     legend.position = c(0.9, 0.65),
+     legend.direction = "horizontal")+
+   guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
+                                title.position = "top", title.hjust = 0.5))#+coord_flip()
+ 
  
 # Are hotspots related to temporal sampling?---
  
@@ -1893,7 +1965,7 @@ hemlock.co.mort.gi
 
 mort.hwa.detect <- ggplot(data = hemlock.co.mort.gi, aes(x = no.years.present.T2, y = pmort_weighted_1*100 ))+
   geom_point()+
-  geom_errorbar(aes(x = no.years.present.T2, ymin = pmort_weighted_1.ci.lo*100, ymax = pmort_weighted_1.ci.hi*100), width = 0.1, alpha = 0.5)+theme_bw()+ylab("County average Hemlock \n mortality probability (%/year)")+
+  geom_errorbar(aes(x = no.years.present.T2, ymin = pmort_weighted_1.ci.lo*100, ymax = pmort_weighted_1.ci.hi*100), width = 0.25, alpha = 0.5)+theme_bw()+ylab("County average Hemlock \n mortality probability (%/year)")+
   xlab("# of years of detected HWA")
 
 ggsave(filename = paste0(output.dir, "images/HWA_county_pmort_Hemlock.png"), 
@@ -1996,7 +2068,7 @@ beech.co.mort.gi <- county.mort.gi.remper %>%
 mort.bbd.detect <- ggplot(beech.co.mort.gi, aes(x = no.years.present.T2, y = pmort_weighted_1*100 ))+
   geom_point()+
   geom_point()+
-  geom_errorbar(aes(x = no.years.present.T2, ymin = pmort_weighted_1.ci.lo*100, ymax = pmort_weighted_1.ci.hi*100), width = 0.1, alpha = 0.5)+
+  geom_errorbar(aes(x = no.years.present.T2, ymin = pmort_weighted_1.ci.lo*100, ymax = pmort_weighted_1.ci.hi*100), width = 0.25, alpha = 0.5)+
   theme_bw()+ylab("County average Beech \n mortality probability (%/year)")+
   xlab("# of years of detected Beech Scale")
 
@@ -2352,14 +2424,19 @@ ggsave(filename = paste0(output.dir, "images/county_pMort_spongy_species_num_pea
 spongysusceptible.mort.num.peaks.plt <- co.with.spongy %>% filter(!is.na(CO.withpeak)) %>% filter(Species %in% c("chestnut oak", "white oak", "northern red oak", "yellow birch", "paper birch"))%>%
   mutate(spongy.peaks = ifelse(CO.withpeak %in% "1+ defoliation peaks", "1+", 
                                                                              ifelse(CO.withpeak %in% "no spongy defoliation peaks", "none", NA)))|> ggplot()+
-  geom_jitter(aes(x =spongy.peaks, y = pmort_weighted_1*100, group = spongy.peaks, color = Species), alpha = 0.65)+
-  geom_boxplot(aes(x =spongy.peaks, y = pmort_weighted_1*100, group = spongy.peaks), fill = NA, outliers = FALSE)+
+  #geom_jitter(aes(x =spongy.peaks, y = pmort_weighted_1*100, group = spongy.peaks, color = Species), alpha = 0.65)+
+  geom_pointrange(aes(x =spongy.peaks, y = pmort_weighted_1*100, group = spongy.peaks, color = Species,
+                      ymin = pmort_weighted_1.ci.lo*100, ymax = pmort_weighted_1.ci.hi*100), 
+                  position=position_jitter(width=0.25), 
+                  linetype='dotted', alpha = 0.5) +
+  geom_boxplot(aes(x = spongy.peaks, y = pmort_weighted_1*100, group = spongy.peaks), fill = NA, outliers = FALSE)+
   facet_wrap(~Species, scales = "free_y", ncol = 5)+
   species_color+
   ylab("Mortality probability (%/year)")+
   xlab("Number of spongy moth defoliation peaks")+
   theme_bw()+
   theme(panel.grid = element_blank())
+spongysusceptible.mort.num.peaks.plt
 
 ggsave(filename = paste0(output.dir, "images/county_pMort_spongy_species_num_peaks.png"), 
        plot = spongysusceptible.mort.num.peaks.plt , 
@@ -2743,7 +2820,13 @@ ggsave(filename = paste0(output.dir, "images/county_pMort_budworm_species_num_pe
 budworm.mort.num.peaks.plt <- co.with.budworm %>% 
   mutate(budworm.peaks = ifelse(CO.withpeak %in% "1+ defoliation peaks", "1+", 
                                 ifelse(CO.withpeak %in% "no budworm defoliation peaks", "none", NA)))|> ggplot()+
-  geom_jitter(aes(x =budworm.peaks, y = pmort_weighted_1*100, group = budworm.peaks, color = Species), alpha = 0.65)+
+  #geom_jitter(aes(x =budworm.peaks, y = pmort_weighted_1*100, group = budworm.peaks, color = Species), alpha = 0.65)+
+  
+  geom_pointrange(aes(x = budworm.peaks, y = pmort_weighted_1*100, group = budworm.peaks, color = Species,
+                      ymin = pmort_weighted_1.ci.lo*100, ymax = pmort_weighted_1.ci.hi*100), 
+                  position=position_jitter(width=0.25), 
+                  linetype='dotted', alpha = 0.5) +
+  
   geom_boxplot(aes(x =budworm.peaks, y = pmort_weighted_1*100, group = budworm.peaks), fill = NA, outliers = FALSE)+
   facet_wrap(~Species, scales = "free_y", ncol = 5)+
   species_color+
@@ -2756,6 +2839,17 @@ ggsave(filename = paste0(output.dir, "images/county_pMort_budworm_species_num_pe
        plot = budworm.mort.num.peaks.plt , 
        height = 3.5, width = 9, units = "in", 
        dpi = 350)
+
+
+# figure 6:
+figure6 <- plot_grid(budworm.mort.num.peaks.plt, mort.bbd.detect,
+          spongysusceptible.mort.num.peaks.plt, mort.hwa.detect, ncol =2, 
+          rel_widths = c(1, 0.5, 1, 0.5), 
+          labels = c("A", "C", "B", "C"))
+
+ggsave(filename= paste0(output.dir, "images/Figure_6_mortality_estimates_vs_data.png"), 
+       figure6, 
+       height = 6, width = 12)
 
 co.with.budworm %>% group_by(STATE_NAME)%>%
   summarise(max(number.budworm.peaks), 
@@ -3044,13 +3138,7 @@ get_lower_tri<-function(cormat){
 }
 species_order
 disturb.species.order
-hc$labels[hc$order]
 
-correlations <- get_upper_tri(county.corr.log.pmort$r)
-host_weights <- get_upper_tri(weighted_hosts)
-
-# species with shared hosts are have more correlated county level mortality
-cor.test(host_weights, correlations)
 
 
 
@@ -3134,7 +3222,7 @@ pmort_correlation_county <-  ggplot(data = melted.correlation, aes(Var2, Var1, f
   scale_y_discrete(position = "left",
                    limits = rev(levels(melted.correlation$Var1)))+
   
-  geom_text(aes(Var2, Var1, label = sig.label), color = "black", size = 4) +
+  geom_text(aes(Var2, Var1, label = sig.label), color = "black", size = 3) +
   theme(
     axis.title.x = element_blank(),
     axis.title.y = element_blank(),
@@ -3153,6 +3241,37 @@ ggsave(filename = paste0(output.dir, "images/posterior_county_pMort_species_corr
        plot = pmort_correlation_county, 
        height = 6, width = 6, units = "in", 
        dpi = 350)
+
+
+# save figure 5:----
+
+figure5 <- plot_grid(plot_grid(uniformity.bar.plot+theme(axis.title.x = element_blank(), legend.position = c(0.5, 0.6),
+                                                         legend.key.size = unit(0.5, "cm"),
+                                                         legend.text = element_text(size = 10),
+                                                         legend.title = element_text(size = 12)), 
+                               pmort_correlation_county + theme(axis.title = element_blank(), legend.position = c(0.88, 0.6), 
+                                                                legend.direction = "horizontal",legend.key.size = unit(0.25, "cm"),
+                                                                legend.text = element_text(size = 10),
+                                                                legend.title = element_text(size = 12), 
+                                                                legend.background = element_rect(fill = "transparent", color = NA)), 
+                                ncol = 2, 
+                               #align = "h",
+                               rel_widths = c(1, 1.5),
+                               rel_heights = c(0.5, 1.5),
+                               labels = c("A", "B")),
+temporal_pmort, labels = c(NA, "C"), 
+rel_heights = c(1,1.1),
+rel_widths = c(1,0.8),
+ncol = 1)
+
+figure5
+
+ggsave(filename = paste0(output.dir, "images/figure_5_hotspots_specificity_synchronicity.png"), 
+       plot = figure5, 
+       height = 11, width = 8.5, units = "in", bg = "white", 
+       dpi = 350)
+
+uniformity.bar.plot/pmort_correlation_county
 
 # Visualize correlations for highly correlated species on the map:
 
