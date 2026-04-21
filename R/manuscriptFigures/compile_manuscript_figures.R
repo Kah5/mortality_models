@@ -457,6 +457,209 @@ ggplot(data = TREE.remeas.df %>% filter(Species %in% "balsam fir"))+
   geom_boxplot(aes(as.factor(as.character(T1.year)), DIA_DIFF, color = Mstatus, group = Mstatus), position = position_dodge())+
   facet_wrap(~T1.year)
 
+
+
+# read in AUC_computational_efficiency data
+AUC.comp.time <- readRDS(paste0(output.dir, "SPCD_stanoutput_joint_v3/Hierarchical_Species_AUC_COMP_TIME_v3.RDS"))
+
+AUC.comp.time$Nparams
+
+model.complexity <- data.frame(model = rep(1:9, 2), 
+                               nbetas = c(1, 2, 5, 9, 12, 33, 57, 75, 78, 1*17, 2*17, 5*17, 9*17, 12*17, 33*17, 57*17, 75*17, 78*17),
+                               nalphas = c(rep(1, 9), rep(17, 9)),
+                               npopalphas = c(rep(0, 9), rep(1, 9)),
+                               npopbetas = c(rep(0, 9), c(1, 2, 5, 9, 12, 33, 57, 75, 78)),
+                               `Model Type` = c(rep("Species", 9), rep("Hierarchical", 9))) %>%
+  mutate(`Fixed & Random Parameters` = nbetas+nalphas+ npopalphas+npopbetas)%>%
+rename("Model Type"= "Model.Type")
+combined.comptime <- AUC.comp.time %>% filter(`Model Type` %in% "Hierarchical" & Size_effect %in% "Linear") %>% left_join(.,model.complexity)%>%
+  group_by(`Model Type`,model,Model.name,`Fixed & Random Parameters`)%>%
+  summarise(total.core.hours = sum(core.hours), 
+            MCMCsamples = mean(num_samps))%>%
+mutate(`Core hours per 100 samples` = (total.core.hours/MCMCsamples)*100)%>%
+  mutate(Group = "Hierarchical Model")%>%
+
+rbind(., 
+
+AUC.comp.time %>% filter(`Model Type` %in% "Species" & Size_effect %in% "Linear") %>% 
+  left_join(.,model.complexity) %>%
+  group_by(`Model Type`,model,Model.name,Species,`Fixed & Random Parameters`)%>%
+  summarise(total.core.hours = sum(core.hours), 
+            MCMCsamples = mean(num_samps))%>%
+  mutate(`Core hours per 100 samples` = (total.core.hours/MCMCsamples)*100)%>%
+  mutate(Group = Species) %>% 
+  select(-Species)
+)
+combined.comptime$Group <- factor(combined.comptime$Group, levels = c(levels(AUC.comp.time$Species), "Hierarchical Model"))
+
+FigureS3.comptime.complexity.species <- ggplot(data = combined.comptime)+
+  geom_text(aes(x = `Core hours per 100 samples`, y = `Fixed & Random Parameters`, label = model, color = `Model Type`))+
+  scale_color_manual( values = c("Species" ="black" , 
+                               "Hierarchical" = "red" ))+
+  facet_wrap(~Group, scales = "free")+theme_bw()+
+  xlab("Core Hours per 100 samples")+ylab("# Fixed & Random Parameters")
+
+ggsave(paste0(output.dir, "images/Compare_complexity_efficiency_joint_species.png"), 
+       FigureS3.comptime.complexity.species,
+       width = 10, height = 6)
+
+FigureS4.comptime.AUC.species <- ggplot()+
+  geom_text(data = AUC.comp.time, aes(x = `Core hours per 100 samples`, y = auc.oosample.median, label = model, color = `Model Type`))+
+  facet_wrap(~Species, scales =  "free")+
+  scale_color_manual( values = c("Species" ="black" , 
+                                 "Hierarchical" = "red" ))+
+  theme_bw()+
+  xlab("Core Hours per 100 samples")+ylab("Out of Sample AUC")
+ggsave(paste0(output.dir, "images/Compare_AUC_efficiency_joint_species.png"), 
+       FigureS4.comptime.AUC.species,
+       width = 10, height = 6)
+
+Figure2.AUC.species <- ggplot()+
+  geom_point(data = AUC.comp.time, aes(x = Model.name, y = auc.oosample.median, group = `Model Type`,color = `Model Type`), position = position_dodge(width = 1), size = 0.5)+
+  geom_errorbar(data = AUC.comp.time, aes(x = Model.name, ymin = auc.oosample.lo, ymax = auc.oosample.hi,group = `Model Type`, color = `Model Type`), position = position_dodge(width = 1))+
+  geom_hline(data = AUC.comp.time %>% filter(`Model Type` %in% "Hierarchical" & Model.name %in% "Model 6"), aes(yintercept =  auc.oosample.median), linetype = "dashed", color = "red")+
+  geom_rect(data = AUC.comp.time %>% filter(`Model Type` %in% "Hierarchical" & Model.name %in% "Model 6"), 
+            aes(ymin =  auc.oosample.lo, ymax = auc.oosample.hi, xmin = -Inf, xmax = Inf), fill = "red", alpha = 0.15, color = NA)+
+  
+  scale_color_manual( values = c("Species" ="black" , 
+                                 "Hierarchical" = "red" ))+
+  theme_bw(base_size = 12)+theme(axis.text.x = element_text(angle = 90,  vjust=0.5)) +
+  facet_wrap(~Species)+
+  xlab("")+ylab("Out of Sample AUC")
+
+ggsave(paste0(output.dir, "images/All_species_models_all9models_compare-auc-outofsample_joint_species.png"), 
+       Figure2.AUC.species,
+       width = 10, height = 6)
+
+
+#--------------------------------------------------------------------------------------------------
+
+# compare model estimates to species-level betas
+# get the complete spcies list
+cleaned.data <- readRDS( "data/cleaned.data.mortality.TRplots.RDS")
+cleaned.data <- cleaned.data %>% dplyr::select(state, county, pltnum, cndtn, point, tree, PLOT.ID, cycle, spp, dbhcur, dbhold, damage, Species, SPCD,
+                                               remper, LAT_FIADB, LONG_FIADB, elev, DIA_DIFF, annual.growth, M, relative.growth, si, physio:RD) %>% distinct()
+
+nspp <- cleaned.data %>% group_by(SPCD) %>% summarise(n = n(), 
+                                                      pct = n/nrow(cleaned.data)) %>% arrange (desc(`pct`))
+
+nspp$cumulative.pct <- cumsum(nspp$pct)
+
+
+
+# link up to the species table:
+nspp$COMMON <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$COMMON
+
+#View(nspp)
+
+nspp[1:17,]$COMMON
+
+
+# read in the test data for all the species
+spp.table <- data.frame(SPCD.id = nspp[1:17,]$SPCD, 
+                        spp = 1:17, 
+                        COMMON = nspp[1:17,]$COMMON)
+
+
+joint.betas <- readRDS(paste0(output.folder, "SPCD_stanoutput_joint_v3/samples/u_betas_model_6_5000samples.RDS"))
+joint.betas.summary <- joint.betas %>% select(-.iteration, -.chain, -.draw)%>% reshape2::melt() %>%
+  group_by(variable)%>% summarise(median = quantile(value, 0.5), 
+                                  ci.lo = quantile(value, 0.025), 
+                                  ci.hi = quantile(value, 0.975), 
+                                  log.odds.median = quantile(exp(value), 0.5), 
+                                  log.odds.ci.lo = quantile(exp(value), 0.025), 
+                                  log.odds.ci.hi = quantile(exp(value), 0.975))
+
+
+joint.alphas <- readRDS(paste0(output.folder, "SPCD_stanoutput_joint_v3/samples/alpha.spp_model_6_5000samples.RDS"))
+joint.alphas.summary <- joint.alphas %>% select(-.iteration, -.chain, -.draw)%>% reshape2::melt() %>%
+  group_by(variable)%>% summarise(median = quantile(value, 0.5), 
+                                  ci.lo = quantile(value, 0.025), 
+                                  ci.hi = quantile(value, 0.975), 
+                                  log.odds.median = quantile(exp(value), 0.5), 
+                                  log.odds.ci.lo = quantile(exp(value), 0.025), 
+                                  log.odds.ci.hi = quantile(exp(value), 0.975)) 
+
+# read in the data used to fit
+mod.data.full <- readRDS ( paste0(output.folder,"SPCD_stanoutput_joint_v3/all_SPCD_model_6.RDS"))
+param.id = rep(1:33, each = 17)
+spp.id = rep(1:17, 33)
+beta.names.df <- data.frame(variable = unique(joint.betas.summary$variable), 
+                            spp = spp.id, 
+                            Param.id = param.id, 
+                            Parameter.name = rep(colnames(mod.data.full$xM), each = 17))
+
+alpha.names.df <- data.frame(variable = unique(joint.alphas.summary$variable), 
+                             spp = 1:17, 
+                             Param.id = 34, 
+                             Parameter.name = rep("alpha", 17))
+
+joint.betas.summary <- joint.betas.summary %>% left_join(.,beta.names.df) %>% left_join(., spp.table)
+joint.betas.summary$significance <- ifelse(joint.betas.summary$ci.lo > 0 & joint.betas.summary$ci.hi > 0, "significant", 
+                                           ifelse(joint.betas.summary$ci.lo < 0 & joint.betas.summary$ci.hi < 0, "significant", "not significant"))
+joint.betas.summary$Parameter.name <- factor(joint.betas.summary$Parameter.name, levels = unique(beta.names.df$Parameter.name))
+
+
+joint.alphas.summary <- joint.alphas.summary %>% left_join(.,alpha.names.df) %>% left_join(., spp.table)
+joint.alphas.summary$significance <- ifelse(joint.alphas.summary$ci.lo > 0 & joint.alphas.summary$ci.hi > 0, "significant", 
+                                            ifelse(joint.alphas.summary$ci.lo < 0 & joint.alphas.summary$ci.hi < 0, "significant", "not significant"))
+joint.alphas.summary$Parameter.name <- factor(joint.alphas.summary$Parameter.name, levels = unique(alpha.names.df$Parameter.name))
+
+joint.betas.alpha.summary <- rbind(joint.betas.summary, joint.alphas.summary)
+
+model6.betas <- ggplot()+geom_point(data = joint.betas.alpha.summary, aes(x = COMMON, y = median, color = significance))+
+  geom_errorbar(data = joint.betas.alpha.summary, aes(x = COMMON, ymin = ci.lo, ymax = ci.hi, color = significance))+
+  facet_wrap(~Parameter.name, scales = "free_y")+
+  scale_color_manual(values = c("significant" = "black", 
+                                "not significant" = "darkgrey"))+
+  theme_bw()+
+  theme(axis.text.x = element_text(vjust = 0.5, angle = 90, hjust = 1), 
+        panel.grid = element_blank())+
+  ylab("Effect on Survival")+
+  xlab("Species")
+ggsave(filename = paste0(output.folder,"images/model_6_regression_betas.png"), 
+       model6.betas,
+       height = 10, width =12, units = "in")
+
+
+ggplot()+geom_point(data = joint.betas.summary  %>% filter(significance %in% "significant"), aes(x = Parameter.name, y = log.odds.median, color = log.odds.median >=1))+
+  geom_errorbar(data = joint.betas.summary  %>% filter(significance %in% "significant"), aes(x = Parameter.name, ymin = log.odds.ci.lo, ymax = log.odds.ci.hi, color = log.odds.median >=1))+
+  geom_hline(yintercept = 1, color = "red", linetype = "dashed")+facet_wrap(~COMMON, scales = "free")+theme(axis.text.x = element_text(hjust = 1, angle = 45), legend.position = "none")
+ggsave(filename = paste0(output.folder,"images/joint_model_log_odds_betas_significant.png"), 
+       height = 10, width =12, units = "in")
+
+
+rhat_ESS_model6_hiearachical <- rbind(
+  # betas
+  summarise_draws(joint.betas) %>% select(variable,  rhat, ess_bulk, ess_tail) %>% 
+    left_join(., beta.names.df) %>% left_join(., spp.table),
+  # alphas
+  summarise_draws(joint.alphas) %>% select(variable,  rhat, ess_bulk, ess_tail) %>% 
+    left_join(., alpha.names.df) %>% left_join(., spp.table))
+
+bulk.ess.h <- rhat_ESS_model6_hiearachical |>
+  ggplot()+geom_histogram(aes(y = ess_bulk))+
+  geom_hline(aes(yintercept = 1000), linetype = "dashed")+
+  ylab("Bulk ESS")+theme_bw()
+
+tail.ess.h <- rhat_ESS_model6_hiearachical |>
+  ggplot()+geom_histogram(aes(y = ess_tail))+
+  geom_hline(aes(yintercept = 1000), linetype = "dashed")+
+  ylab("Tail ESS")+theme_bw()
+
+rhat.ess.h <- rhat_ESS_model6_hiearachical |>
+  ggplot()+geom_histogram(aes(y = rhat))+
+  geom_hline(aes(yintercept = 1.01), linetype = "dashed")+
+  ylab("R-hat")+theme_bw()
+
+figureS9<- cowplot::plot_grid(rhat.ess.h,bulk.ess.h , tail.ess.h, 
+                              align = "hv", ncol = 3,
+                              labels = "AUTO")
+
+ggsave(filename = paste0(output.folder,"images/ESS_Rhat_statistics_model6_heirarchical.png"), 
+       figureS9,
+       height = 4, width =11, units = "in")
+
 # distribution of diameter differences
 
 # calculate inferred growth rate for dead trees based on each mortality year
