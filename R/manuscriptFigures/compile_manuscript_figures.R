@@ -5676,7 +5676,14 @@ plot.scaled <- plot.medians %>% select(damage.median, damage.sd) %>%
 combined.scaled.main <- rbind(plot.scaled, species.scaling)
 
 marginal_response_df_unscaled <- marginal_response_df %>% left_join(., combined.scaled.main)%>%
-  mutate(Raw.value = ifelse(!is.na(Val.mean), (Value*Val.sd) + Val.mean, Value))
+  mutate(Raw.value = ifelse(!is.na(Val.mean), (Value*Val.sd) + Val.mean, Value)) %>%
+  mutate(Raw.value.converted = ifelse(Units %in% "Inches", Raw.value*2.54,
+                                      ifelse(Units %in% "ft^2", Raw.value*0.0929, Raw.value)), 
+         Units.converted = ifelse(Units %in% "Inches", "cm", 
+                                  ifelse(Units %in% "ft^2", "m^2", Units)))%>%
+  mutate(Predictor.strip = ifelse(Predictor %in% "Diameter Difference \n (DIA_DIFF)", "Diameter Difference", 
+                            ifelse(Predictor %in% "Plot Basal Area (BA)", "Plot Basal Area", 
+                                   ifelse(Predictor %in% "Basal Area Larger \n (BAL)", "Basal Area Larger", paste0(Predictor)))))
 
 # marginal_response_df_unscaled
 #Ndep X dia_diff
@@ -5692,12 +5699,24 @@ interaction_response_df_unscaled <- interaction_response_df %>%
                                                "Val.sd.2" = "Val.sd", 
                                                "Clean_Name.2" = "Clean_Name", 
                                                "Units.2" = "Units"))%>%
-  mutate(Raw.value.p2 = ifelse(!is.na(Val.mean.2), (p2.value*Val.sd.2) + Val.mean.2, p2.value))
+  mutate(Raw.value.p2 = ifelse(!is.na(Val.mean.2), (p2.value*Val.sd.2) + Val.mean.2, p2.value))%>%
+  mutate(Raw.value.converted = ifelse(Units %in% "Inches", Raw.value*2.54,
+                                      ifelse(Units %in% "ft^2", Raw.value*0.0929, Raw.value)), 
+         Units.converted = ifelse(Units %in% "Inches", "cm", 
+                                  ifelse(Units %in% "ft^2", "m^2", Units)))%>%
+  mutate(Predictor.strip = ifelse(Predictor %in% "Diameter Difference \n (DIA_DIFF)", "Diameter Difference", 
+                                  ifelse(Predictor %in% "Plot Basal Area (BA)", "Plot Basal Area", 
+                                         ifelse(Predictor %in% "Basal Area Larger \n (BAL)", "Basal Area Larger", paste0(Predictor)))))
+
 
 interaction_response_df_unscaled %>% select(Species, p2.rank, Pred.2, Raw.value.p2) %>% distinct()
 # need to join the interaction plots by the median and sd values and convert p1 and p2 values
 # function to plot up the effects on 10 year mortality probabilities
 # using the unscaled "raw" values for covariates
+
+
+
+
 plot_main_region_effects <- function(species.group, covar, ymax.spp){
   
   
@@ -5709,13 +5728,13 @@ plot_main_region_effects <- function(species.group, covar, ymax.spp){
     
     
     
-    p1 <-  ggplot(df.species , aes(x = Raw.value, y = 1-(mean)^10, color = Species)) +
+    p1 <-  ggplot(df.species , aes(x = Raw.value.converted, y = 1-(mean)^10, color = Species)) +
       geom_line(size = 1) +
       geom_ribbon(aes(ymin = 1-(ci.lo)^10, ymax = 1-(ci.hi)^10, fill = Species), alpha = 0.1, color = NA) +
       #geom_label(aes(label = Species, color = Species))+
-      facet_wrap(~Predictor) +
+      facet_wrap(~Predictor.strip) +
       labs(
-        x = paste(df.species$predictor.class2, "(", unique(df.species$Units),")"),
+        x = paste(df.species$predictor.class2, "(", unique(df.species$Units.converted),")"),
         y = "10-year Mortality Probability",
         #title = "Effect of Predictors on Probability of Mortality"
       ) +
@@ -5741,12 +5760,12 @@ plot_main_region_effects <- function(species.group, covar, ymax.spp){
     if(unique(df.species$Pred.2) %in% "DIA_DIFF_scaled"){
       
       p1 <-  ggplot(data = df.species) +
-        geom_line(aes(x = Raw.value, y = 1-(mean)^10, color = Species, group = interaction(Species, p2.rank), linetype = p2.rank), size = 1) +
-        geom_ribbon(aes(x = Raw.value, ymin = 1-(ci.lo.10)^10, ymax = 1-(ci.hi.90)^10, fill = Species, group = interaction(Species, p2.rank)), color = NA, alpha = 0.1) +
+        geom_line(aes(x = Raw.value.converted, y = 1-(mean)^10, color = Species, group = interaction(Species, p2.rank), linetype = p2.rank), size = 1) +
+        geom_ribbon(aes(x = Raw.value.converted, ymin = 1-(ci.lo.10)^10, ymax = 1-(ci.hi.90)^10, fill = Species, group = interaction(Species, p2.rank)), color = NA, alpha = 0.1) +
         #facet_grid(cols = vars(predictor.class2), rows = vars(Predictor)) +
         facet_wrap(~Predictor)+
         labs(
-          x = paste(pred.name$Predictor, "(", unique(df.species$Units),")"),
+          x = paste(pred.name$Predictor, "(", unique(df.species$Units.converted),")"),
           y = "10-year Mortality Probability",
           #title = "Effect of Predictors on Probability of Mortality"
         ) + scale_linetype_manual(values = c("low"= "dotted" ,
@@ -5770,12 +5789,12 @@ plot_main_region_effects <- function(species.group, covar, ymax.spp){
     }else{
       
       p1 <-  ggplot(data = df.species) +
-        geom_line(aes(x = Raw.value, y = 1-(mean)^10, color = Species, group = interaction(Species, p2.rank), linetype = p2.rank, size = p2.rank)) +
-        geom_ribbon(aes(x = Raw.value, ymin = 1-(ci.lo.10)^10, ymax = 1-(ci.hi.90)^10, fill = Species, group = interaction(Species, p2.rank)), color = NA, alpha = 0.1) +
+        geom_line(aes(x = Raw.value.converted, y = 1-(mean)^10, color = Species, group = interaction(Species, p2.rank), linetype = p2.rank, size = p2.rank)) +
+        geom_ribbon(aes(x = Raw.value.converted, ymin = 1-(ci.lo.10)^10, ymax = 1-(ci.hi.90)^10, fill = Species, group = interaction(Species, p2.rank)), color = NA, alpha = 0.1) +
         #facet_grid(cols = vars(predictor.class2), rows = vars(Predictor)) +
         facet_wrap(~Predictor)+
         labs(
-          x = paste(pred.name$Predictor, "(", unique(df.species$Units),")"),
+          x = paste(pred.name$Predictor, "(", unique(df.species$Units.converted),")"),
           y = "10-year Mortality Probability",
           #title = "Effect of Predictors on Probability of Mortality"
         ) + 
@@ -5824,7 +5843,7 @@ dia.marg.p <- plot_main_region_effects(species.group =
                              "northern red oak", "eastern hemlock", "white oak", "eastern white pine", 
                              "red maple", "white ash", "yellow poplar", "sugar maple", "red spruce"), 
                          covar = "DIA_scaled", 
-                         ymax.spp = 0.05)
+                         ymax.spp = 0.15)
 
 marginal_response_df_unscaled %>%
   filter(Covariate %in% "DIA_scaled") %>%
@@ -5837,7 +5856,7 @@ marginal_response_df_unscaled %>%
 dia.diff.marg.p <- plot_main_region_effects(species.group = 
                            unique(marginal_response_df_unscaled$Species), 
                          covar = "DIA_DIFF_scaled", 
-                         ymax.spp = 0.2)
+                         ymax.spp = 0.25)
 
 # marginal_response_df_unscaled %>% 
 #   filter(Covariate %in% "DIA_DIFF_scaled") %>% 
@@ -5863,9 +5882,10 @@ dia_dia.diff.balsam.fir.marg.p <- plot_main_region_effects(species.group =
 # matmax scaled:
 matmax.marg.p <- plot_main_region_effects(species.group = 
                            c("American beech", 
-                             "northern red oak", "eastern white pine"), 
+                             "northern red oak", "eastern white pine", 
+                             "balsam fir", "red maple"), 
                          covar = "MATmax.scaled", 
-                         ymax.spp = 0.075)
+                         ymax.spp = 0.15)
 
 # matmax x dia differeces
 # more mortality at higher temps
@@ -5891,7 +5911,8 @@ tmax_dia.marg.p <- plot_main_region_effects(species.group =
 # percent damage
 pct.damage.marg.p <- plot_main_region_effects(species.group = 
                            c("northern white-cedar", 
-                             "white oak","yellow birch", "red spruce"), 
+                             "white oak","yellow birch", "red spruce", 
+                             "balsam fir", "chestnut oak", "northern red oak", "yellow birch", "red maple"), 
                          covar = "damage.scaled", 
                          ymax.spp = 0.075)
 
@@ -5943,6 +5964,28 @@ slop.marg.p <- plot_main_region_effects(species.group =
   xlab("Slope (%)")
 
 # plot up in a big figure:
+
+# figure 4:-----
+cleaned.data$Species <- factor(cleaned.data$Species, disturb.species.order)
+barplot.legend <- ggplot()+geom_histogram(data = cleaned.data, aes(fill = Species, y = tree))+species_fill
+
+
+species.legend <- get_legend(barplot.legend)
+
+figure4 <- plot_grid(plot_grid(dia.marg.p, 
+                     dia.diff.marg.p, 
+                     matmax.marg.p +xlab("Degrees C"), 
+                     pct.damage.marg.p +xlab("% Damage"), 
+          ba.marg.p,
+          bal.marg.p, 
+          slop.marg.p, 
+          ndep.marg.p +xlab("N deposition decline \n (kg/m^2/year)"), 
+          ncol = 4, align = "hv", labels = "AUTO"), 
+          species.legend, ncol = 2, rel_widths = c(1, 0.2))
+ggsave(paste0(output.dir,"images/Figure_4_marginal.png"), 
+       plot = figure4, width = 12, height = 7, dpi = 300, bg = "white")
+
+
 dia_plots_marg <- dia.marg.p + dia.diff.marg.p + dia_dia.diff.marg.p  + dia_dia.diff.balsam.fir.marg.p + plot_layout(ncol = 4)
 ggsave(paste0(output.dir,"images/diameter_effects_marginal_top_var.png"), 
        plot = dia_plots_marg, width = 10, height = 4, dpi = 300)
