@@ -2015,7 +2015,7 @@ pathogen.plot.primary <- unique.pathogens %>% filter(Impact %in% "primary diseas
 
 ggsave(filename = paste0(output.dir, "images/primary_disease_impacts_by_year_NE.png"), 
        pathogen.plot.primary, 
-       height = 4, width = 8)
+       height = 4, width = 10)
 
 # secondary pathogens, by host species:
 secondary.pathogens <- disease.region %>% 
@@ -2256,7 +2256,21 @@ ggplot()+#geom_point(aes(x = Year, y = Host, color = Host, size = nstate),  stat
   theme(panel.grid.minor = element_blank(), 
         axis.text.x = element_text(angle = 90,hjust = 1 ))+facet_wrap(~Host)
 
-# for each species get 
+# make figure S5:----
+figureS5 <- plot_grid(
+  plot_grid(
+conifer.defoliators.species+theme(panel.grid = element_blank()), 
+hardwood.defoliators.species+ylab("Hardwood Insect Defoliators")+theme(panel.grid = element_blank()), 
+ncol = 1, align = "hv", labels = c("A", "B")
+),
+        plot_grid( abiotic.plot.region+theme(panel.grid = element_blank()), 
+pathogen.plot.primary+theme(panel.grid = element_blank()), decline.plot,  align = "hv", labels = c("A", "B"),
+ncol = 1
+),
+ncol = 2
+)
+ggsave(filename = paste0(output.dir, "images/FigureS5.png"), 
+       height = 9, width = 18, units = "in")
 
 # Next steps:
 

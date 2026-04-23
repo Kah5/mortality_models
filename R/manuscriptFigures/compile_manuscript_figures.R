@@ -8,7 +8,7 @@ library(sfdep)
 library(sf)
 library(spdep)
 library(gt)
-
+# Setting up species, colorschemes, etc: ----
 output.dir <- output.folder <- "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
 
 # # get the complete species list
@@ -101,6 +101,99 @@ disturb.species.order <- c(
   "white ash", 
   "yellow-poplar"
 )
+
+# update table 1 in the manuscript: ----
+
+df <- tibble(
+  Model = c("Model 1", 
+                  "Model 2", 
+                  "Model 3", 
+                  "Model 4", 
+                  "Model 5", 
+                  "Model 6", 
+                  "Model 7", 
+                  "Model 8",
+                  "Model 9"
+  ),
+  Covariates = c("Diameter Difference", 
+                 "Diameter Difference & Diameter)", 
+                 "Diameter Difference, Diameter & Neighborhood attributes", 
+                 "Diameter Difference, Diameter, Neighborhood attributes & Climate Variables", 
+                 "Diameter Difference, Diameter, Neighborhood attributes, Climate Variables & Site Conditions", 
+                 "Model 5 + all Diameter difference and Diameter interactions", 
+                 "Model 6 + all competition interactions",  
+                  "Model 7 + all climate interactions",
+                  "Model 8 + all site interactions (all fixed efffects and two way interactions)"
+  ),
+  Formula = c("$\\beta_{DBH}DBH$", 
+              
+              "$\\bm{\\sum\\limits_{s = 1}^{2}\\beta_{Size}Size_{s}} = \\beta_{DBH}DBH + \\beta_{DBH}DBHdiff$", 
+              
+              "$ \\bm{\\beta_{Size}Size_{s}} + \\bm{\\sum\\limits_{h = 1}^{3}\\beta_{Neighbor}*Neighbor_{h}}$", 
+              
+              "$\\bm{\\beta_{Size}Size_{s}} + \\bm{\\sum\\limits_{h = 1}^{3}\\beta_{Neighbor}*Neighbor_{h}} +
+              \\bm{\\sum\\limits_{c = 1}^{3}\\beta_{Climate}*Climate_{c}}$", 
+              
+              "$\\bm{\\sum\\limits_{j = 1}^{12}\\beta_{j}X_{j}} = \\bm{\\beta_{Size}*Size{s}} + \\bm{\\sum\\limits_{h = 1}^{3}\\beta_{Neighbor}*Neighbor_{h}} +
+              \\bm{\\sum\\limits_{c = 1}^{3}\\beta_{Climate}*Climate_{c}} + \\bm{\\sum\\limits_{d = 1}^{4}\\beta_{Site}*Site_{d}}$",
+              
+              "$\\bm{\\sum\\limits_{j = 1}^{12}\\beta_{j}X_{j}} + \\sum\\limits_{j > s} \\beta_{j,Size}(X_j Size_{s})$",
+              
+              "$\\bm{\\sum\\limits_{j = 1}^{12}\\beta_{j}X_{j}} + \\sum\\limits_{j > s} \\beta_{j,Size}(X_j Size_{s}) + \\sum\\limits_{j > h} \\beta_{j,Neighbor}(X_j Neighbor_{h})$",
+              
+              "$\\bm{\\sum\\limits_{j = 1}^{12}\\beta_{j}X_{j}} + \\sum\\limits_{j > s} \\beta_{j,Size}(X_j Size_{s}) + \\sum\\limits_{j > h} \\beta_{j,Neighbor}(X_j Neighbor_{h}) +
+              \\sum\\limits_{j > c} \\beta_{j, Climate}(X_j Climate_{c})$",
+              
+              "$\\bm{\\sum\\limits_{j = 1}^{12}\\beta_{j}X_{j}} + \\sum\\limits_{j > s} \\beta_{j,Size}(X_j Size_{s}) + \\sum\\limits_{j > h} \\beta_{j,Neighbor}(X_j Neighbor_{h}) +
+              \\sum\\limits_{j > c} \\beta_{j, Climate}(X_j Climate_{c}) +
+              \\sum\\limits_{j > d} \\beta_{j, Site}(X_j Site_{d})$"
+              
+             
+  ), 
+
+  Number.betas = c(1, 
+                   2, 
+                   5,
+                   9, 
+                   12, 
+                   33, 
+                   57, 
+                   75, 
+                   78)
+)
+
+table1 <- df |> gt()|> 
+  fmt_markdown(columns = Formula) |>
+  cols_label(Covariates = "Description", 
+             Formula = md("$\\bm{\\beta_{K}X_{K}} = $"),
+             Number.betas = md("Number of $\\beta$'s (K)"))|>
+  cols_width(Model ~ px(80), 
+             Covariates ~ px(300),
+             Formula ~ px(700), 
+             Number.betas ~ px(80))|>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels()
+  )|>
+  tab_style(
+    style = cell_text(font = "Times New Roman"),
+    locations = cells_body()
+  ) |>
+  # Apply to column labels
+  tab_style(
+    style = cell_text(font = "Times New Roman"),
+    locations = cells_column_labels()
+  )|>
+  tab_options(
+    # Add horizontal lines between rows
+    table.border.bottom.color = "black"
+  )#|>
+
+# save png and tex format
+# pretty version:
+gtsave(data = table1, filename = paste0(output.dir, "images/Table_1_model_summary.png"), vwidth = 1500)
+# tables have to be inserted into MS word format: (ugh!)
+gtsave(data = table1, filename = paste0(output.dir, "images/Table_1_model_summary.docx"))
 
 # summaries of the mortality rates (observed) by species:-----
 
