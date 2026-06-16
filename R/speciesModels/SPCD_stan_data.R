@@ -175,7 +175,8 @@ if(remper.correction == "random"){
   # DIA_DIFF_scaled is 
   cleaned.data <- cleaned.data %>% mutate(ba.scaled = plt_ba_sq_ft_cur.scaled, 
             DIA_DIFF_scaled = annual.growth.scaled, 
-            BAL.scaled = BAL.ratio.scaled)
+            BAL.scaled = BAL.ratio.scaled) %>% 
+    filter(!is.na(BAL.scaled))
 
   #summary(cleaned.data$BAL.scaled)
   cleaned.data$S <- ifelse(cleaned.data$M == 1, 0, 1)
@@ -861,12 +862,17 @@ if(remper.correction == "random"){
   mod.data$xMrep <- mod.data.test$xM
   mod.data$ytest <- mod.data.test$y
   mod.data$Remperoos <- mod.data.test$Remper
+  mod.data$K <- ncol(mod.data$xM)
+  
   save(train.data, 
        test.data, 
        mod.data,
        mod.data.test, 
        model.name, 
        file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_1.Rdata"))
+  # save to json file for use in cmdstan
+  write_json(mod_data, file = paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
+                                     remper.correction,"model_1.json"), pretty = TRUE, auto_unbox = TRUE)
   
   mod.data <- mod.data.2
   mod.data.test <- mod.data.2.test
@@ -874,12 +880,16 @@ if(remper.correction == "random"){
   mod.data$xMrep <- mod.data.test$xM
   mod.data$ytest <- mod.data.test$y
   mod.data$Remperoos <- mod.data.test$Remper
+  mod.data$K <- ncol(mod.data$xM)
   save(train.data, 
        test.data, 
        mod.data,
        mod.data.test, 
        model.name, 
        file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_2.Rdata"))
+  # save to json file for use in cmdstan
+  write_json(mod_data, file = paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
+                                     remper.correction,"model_2.json"), pretty = TRUE, auto_unbox = TRUE)
   
   mod.data <- mod.data.3
   mod.data.test <- mod.data.3.test
@@ -887,12 +897,16 @@ if(remper.correction == "random"){
   mod.data$xMrep <- mod.data.test$xM
   mod.data$ytest <- mod.data.test$y
   mod.data$Remperoos <- mod.data.test$Remper
+  mod.data$K <- ncol(mod.data$xM)
   save(train.data, 
        test.data, 
        mod.data,
        mod.data.test, 
        model.name, 
        file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_3.Rdata"))
+  # save to json file for use in cmdstan
+  write_json(mod_data, file = paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
+                                     remper.correction,"model_3.json"), pretty = TRUE, auto_unbox = TRUE)
   
   mod.data <- mod.data.4
   mod.data.test <- mod.data.4.test
@@ -900,12 +914,16 @@ if(remper.correction == "random"){
   mod.data$xMrep <- mod.data.test$xM
   mod.data$ytest <- mod.data.test$y
   mod.data$Remperoos <- mod.data.test$Remper
+  mod.data$K <- ncol(mod.data$xM)
   save(train.data, 
        test.data, 
        mod.data,
        mod.data.test, 
        model.name, 
        file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_4.Rdata"))
+  # save to json file for use in cmdstan
+  write_json(mod_data, file = paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
+                                     remper.correction,"model_4.json"), pretty = TRUE, auto_unbox = TRUE)
   
   mod.data <- mod.data.5
   mod.data.test <- mod.data.5.test
@@ -913,12 +931,16 @@ if(remper.correction == "random"){
   mod.data$xMrep <- mod.data.test$xM
   mod.data$ytest <- mod.data.test$y
   mod.data$Remperoos <- mod.data.test$Remper
+  mod.data$K <- ncol(mod.data$xM)
   save(train.data, 
        test.data, 
        mod.data,
        mod.data.test, 
        model.name, 
        file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_5.Rdata"))
+  # save to json file for use in cmdstan
+  write_json(mod_data, file = paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
+                                     remper.correction,"model_5.json"), pretty = TRUE, auto_unbox = TRUE)
   
   mod.data <- mod.data.6
   mod.data.test <- mod.data.6.test
@@ -926,12 +948,17 @@ if(remper.correction == "random"){
   mod.data$xMrep <- mod.data.test$xM
   mod.data$ytest <- mod.data.test$y
   mod.data$Remperoos <- mod.data.test$Remper
+  mod.data$K <- ncol(mod.data$xM)
   save(train.data, 
        test.data, 
        mod.data,
        mod.data.test, 
        model.name, 
        file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_6.Rdata"))
+  # save to json file for use in cmdstan
+  write_json(mod_data, file = paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
+                                     remper.correction,"model_6.json"), pretty = TRUE, auto_unbox = TRUE)
+  
   
   mod.data <- mod.data.7
   mod.data.test <- mod.data.7.test
@@ -939,12 +966,17 @@ if(remper.correction == "random"){
   mod.data$xMrep <- mod.data.test$xM
   mod.data$ytest <- mod.data.test$y
   mod.data$Remperoos <- mod.data.test$Remper
+  mod.data$K <- ncol(mod.data$xM)
   save(train.data, 
        test.data, 
        mod.data,
        mod.data.test, 
        model.name, 
        file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_7.Rdata"))
+  # save to json file for use in cmdstan
+  write_json(mod_data, file = paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
+                                     remper.correction,"model_7.json"), pretty = TRUE, auto_unbox = TRUE)
+  
   
   mod.data <- mod.data.8
   mod.data.test <- mod.data.8.test
@@ -952,12 +984,19 @@ if(remper.correction == "random"){
   mod.data$xMrep <- mod.data.test$xM
   mod.data$ytest <- mod.data.test$y
   mod.data$Remperoos <- mod.data.test$Remper
+  mod.data$K <- ncol(mod.data$xM)
   save(train.data, 
        test.data, 
        mod.data,
        mod.data.test, 
        model.name, 
        file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_8.Rdata"))
+  # save to json file for use in cmdstan
+  write_json(mod_data, file = paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
+                                     remper.correction,"model_8.json"), pretty = TRUE, auto_unbox = TRUE)
+  
+  
+  
   
   mod.data <- mod.data.9
   mod.data.test <- mod.data.9.test
@@ -965,6 +1004,7 @@ if(remper.correction == "random"){
   mod.data$xMrep <- mod.data.test$xM
   mod.data$ytest <- mod.data.test$y
   mod.data$Remperoos <- mod.data.test$Remper
+  mod.data$K <- ncol(mod.data$xM)
   save(train.data, 
        test.data, 
        mod.data,
@@ -972,4 +1012,7 @@ if(remper.correction == "random"){
        model.name, 
        file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_9.Rdata"))
   
+  # save to json file for use in cmdstan
+  write_json(mod_data, file = paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
+                                     remper.correction,"model_9.json"), pretty = TRUE, auto_unbox = TRUE)
 }
