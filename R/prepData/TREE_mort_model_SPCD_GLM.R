@@ -226,7 +226,7 @@ for(i in 1:length(SPCD.df$SPCD)){
                                  non_SPCD.BA = mod.data$non_SPCD.BA.scaled,
                                  prop.focal.ba = mod.data$prop.focal.ba.scaled,
                                  remper = mod.data$remper
-    )
+    )%>% na.omit()
     
     test.covariate.data <- data.frame(M = test.data$M,
                                       annual.growth = mod.data$annual_growth_test, 
@@ -251,7 +251,7 @@ for(i in 1:length(SPCD.df$SPCD)){
                                       SPCD.BA = mod.data$SPCD.BA_test,
                                       non_SPCD.BA = mod.data$non_SPCD.BA.scaled_test,
                                       prop.focal.ba = mod.data$prop.focal.ba.scaled_test,
-                                      remper = mod.data$remper_test )
+                                      remper = mod.data$remper_test )%>% na.omit()
     
     
     
