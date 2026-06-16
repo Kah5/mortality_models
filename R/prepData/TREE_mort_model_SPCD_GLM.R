@@ -42,14 +42,6 @@ library(gt)
 nspp[1:17,] |> gt()
 # 15 species make up >75% of the total trees in the cored plots, so lets focus on those
 
-# only 210 tree mortality events detected in this dataset:
-# M  `n()`
-# <dbl>  <int>
-#   1     0 315132
-# 2     1    210
-# Split into training and testing
-
-
 cleaned.data$SPGRPCD <- FIESTA::ref_species[match(cleaned.data$SPCD, FIESTA::ref_species$SPCD),]$E_SPGRPCD
 
 SPGRP.df <- FIESTA::ref_codes %>% filter(VARIABLE %in% "SPGRPCD") %>% filter(VALUE %in% unique(cleaned.data$SPGRPCD))
@@ -66,7 +58,7 @@ hist(cleaned.data$plt_ba_sq_ft_cur)
 hist(cleaned.data$plt_ba_sq_ft_old)
 hist(cleaned.data$Ndep.remper.avg)
 hist(cleaned.data$Ndep.remper.rel.1950)
-hist(cleaned.data$Differece_per_yr)
+hist(cleaned.data$BAL.ratio)
 hist(cleaned.data$remper)
 hist(cleaned.data$ppt.anom)
 all.monthly <- readRDS("C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/data/PRISM_monthly_NE_periodic.RDS" )
@@ -145,7 +137,8 @@ stan2glm.data <- function(SPCD.id, remper.correction){
                    SPCD.BA = train.data$SPCD.BA.scaled,
                    non_SPCD.BA.scaled = train.data$non_SPCD.BA.scaled,
                    prop.focal.ba.scaled = train.data$prop.focal.ba.scaled, 
-                   DIA.diff  = train.data$DIA_DIFF,
+                   DIA.diff  = train.data$DIA_DIFF_scaled,
+                   remper = train.data$remper,
                    
                    
                    N_test = nrow(test.data),
@@ -171,7 +164,8 @@ stan2glm.data <- function(SPCD.id, remper.correction){
                    SPCD.BA_test = test.data$SPCD.BA.scaled,
                    non_SPCD.BA.scaled_test = test.data$non_SPCD.BA.scaled,
                    prop.focal.ba.scaled_test = test.data$prop.focal.ba.scaled, 
-                   DIA.diff_test  = test.data$DIA_DIFF)
+                   DIA.diff_test  = test.data$DIA_DIFF_scaled, 
+                   remper_test = test.data$remper)
   
   
   model.name <- paste0("simple_logistic_SPCD_", SPCD.id, "remper_",remper.correction)
@@ -230,7 +224,8 @@ for(i in 1:length(SPCD.df$SPCD)){
                                  Ndep = mod.data$Ndep, 
                                  SPCD.BA = mod.data$SPCD.BA,
                                  non_SPCD.BA = mod.data$non_SPCD.BA.scaled,
-                                 prop.focal.ba = mod.data$prop.focal.ba.scaled 
+                                 prop.focal.ba = mod.data$prop.focal.ba.scaled,
+                                 remper = mod.data$remper
     )
     
     test.covariate.data <- data.frame(M = test.data$M,
@@ -255,7 +250,8 @@ for(i in 1:length(SPCD.df$SPCD)){
                                       Ndep = mod.data$Ndep_test, 
                                       SPCD.BA = mod.data$SPCD.BA_test,
                                       non_SPCD.BA = mod.data$non_SPCD.BA.scaled_test,
-                                      prop.focal.ba = mod.data$prop.focal.ba.scaled_test )
+                                      prop.focal.ba = mod.data$prop.focal.ba.scaled_test,
+                                      remper = mod.data$remper_test )
     
     
     
@@ -279,7 +275,7 @@ for(i in 1:length(SPCD.df$SPCD)){
     glm.M <-  glm(M ~ SPCD.BA, data = covariate.data, family = "binomial")
     glm.N <-  glm(M ~ non_SPCD.BA, data = covariate.data, family = "binomial")
     glm.O <-  glm(M ~ prop.focal.ba, data = covariate.data, family = "binomial")
-    
+    glm.P <-  glm(M ~ remper, data = covariate.data, family = "binomial")
     
     
     glm.1 <-  glm(M ~ dia.diff, data = covariate.data, family = "binomial")
@@ -1548,6 +1544,8 @@ for(i in 1:length(SPCD.df$SPCD)){
                      non_SPCD.BA*prop.focal.ba
                    , data = covariate.data, family = "binomial")
     
+    glm.remper <- glm(M ~ remper, data = covariate.data, family = "binomial" )
+    
     # mcfaddens rsquared
     list.mods <- list(glm.A1, glm.A2, glm.A3, glm.A4,
                       glm.A, glm.B, glm.C, glm.D, glm.E, 
@@ -1610,9 +1608,9 @@ for(i in 1:length(SPCD.df$SPCD)){
                              McFadden.Rsq = McFadden.rsq.df[,1], 
                              AIC = aics.df[,1], 
                              converged = convergence.df[,1])
-    plot(model.diag$model.no, model.diag$AUC)
-    plot(model.diag$model.no, model.diag$McFadden.Rsq)
-    
+    # plot(model.diag$model.no, model.diag$AUC)
+    # plot(model.diag$model.no, model.diag$McFadden.Rsq)
+    # 
     saveRDS(model.diag, paste0(box.dir,"/SPCD_glm_output/GLM_model_diag_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".RDS") )
     saveRDS(Var.importance.list, paste0(box.dir,"/SPCD_glm_output/GLM_variable_importance_list_SPCD_", SPCD.df[i,]$SPCD, "_remp_", remper.cor.vector[j], ".RDS") )
     

@@ -79,6 +79,13 @@ NE_plot <- dbGetQuery(ocon, "SELECT cn, statecd, unitcd, countycd, plot, invyr, 
   rename_with(tolower)
 unique(NE_plot$statecd)
 length(unique(NE_plot$cn))
+
+NE_plot %>% group_by(statecd, invyr) %>%
+  dplyr::select(statecd, invyr)%>%
+  distinct()%>%
+  ungroup()%>%
+  group_by(statecd)%>%
+  reframe(invyrs = paste(invyr, collapse = ","))
 # kindCD or design cd
 
 # RI_tree <- dbGetQuery(ocon, "SELECT cn, statecd, unitcd, countycd, plot, subp, tree, invyr, dia, statuscd, spcd
@@ -469,8 +476,8 @@ TREE.remeas %>% filter( exprem > 0 & dbhold > 0 & ! remper == 0 & !status == 5) 
    group_by(PLOT.ID, point, state, county, pltnum, tree, date) %>% 
    
    # for dead trees (dead, non-salvable dead, and snags), calculate annual growth as diameter diff/ half of remper
-   # for live trees, calculate annual growht as diamber diff/remper
-   mutate(annual.growth = ifelse(status %in% c(2,  4, 5) & ! is.na(dbhold) & ! remper == 0, 
+   # for live trees, calculate annual growth as diamber diff/remper
+   mutate(annual.growth = ifelse(status %in% c(2, 4, 5) & ! is.na(dbhold) & ! remper == 0, 
                                  DIA_DIFF/(remper/2), DIA_DIFF/remper),
           M = ifelse(status %in%  c(2, 4, 5), 1, 0), # if a tree is dead, non-salvable deead or a snag, mark as dead
           relative.growth = (annual.growth/dbhold)*100) %>% ungroup() %>% 
@@ -793,7 +800,8 @@ Ndep.melt$year <- substring(Ndep.melt$variable, 2)
 # mean N deposition
 Ndep.remper <- Ndep.melt %>% group_by(PLOT.ID, cycle) %>% 
                           mutate(prev.date = date - remper) %>% group_by(PLOT.ID, cycle)%>%
-                              filter(year >= prev.date & year <= date) %>% group_by(PLOT.ID, cycle, county, state) %>% 
+                              filter(year >= prev.date & year <= date) %>% 
+                          group_by(PLOT.ID, cycle, county, state) %>% 
                               mutate(Ndep.remper.avg = mean(value, na.rm =TRUE), 
                                      Nyears = n())
 
@@ -804,8 +812,8 @@ Ndep.remper.trend <- Ndep.melt %>% group_by(PLOT.ID, cycle) %>%
   mutate(year.id = ifelse(year == prev.date, "T1", "T2"))%>%
   group_by(PLOT.ID, cycle, county, state,remper, year.id) %>% 
   summarise(Ndep.start = mean(value, na.rm =TRUE)) %>% spread(year.id, Ndep.start) %>%
-  mutate(Difference = T1 - T2, 
-         Difference_per_yr = (T1 - T2)/remper)
+  mutate(Difference = T2 - T1, 
+         Difference_per_yr = (T2 - T1)/remper)
 
 # N deposition relative to 1931:1950 year mean
 Ndep.1931.1950.yr.means <- Ndep.melt %>% group_by(PLOT.ID, cycle) %>%
@@ -824,6 +832,7 @@ Ndep.remper <- left_join(Ndep.remper.rel.1950, Ndep.remper.trend)
 rm(test, plots.clim)
 # save Ndep average for the remper
 saveRDS(Ndep.remper, "data/Ndep.average.remper.NE.periodic.RDS")
+Ndep.remper <- readRDS("data/Ndep.average.remper.NE.periodic.RDS")
 
 Ndep.remper <- Ndep.remper %>% 
   dplyr::select(date, PLOT.ID, cycle, remper, county, state, Ndep.1931.1950,
@@ -842,7 +851,18 @@ png(height = 6, width = 10, units = "in", res = 150, "images/Ndep_map_trees_NE_F
 map.ndep.trees
 dev.off()
 
-map.ndep.trees <- ggplot(cleaned.data, aes(x = LONG_FIADB, y = LAT_FIADB, color = Difference_per_yr))+geom_point()
+map.ndep_remper_diff.trees <- ggplot(cleaned.data2, aes(x = LONG_FIADB, y = LAT_FIADB, color = Difference_per_yr))+geom_point()
+
+png(height = 6, width = 10, units = "in", res = 150, "images/Ndep_diff_year_map_trees_NE_FIA.png")
+map.ndep_remper_diff.trees
+dev.off()
+
+map.ndep_remper_diff.trees_spce <- ggplot(cleaned.data2, aes(x = LONG_FIADB, y = LAT_FIADB, color = Difference_per_yr))+geom_point()+facet_wrap(~Species)
+
+png(height = 6, width = 10, units = "in", res = 150, "images/Ndep_diff_year_map_trees_NE_FIA.png")
+map.ndep_remper_diff.trees_spce
+dev.off()
+
 map.ndep.trees <- ggplot(cleaned.data, aes(x = LONG_FIADB, y = LAT_FIADB, color = Ndep.remper.rel.1950))+geom_point()
 
 
@@ -918,7 +938,7 @@ all.model.coeffs.df
 # now do the estimates on all the trees
 TREE.RD <- left_join(TREE.remeas.BAL %>% filter(!is.na(volfac)), all.model.coeffs.df) 
 Nmax <- TREE.RD %>% mutate(TPA.log = log(volfac), 
-                                BA.log = log(ba_sq_ft)) %>% 
+                            BA.log = log(ba_sq_ft)) %>% 
   mutate(Nmax = exp(alpha + BA.log*beta))%>% mutate(N.Nmax = volfac/Nmax)
 RD.by.plot <- Nmax %>% group_by(state, county, pltnum, PLOT.ID, cycle)%>%
   summarise(RD = sum(N.Nmax, na.rm = TRUE))
@@ -986,7 +1006,7 @@ g +
 
 nspp[1:20,]$spp
 # filter to just get the target species
-cleaned.data.spp <- cleaned.data2 %>% filter(SPCD %in% nspp[1:17,]$spp)
+cleaned.data.spp <- cleaned.data2 %>% filter(SPCD %in% nspp[1:17,]$SPCD)
 
 # get common names
 cleaned.data.spp$COMMON <- FIESTA::ref_species[match(cleaned.data.spp$SPCD, FIESTA::ref_species$SPCD),]$COMMON
@@ -1090,6 +1110,8 @@ histogram.growth.plt <- ggplot(cleaned.data.spp, aes(x = forcats::fct_rev(`Tree 
 histogram.growth.plt 
 ggsave(height = 12, width = 12, units = "in", "images/Growth_Mortality_plot.png")
 
+ggplot()+geom_violin(data = cleaned.data.spp, aes(x = factor(Species), y = Difference_per_yr, fill = as.character(M)))+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 
 ggplot()+geom_violin(data = cleaned.data.spp, aes(x = factor(Species), y = ppt.anom, fill = as.character(M)))+

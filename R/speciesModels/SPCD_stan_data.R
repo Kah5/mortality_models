@@ -18,12 +18,15 @@ if(remper.correction == "random"){
   cleaned.data <- cleaned.data %>% ungroup()  %>% group_by(SPCD) %>% 
     mutate(remper.sample = runif(length(cleaned.data$state)))%>%
     mutate(rempercur = ifelse(M ==1, remper*remper.sample, remper), 
-           annual.growth = DIA_DIFF/rempercur) %>% mutate(DIA.median = median(dbhcur, na.rm =TRUE), 
+           annual.growth = DIA_DIFF/rempercur, 
+           BAL.ratio = BAL/BA_total) %>% mutate(DIA.median = median(dbhcur, na.rm =TRUE), 
                                                           DIA.sd = sd(dbhcur, na.rm = TRUE),  
                                                           DIA.DIFF.median = median(DIA_DIFF, na.rm =TRUE), 
                                                           DIA.DIFF.sd = sd(DIA_DIFF, na.rm =TRUE),
                                                           BAL.median = median(BAL, na.rm=TRUE),
                                                           BAL.sd = sd(BAL, na.rm = TRUE),
+                                                BAL.ratio.median = median(BAL.ratio, na.rm=TRUE),
+                                                BAL.ratio.sd = sd(BAL.ratio, na.rm = TRUE),
                                                           RD.median = median(RD, na.rm=TRUE), 
                                                           RD.sd = sd(RD, na.rm =TRUE),
                                                           nonSPCD_BA_tot.sd = sd(non_SPCD_BA, na.rm = TRUE),
@@ -43,6 +46,7 @@ if(remper.correction == "random"){
                          annual.growth.scaled = (annual.growth - annual.growth.median)/annual.growth.sd,
                          RD.scaled = (RD-RD.median)/RD.sd,
                          BAL.scaled = (BAL-BAL.median)/BAL.sd,
+                         BAL.ratio.scaled = (BAL.ratio-BAL.ratio.median)/BAL.ratio.sd,
                          SPCD.BA.scaled = (SPCD_BA - SPCD_BA.median)/SPCD_BA.sd,
                          non_SPCD.BA.scaled = (non_SPCD_BA - nonSPCD_BA_tot.median)/nonSPCD_BA_tot.sd,
                          prop.focal.ba.scaled = ((SPCD_BA/BA_total) - prop.focal.ba.median)/prop.focal.ba.sd, 
@@ -60,13 +64,15 @@ if(remper.correction == "random"){
     }else{
     cleaned.data <- cleaned.data %>% ungroup()  %>% group_by(SPCD) %>% 
       mutate(rempercur = ifelse(M ==1, remper*remper.correction, remper), 
-             annual.growth = DIA_DIFF/rempercur) %>% mutate(DIA.median = median(dbhcur, na.rm =TRUE), 
+             annual.growth = DIA_DIFF/rempercur,
+             BAL.ratio = BAL/BA_total) %>% mutate(DIA.median = median(dbhcur, na.rm =TRUE), 
                                                             DIA.sd = sd(dbhcur, na.rm = TRUE),  
                                                             DIA.DIFF.median = median(DIA_DIFF, na.rm =TRUE), 
                                                             DIA.DIFF.sd = sd(DIA_DIFF, na.rm =TRUE),
                                                             BAL.median = median(BAL, na.rm=TRUE),
                                                             BAL.sd = sd(BAL, na.rm = TRUE),
-                                                            
+                                                            BAL.ratio.median = median(BAL.ratio, na.rm=TRUE),
+                                                            BAL.ratio.sd = sd(BAL.ratio, na.rm = TRUE),
                                                             plt_ba_sq_ft_cur.median = median(plt_ba_sq_ft_cur, na.rm = TRUE),
                                                             plt_ba_sq_ft_cur.sd = sd(plt_ba_sq_ft_cur, na.rm = TRUE),
                                                             
@@ -100,6 +106,7 @@ if(remper.correction == "random"){
                            
                            RD.scaled = (RD-RD.median)/RD.sd,
                            BAL.scaled = (BAL-BAL.median)/BAL.sd,
+                           BAL.ratio.scaled = (BAL.ratio-BAL.ratio.median)/BAL.ratio.sd,
                            SPCD.BA.scaled = (SPCD_BA - SPCD_BA.median)/SPCD_BA.sd,
                            non_SPCD.BA.scaled = (non_SPCD_BA - nonSPCD_BA_tot.median)/nonSPCD_BA_tot.sd,
                            prop.focal.ba.scaled = ((SPCD_BA/BA_total) - prop.focal.ba.median)/prop.focal.ba.sd, 
@@ -165,8 +172,10 @@ if(remper.correction == "random"){
                                              !is.na(annual.growth.scaled) & !is.na(ppt.anom))# & !is.na(prop.focal.ba) & !is.na(prop.focal.density))
   
   # try replacing these variables
+  # DIA_DIFF_scaled is 
   cleaned.data <- cleaned.data %>% mutate(ba.scaled = plt_ba_sq_ft_cur.scaled, 
-                          Ndep.scaled = Ndep_Diff_per_yr.scaled)
+            DIA_DIFF_scaled = annual.growth.scaled, 
+            BAL.scaled = BAL.ratio.scaled)
 
   #summary(cleaned.data$BAL.scaled)
   cleaned.data$S <- ifelse(cleaned.data$M == 1, 0, 1)
@@ -188,6 +197,7 @@ if(remper.correction == "random"){
   ggplot(test.data, aes(x= as.character(M), y = plt_ba_sq_ft_cur.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
   ggplot(test.data, aes(x= as.character(M), y = ba.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
   ggplot(test.data, aes(x= as.character(M), y = BAL.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  ggplot(test.data, aes(x= as.character(M), y = BAL.ratio.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
   
   #ggplot(test.data, aes(x= as.character(M), y = SPCD.density.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
   ggplot(test.data, aes(x= as.character(M), y = non_SPCD.BA.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")

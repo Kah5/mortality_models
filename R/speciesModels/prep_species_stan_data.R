@@ -163,6 +163,7 @@ plot.medians <- unique(
     MATmax.sd = sd(MATmax, na.rm = TRUE)
   )
 
+saveRDS(plot.medians, "data/plot.medians_SPCD_all.rds")
 #View(cleaned.data %>% group_by(SPGRPCD, SPCD) %>% summarise(n()))
 
 cleaned.data.full <- cleaned.data
@@ -231,8 +232,4 @@ source("R/speciesModels/SPCD_stan_data.R")
 for(i in 1:length(unique(nspp[1:17,]$SPCD))){
   cat(i)
   SPCD.stan.data(SPCD.id = nspp[i,]$SPCD, remper.correction = 0.5, cleaned.data.full = cleaned.data.full)
-  # SPCD.stan.data(SPCD.id = nspp[i,]$SPCD, remper.correction = 0.9, cleaned.data.full = cleaned.data.full)
-  # SPCD.stan.data(SPCD.id = nspp[i,]$SPCD, remper.correction = 0.1, cleaned.data.full = cleaned.data.full)
-  # SPCD.stan.data(SPCD.id = nspp[i,]$SPCD, remper.correction = 0.3, cleaned.data.full = cleaned.data.full)
-  # SPCD.stan.data(SPCD.id = nspp[i,]$SPCD, remper.correction = 0.7, cleaned.data.full = cleaned.data.full)
-}
+ }
