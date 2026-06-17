@@ -7,6 +7,7 @@ library(FIESTA)
 library(dplyr)
 library(mltools)
 library(scales)
+library(jsonlite)
 
 options(mc.cores = parallel::detectCores())
 cleaned.data <- readRDS( "data/cleaned.data.mortality.TRplots.RDS")
@@ -231,5 +232,7 @@ source("R/speciesModels/SPCD_stan_data.R")
 # write the data for all 26 different species groups:
 for(i in 1:length(unique(nspp[1:17,]$SPCD))){
   cat(i)
-  SPCD.stan.data(SPCD.id = nspp[i,]$SPCD, remper.correction = 0.5, cleaned.data.full = cleaned.data.full)
+  SPCD.stan.data(SPCD.id = nspp[i,]$SPCD, 
+                 remper.correction = 0.5, 
+                 cleaned.data.full = cleaned.data.full)
  }
