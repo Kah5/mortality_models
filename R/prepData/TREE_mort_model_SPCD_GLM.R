@@ -1701,22 +1701,22 @@ model.diag <- do.call(rbind, model.diags)
 model.diag %>% group_by(SPCD, COMMON)|> gt()
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AUC, fill = COMMON, group = model.no))+geom_bar(stat= "identity",position = position_dodge2())#+position_dodge()
-ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_AUC.png", height = 5, width = 8)
+ggsave(paste0(box.dir, "/SPCD_glm_output/GLM_all_species_AUC.png"), height = 5, width = 8)
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = McFadden.Rsq))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
-ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_McFaddenRsq.png", height = 5, width = 8)
+ggsave(paste0(box.dir, "/SPCD_glm_output/GLM_all_species_McFaddenRsq.png"), height = 5, width = 8)
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AUC))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
-ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_AUC.png", height = 5, width = 8)
+ggsave(paste0(box.dir, "/SPCD_glm_output/GLM_all_species_AUC.png"), height = 5, width = 8)
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AIC))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
-ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_AIC.png", height = 5, width = 8)
+ggsave(paste0(box.dir, "/SPCD_glm_output/GLM_all_species_AIC.png"), height = 5, width = 8)
 
 ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, AIC,  label = as.character(model.no)))+geom_text()+facet_wrap(~SPCD, scales = "free_y")
-ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_AIC_AUC.png", height = 5, width = 8)
+ggsave(paste0(box.dir, "/SPCD_glm_output/GLM_all_species_AIC_AUC.png"), height = 5, width = 8)
 
 ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, McFadden.Rsq,  label = as.character(model.no)))+geom_text(size = 2)+facet_wrap(~SPCD, scales = "free_y")
-ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_AUC_Rsq.png", height = 5, width = 8)
+ggsave(paste0(box.dir, "/SPCD_glm_output/GLM_all_species_AUC_Rsq.png"), height = 5, width = 8)
 
 # make a table explaining the models:
 
@@ -1807,24 +1807,24 @@ glm.model.table <- data.frame(model.no = 1:length(list.mods),
 model.diag <- left_join(model.diag, glm.model.table)
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AUC, fill = COMMON, group = model.no))+geom_bar(stat= "identity",position = position_dodge2())#+position_dodge()
-ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_AUC.png", height = 5, width = 8)
+ggsave(paste0(box.dir, "/SPCD_glm_output/GLM_all_species_AUC.png"), height = 5, width = 8)
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = McFadden.Rsq, fill = model.type))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
-ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_McFaddenRsq.png", height = 5, width = 8)
+ggsave(paste0(box.dir, "/SPCD_glm_output/GLM_all_species_McFaddenRsq.png"), height = 5, width = 8)
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AUC, fill = model.type))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
-ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_AUC.png", height = 5, width = 8)
+ggsave(paste0(box.dir, "/SPCD_glm_output/GLM_all_species_AUC.png"), height = 5, width = 8)
 
 ggplot(model.diag %>% filter(converged == TRUE), aes(x = model.no, y = AIC, fill = model.type))+geom_bar(stat= "identity") + facet_wrap(~COMMON, scales = "free_y")
-ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_AIC.png", height = 5, width = 8)
+ggsave(paste0(box.dir,  "/SPCD_glm_output/GLM_all_species_AIC.png"), height = 5, width = 8)
 
 ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, AIC,  label = as.character(model.no)))+geom_text()+facet_wrap(~SPCD, scales = "free_y")
-ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_AIC_AUC.png", height = 5, width = 8)
+ggsave(paste0(box.dir,  "/SPCD_glm_output/GLM_all_species_AIC_AUC.png"), height = 5, width = 8)
 
 ggplot(model.diag %>% filter(converged ==TRUE), aes(AUC, McFadden.Rsq,  label = as.character(model.no)))+geom_text(size = 2)+facet_wrap(~SPCD, scales = "free_y")
-ggsave(box.dir, "/SPCD_glm_output/GLM_all_species_AUC_Rsq.png", height = 5, width = 8)
+ggsave(paste0(box.dir,  "/SPCD_glm_output/GLM_all_species_AUC_Rsq.png"), height = 5, width = 8)
 
-write.csv(glm.model.table, box.dir, "/SPCD_glm_output/GLM_table.csv", quote = TRUE)
+write.csv(glm.model.table, paste0(box.dir, "/SPCD_glm_output/GLM_table.csv"), quote = TRUE)
 
 # get all of the correlated variables for all species--are there common ones that we should eliminate
 inter.cov.corrs <- list()
@@ -1930,7 +1930,7 @@ test.covariate.all.df <- do.call(rbind, test.covariate.all)
 
 
 # Creating a correlation matrix
-all.correlations <- round(cor(covariate.all.df[,4:ncol(covariate.all.df)]), 1)
+all.correlations <- round(cor(covariate.all.df[,4:ncol(covariate.all.df)], use = "pairwise.complete.obs"), 1)
 
 # generate correlation plots here:
 ggcorrplot(all.correlations, hc.order = TRUE, type = "lower",
@@ -1956,7 +1956,7 @@ cor_df %>% filter(abs(Correlation) >= 0.5)
 
 
 # save in a list with the rest of the species
-inter.cov.corrs.comb <- cor_df %>% select(Variable1, Variable2, Correlation) %>% 
+inter.cov.corrs.comb <- cor_df %>% dplyr::select(Variable1, Variable2, Correlation) %>% 
   mutate(high.corr.F = ifelse(abs(Correlation) >= 0.5, "High", "Low"))
 
 # candidate variables for removal in the models
@@ -1966,11 +1966,13 @@ inter.cov.corrs.comb %>% filter(high.corr.F == "High")  %>% group_by(Variable2) 
 #####################################################################################
 # redo correlations with out the problem variables
 #####################################################################################
-covariate.reduced.df <- covariate.all.df %>% dplyr::select(-MATmin, -MATminanom, -RD, -SPCD.BA)
+covariate.reduced.df <- covariate.all.df %>% dplyr::select(-SPCD.BA, -non_SPCD.BA)
 # Creating a correlation matrix
-reduced.correlations <- round(cor(covariate.reduced.df[,4:ncol(covariate.reduced.df)]), 1)
+reduced.correlations <- round(cor(covariate.reduced.df[,4:ncol(covariate.reduced.df)], use = "pairwise.complete.obs"), 1)
 
-cor_matrix <- Hmisc::rcorr(as.matrix(covariate.reduced.df[,4:ncol(covariate.reduced.df)]), type="pearson")
+cor_matrix <- Hmisc::rcorr(as.matrix(na.omit(covariate.reduced.df[,4:ncol(covariate.reduced.df)])),
+                           #use = "pairwise.complete.obs",
+                           type="pearson")
 # most are significant, so I will focus on coefficient values
 
 
@@ -2047,7 +2049,7 @@ for(i in 1:length(SPCD.df$SPCD)){
                                  SPCD.BA = mod.data$SPCD.BA,
                                  non_SPCD.BA = mod.data$non_SPCD.BA.scaled#,
                                 # prop.focal.ba = mod.data$prop.focal.ba.scaled 
-    ) #%>% select(!problem.variables.corr.species)
+    ) %>% filter(!is.na(BAL))#%>% select(!problem.variables.corr.species)
     
     test.covariate.data <- data.frame(M = test.data$M,
                                       annual.growth = mod.data$annual_growth_test, 
@@ -2070,7 +2072,7 @@ for(i in 1:length(SPCD.df$SPCD)){
                                       elev = mod.data$elev_test, 
                                       Ndep = mod.data$Ndep_test, 
                                       SPCD.BA = mod.data$SPCD.BA_test,
-                                      non_SPCD.BA = mod.data$non_SPCD.BA.scaled_test)#,
+                                      non_SPCD.BA = mod.data$non_SPCD.BA.scaled_test) %>% filter(!is.na(BAL))#,
                                       #prop.focal.ba = mod.data$prop.focal.ba.scaled_test )#%>% 
       #select(!problem.variables.corr.species)
     
@@ -2859,7 +2861,7 @@ write.csv(glm.model.table, paste0(box.dir,"/SPCD_glm_output/GLM_reduced_table.cs
 # Look at Random forest approach and see if we get similar answers for the covariates that are important
 #####################################################################################################################################################
 library(randomForest)
-covariate.data.RF <- covariate.all.df %>% dplyr::select(-prop.focal.ba)
+covariate.data.RF <- covariate.all.df 
 covariate.data.RF$PHYSIO <- as.factor(covariate.data.RF$PHYSIO)
 covariate.data.RF$M <- as.factor(covariate.data.RF$M)
 all.cov.model <- randomForest(
