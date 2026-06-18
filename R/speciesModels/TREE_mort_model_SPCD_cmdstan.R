@@ -38,10 +38,17 @@ nparallel <- 4
 #TODO: multi-threading with reduce_sum
 
 #for(i in 16:1){# run for each of the 17 species
-  for(m in 1:9){ 
+  
 
 #for(m in 1:9){ 
-  
+ run.species.models <-  function(i, 
+                                 m, 
+                                 nparallel,
+                                 niter, 
+                                 nwarmup, 
+                                 nchain, 
+                                 output.dir){
+   #for(m in 2:9){
   model.number <- model.list[m]
 
   common.name <- nspp[1:17, ] %>% filter(SPCD %in% SPCD.df[i,]$SPCD) %>% dplyr::select(COMMON)
@@ -74,7 +81,7 @@ nparallel <- 4
       remp.cor <- remper.cor.vector[j]
       remper.correction <- remper.cor.vector[j]
       
-     fit.1$save_object(file = paste0(output.dir,"SPCD_stanoutput_cmdstan/", model.name, ".rds"))
+     fit.1$save_object(file = paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/", model.name, ".rds"))
       
       
       #fit.1 <- readRDS(paste0(output.dir,"SPCD_stanoutput_cmdstan/", model.name, ".rds"))
@@ -100,17 +107,17 @@ nparallel <- 4
       pSannual_hat_samps <-  fit.1$draws(variables = c("pSannualhat"), format = "df")
       
       # save all to their own objects:
-      saveRDS(log_lik_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/log_lik_samps_", model.name, ".rds"))
-      saveRDS(beta_alpha_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/u_beta_alpha_samps_", model.name, ".rds"))
+      saveRDS(log_lik_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO/log_lik_samps_", model.name, ".rds"))
+      saveRDS(beta_alpha_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/betas/u_beta_alpha_samps_", model.name, ".rds"))
       
-      saveRDS(y_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/y_rep_samps_", model.name, ".rds"))
-      saveRDS(y_hat_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/y_hat_samps_", model.name, ".rds"))
+      saveRDS(y_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/y_rep_samps_", model.name, ".rds"))
+      saveRDS(y_hat_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/y_hat_samps_", model.name, ".rds"))
       
-      saveRDS(pSurv_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/pSurv_rep_samps_", model.name, ".rds"))
-      saveRDS(pSurv_hat_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/pSurv_hat_samps_", model.name, ".rds"))
+      saveRDS(pSurv_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSurv_rep_samps_", model.name, ".rds"))
+      saveRDS(pSurv_hat_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSurv_hat_samps_", model.name, ".rds"))
       
-      saveRDS(pSannual_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/pSannual_rep_samps_", model.name, ".rds"))
-      saveRDS(pSannual_hat_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/pSannual_hat_samps_", model.name, ".rds"))
+      saveRDS(pSannual_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSannual_rep_samps_", model.name, ".rds"))
+      saveRDS(pSannual_hat_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSannual_hat_samps_", model.name, ".rds"))
       
       
       # sampler diagnostics -----
@@ -130,7 +137,7 @@ nparallel <- 4
                ebfmi = fit.1$diagnostic_summary()$ebfmi)
       
       write.csv(sampler_diag, paste0(output.dir, 
-                                     "SPCD_stanoutput_cmdstan/sample_diagnostics_", 
+                                     "SPCD_stanoutput_cmdstan/diagnostics/sample_diagnostics_", 
                                      model.name, ".csv"), row.names = FALSE)
       
           #convergence statistics & summary for all parameters we do inference on:
@@ -179,7 +186,7 @@ nparallel <- 4
                                            rhat, ess_bulk, ess_tail) 
       
       
-      convergence.stats <- rbind(u_betas_alphas, 
+      convergence.stats <- rbind( u_betas_alpha.quant, 
                                  y_hat.quant, 
                                  y_rep.quant, 
                                  pSurv_hat.quant, 
@@ -193,13 +200,13 @@ nparallel <- 4
      
       
       write.csv(convergence.stats, 
-                paste0(output.dir, "SPCD_stanoutput_cmdstan/Rhats_ESS_quantiles_", model.name, ".csv"))
+                paste0(output.dir, "SPCD_stanoutput_cmdstan/diagnostics/Rhats_ESS_quantiles_", model.name, ".csv"))
       
       
       # model fit statistics -----
           # loo results
       loo_results <-  fit.1$loo()
-      saveRDS(loo_results, paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO_results_", model.name, ".rds"))
+      saveRDS(loo_results, paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO/LOO_results_", model.name, ".rds"))
       
       # read in model data for comparison
       mod.data <- fromJSON(fit.1$data_file())
@@ -320,7 +327,7 @@ nparallel <- 4
    
    AUC.confusion_draws <- rbind(confusion.is_draws, confusion.oos_draws)
    
-   saveRDS(AUC.confusion_draws, paste0(output.dir,"SPCD_stanoutput_cmdstan/AUC_draws_", model.name, ".rds"))
+   saveRDS(AUC.confusion_draws, paste0(output.dir,"SPCD_stanoutput_cmdstan/AUC/AUC_draws_", model.name, ".rds"))
      
    # # save a summary with 95% CI  
    #  AUC.confusion_draws %>% group_by(model.number, type, SPCD)%>%
@@ -389,9 +396,20 @@ nparallel <- 4
       
       
       # source("R/speciesModels/SPCD_plot_stan.R")
-      rm(fit.1)
-#     }
-   }
+   # rm(list = setdiff(ls(), c("species.file", "species.mod","i","m","j","nspp",
+   #                           "niter", "nchain", "nwarmup", "nparallel", "model.list", "model.number")))
+ #   }
+ }
+ 
+ run.species.models(i = 16, 
+                    m = 2, 
+                    nparallel = nparallel,
+                    niter = niter, 
+                    nwarmup = nwarmup , 
+                    nchain = nchain, 
+                    output.dir = output.dir)
+ 
+ #lapply(17:1, FUN = run.species.models())
 #}
 
 # do the summaries on diagnostics, time, etc
