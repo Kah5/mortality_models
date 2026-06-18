@@ -25,7 +25,7 @@ transformed parameters {
   matrix[Nspp, K] u_beta; // actual species RE for the beta effects
   // calculate the non-centered u_betas from the sigm_beta and z_beta matrix
   for (k in 1:K) {
-    u_beta[, k] = sigma_beta[k] * z_beta[, k]; // multiply each column of z_beta by its sigma_beta[k]
+    u_beta[, k] = mu_beta[k] + sigma_beta[k] * z_beta[, k]; // multiply each column of z_beta by its sigma_beta[k]
   }
 
   vector[Nspp] alpha_SPP = mu_alpha + sigma_alpha * z_alpha_SPP; // non-centered parameterization for species random effect on intercept

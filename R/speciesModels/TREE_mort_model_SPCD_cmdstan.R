@@ -27,8 +27,12 @@ model.list <- 1:9
 species.file <- file.path(getwd(), "modelcode", "mort_model_general.stan")
 species.mod <- cmdstan_model(species.file)
 
-i <- 16
-m <- 5
+# compile the posterior prediction stan model (prediction only)
+predict.species.file <- file.path(getwd(), "modelcode", "mort_model_general_predict.stan")
+predict.species.mod <- cmdstan_model(predict.species.file)
+
+i <- 17
+m <- 1
 j <- 1
 
 niter <- 1000
@@ -48,7 +52,8 @@ nparallel <- 4
                                  niter, 
                                  nwarmup, 
                                  nchain, 
-                                 output.dir){
+                                 output.dir, 
+                                 print.progress = 500){
    #for(m in 2:9){
   model.number <- model.list[m]
 
@@ -58,9 +63,9 @@ nparallel <- 4
     
     
    # for (j in 1:length(remper.cor.vector)){ # for the growth only model explore the consequences of other assumptions about remeasurement period
-      cat(paste("running stan mortality model ", model.number, " for SPCD", SPCD.df[i,]$SPCD, common.name$COMMON, " remper correction", remper.cor.vector[j]))
+      cat(paste("Sampling stan mortality model ", model.number, " for SPCD", SPCD.df[i,]$SPCD, common.name$COMMON, " remper correction", remper.cor.vector[j]))
      
-      # 
+     
        fit.1 <- species.mod$sample(
         data = paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
                       remper.cor.vector[j],"model_",model.number,".json"), # path to json data files
@@ -71,11 +76,10 @@ nparallel <- 4
         parallel_chains = nparallel,
         adapt_delta = 0.95,
         init = 0.5,
-        refresh = 50 # print update every 500 iters
-
+        refresh = print.progress # print update every 500 iters
       )
      
-       
+      
       # save the fit object for later 
       model.name <- paste0("mort_model_",model.number,"_SPCD_", SPCD.id, 
                            "_remper_correction_", remper.cor.vector[j], "_niter_", niter, "_nchain_", nchain)
@@ -86,33 +90,64 @@ nparallel <- 4
       # this takes the longest to save
      #fit.1$save_object(file = paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/", model.name, ".rds"))
       #fit.1$save_object(file = paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/", model.name, ".qs"), format = "qs2")
+    cat(paste("\n Saving stan mortality model fit "))
       
-     qs2::qs_save(fit.1, paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/", model.name, ".qs"))
-      #fit.1 <- readRDS(paste0(output.dir,"SPCD_stanoutput_cmdstan/", model.name, ".rds"))
-      # get diagnostics like R-hat and ESS
-       
+    qs2::qs_save(fit.1, paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/", model.name, ".qs"))
+     
+     # sampler diagnostics -----
+     # divergent transitions, time per chain, cores, etc
+     sampler_diag <- fit.1$time()$chains %>%
+       mutate(total_allchains = fit.1$time()$total, 
+              ncores = nparallel,
+              nchain = nchain, 
+              niter = niter, 
+              nwarmup = nwarmup,
+              model.number = model.number, 
+              model.type = "Species", 
+              SPCD = SPCD.id, 
+              remper.correction = remper.cor.vector[j])%>%
+       mutate(num_divergent = fit.1$diagnostic_summary()$num_divergent, 
+              num_max_treedepth = fit.1$diagnostic_summary()$num_max_treedepth, 
+              ebfmi = fit.1$diagnostic_summary()$ebfmi)
+     
+     write.csv(sampler_diag, paste0(output.dir, 
+                                    "SPCD_stanoutput_cmdstan/diagnostics/sample_diagnostics_", 
+                                    model.name, ".csv"), row.names = FALSE)
       
       # Extract posterior draws and save separately ----
-      beta_alpha_samps <-  fit.1$draws(variables = c("alpha_SPP", "u_beta"), format = "df")
+     cat(paste("\n Extracting posterior draws"))
+      beta_alpha_samps <-  fit.1$draws(variables = c("alpha_SPP", "u_beta"), format = "draws_matrix")
+      qs2::qs_save(beta_alpha_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/betas/u_beta_alpha_samps_", model.name, ".qs"))
+     
       
       # get loo results and save the log_lik, ypredictions, and mmhat and mmrep
     
-      log_lik_samps <-  fit.1$draws(variables = c("log_lik"), format = "df")
+      log_lik_samps <-  fit.1$draws(variables = c("log_lik"), format = "draws_matrix")
       
       
+      # use model$generate_quantities in cmdstan to generate predictions
+      gen_quants <- predict.species.mod$generate_quantities(
+        fitted_params = fit.1, 
+        data = paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
+                      remper.cor.vector[j],"model_",model.number,".json"), # path to json data files
+        seed = 123,
+        parallel_chains = nparallel
+        
+        
+      )
       
-      y_rep_samps <-  fit.1$draws(variables = c("y_rep"), format = "df")
-      y_hat_samps <-  fit.1$draws(variables = c("y_hat"), format = "df")
+      #cat(paste("\n Extracting posterior draws"))
+      y_rep_samps <- gen_quants$draws(variables = c("y_rep"), format = "draws_matrix")
+      y_hat_samps <-  gen_quants$draws(variables = c("y_hat"), format = "draws_matrix")
 
-      pSurv_rep_samps <-  fit.1$draws(variables = c("mMrep"), format = "df")
-      pSurv_hat_samps <-  fit.1$draws(variables = c("mMhat"), format = "df")
+      pSurv_rep_samps <-  gen_quants$draws(variables = c("mMrep"), format = "draws_matrix")
+      pSurv_hat_samps <-  gen_quants$draws(variables = c("mMhat"), format = "draws_matrix")
 
-      pSannual_rep_samps <-  fit.1$draws(variables = c("pSannualrep"), format = "df")
-      pSannual_hat_samps <-  fit.1$draws(variables = c("pSannualhat"), format = "df")
+      # pSannual_rep_samps <-  gen_quants$draws(variables = c("pSannualrep"), format = "draws_matrix")
+      # pSannual_hat_samps <-  gen_quants$draws(variables = c("pSannualhat"), format = "draws_matrix")
       
       # save all to their own objects:
       qs2::qs_save(log_lik_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO/log_lik_samps_", model.name, ".qs"))
-      qs2::qs_save(beta_alpha_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/betas/u_beta_alpha_samps_", model.name, ".qs"))
       
       qs2::qs_save(y_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/y_rep_samps_", model.name, ".qs"))
       qs2::qs_save(y_hat_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/y_hat_samps_", model.name, ".qs"))
@@ -120,31 +155,13 @@ nparallel <- 4
       qs2::qs_save(pSurv_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSurv_rep_samps_", model.name, ".qs"))
       qs2::qs_save(pSurv_hat_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSurv_hat_samps_", model.name, ".qs"))
       
-      qs2::qs_save(pSannual_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSannual_rep_samps_", model.name, ".qs"))
-      qs2::qs_save(pSannual_hat_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSannual_hat_samps_", model.name, ".qs"))
+      # qs2::qs_save(pSannual_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSannual_rep_samps_", model.name, ".qs"))
+      # qs2::qs_save(pSannual_hat_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSannual_hat_samps_", model.name, ".qs"))
+      # 
       
-      
-      # sampler diagnostics -----
-          # divergent transitions, time per chain, cores, etc
-      sampler_diag <- fit.1$time()$chains %>%
-        mutate(total_allchains = fit.1$time()$total, 
-               ncores = nparallel,
-               nchain = nchain, 
-               niter = niter, 
-               nwarmup = nwarmup,
-               model.number = model.number, 
-               model.type = "Species", 
-               SPCD = SPCD.id, 
-               remper.correction = remper.cor.vector[j])%>%
-        mutate(num_divergent = fit.1$diagnostic_summary()$num_divergent, 
-               num_max_treedepth = fit.1$diagnostic_summary()$num_max_treedepth, 
-               ebfmi = fit.1$diagnostic_summary()$ebfmi)
-      
-      write.csv(sampler_diag, paste0(output.dir, 
-                                     "SPCD_stanoutput_cmdstan/diagnostics/sample_diagnostics_", 
-                                     model.name, ".csv"), row.names = FALSE)
-      
-          #convergence statistics & summary for all parameters we do inference on:
+     
+      cat(paste("\n Getting model diagnostics and summaries"))
+      # convergence statistics summaries ----
       u_betas_alpha.quant <-  fit.1$summary(variables = c("alpha_SPP", "u_beta"), 
                                        median,           
                                        ~quantile(.x, probs = c(0.025, 0.975)), 
@@ -152,25 +169,25 @@ nparallel <- 4
                                        rhat, ess_bulk, ess_tail)     
       
       # get predicted draws for survival (0,1), annual and remper survival probabilities for in-sample ("hat") and held-out ("rep")
-      y_hat.quant <-  fit.1$summary(variables = c("y_hat"), 
+      y_hat.quant <-  gen_quants$summary(variables = c("y_hat"), 
                                     median,           
                                     ~quantile(.x, probs = c(0.025, 0.975)), 
                                     mean, sd, min, max, 
                                     rhat, ess_bulk, ess_tail)
       
-      y_rep.quant <-  fit.1$summary(variables = c( "y_rep"), 
+      y_rep.quant <-  gen_quants$summary(variables = c( "y_rep"), 
                                     median,           
                                     ~quantile(.x, probs = c(0.025, 0.975)), 
                                     mean, sd, min, max, 
                                     rhat, ess_bulk, ess_tail)
       
       # pSurv_ predicted survival probabilities over the remper for in sample and out of sample
-      pSurv_hat.quant <-  fit.1$summary(variables = c("mMhat"), 
+      pSurv_hat.quant <-  gen_quants$summary(variables = c("mMhat"), 
                                         median,           
                                         ~quantile(.x, probs = c(0.025, 0.975)), 
                                         mean, sd, min, max, 
                                         rhat, ess_bulk, ess_tail) 
-      pSurv_rep.quant <-  fit.1$summary(variables = c( "mMrep"), 
+      pSurv_rep.quant <-  gen_quants$summary(variables = c( "mMrep"), 
                                         median,           
                                         ~quantile(.x, probs = c(0.025, 0.975)), 
                                         mean, sd, min, max, 
@@ -178,25 +195,25 @@ nparallel <- 4
       
       
       # pSannual_rep predicted annual survival probabilities for in sample and out of sample trees
-      pSannual_hat.quant <-  fit.1$summary(variables = c("pSannualhat"), 
-                                        median,           
-                                        ~quantile(.x, probs = c(0.025, 0.975)), 
-                                        mean, sd, min, max, 
-                                        rhat, ess_bulk, ess_tail) 
-      pSannual_rep.quant <-  fit.1$summary(variables = c( "pSannualrep"), 
-                                           median,           
-                                           ~quantile(.x, probs = c(0.025, 0.975)), 
-                                           mean, sd, min, max, 
-                                           rhat, ess_bulk, ess_tail) 
+      # pSannual_hat.quant <-  gen_quants$summary(variables = c("pSannualhat"), 
+      #                                   median,           
+      #                                   ~quantile(.x, probs = c(0.025, 0.975)), 
+      #                                   mean, sd, min, max, 
+      #                                   rhat, ess_bulk, ess_tail) 
+      # pSannual_rep.quant <-  gen_quants$summary(variables = c( "pSannualrep"), 
+      #                                      median,           
+      #                                      ~quantile(.x, probs = c(0.025, 0.975)), 
+      #                                      mean, sd, min, max, 
+      #                                      rhat, ess_bulk, ess_tail) 
       
       
       convergence.stats <- rbind( u_betas_alpha.quant, 
                                  y_hat.quant, 
                                  y_rep.quant, 
                                  pSurv_hat.quant, 
-                                 pSurv_rep.quant, 
-                                 pSannual_hat.quant, 
-                                 pSannual_rep.quant)%>%
+                                 pSurv_rep.quant)%>%#, 
+                                 #pSannual_hat.quant, 
+                                 #pSannual_rep.quant)%>%
         mutate(model.number = model.number, 
                model.type = "Species",
                SPCD = SPCD.id, 
@@ -219,63 +236,63 @@ nparallel <- 4
       # for in sample data
       actuals = mod.data$y
       preds = as.vector(pSurv_rep.quant$median)
-      auc.is <- pROC::auc( actuals, preds) %>% as.numeric()
+      #auc.is <- pROC::auc( actuals, preds, quiet = TRUE) %>% as.numeric()
       
       # assuming that a probability <= 0.8 results in mortality
-      confusion.is <- data.frame(obs_outcome = actuals,
-                                 prob = preds, 
-                                 type = "in-sample") %>%
-        mutate(pred_outcome = ifelse(prob > 0.8, 1, 0))%>%
-          mutate(TP = ifelse(pred_outcome == 1 & obs_outcome == 1, 1, 0),
-                 FP = ifelse(pred_outcome == 1 & obs_outcome == 0, 1, 0),
-                 TN = ifelse(pred_outcome == 0 & obs_outcome == 0, 1, 0),
-                 FN = ifelse(pred_outcome == 0 & obs_outcome == 1, 1, 0))%>%
-        group_by(type)%>%
-          summarise(`True Survival` = sum(TP),
-                    `False Survival` = sum(FP),
-                    `True Mortality` = sum(TN),
-                    `False Mortality` = sum(FN))%>%
-          mutate(`True survival rate` = `True Survival`/(`True Survival`+`False Mortality`),
-                 `True mortality rate` = `True Mortality`/(`True Mortality`+`False Survival`))
+      # confusion.is <- data.frame(obs_outcome = actuals,
+      #                            prob = preds, 
+      #                            type = "in-sample") %>%
+      #   mutate(pred_outcome = ifelse(prob > 0.8, 1, 0))%>%
+      #     mutate(TP = ifelse(pred_outcome == 1 & obs_outcome == 1, 1, 0),
+      #            FP = ifelse(pred_outcome == 1 & obs_outcome == 0, 1, 0),
+      #            TN = ifelse(pred_outcome == 0 & obs_outcome == 0, 1, 0),
+      #            FN = ifelse(pred_outcome == 0 & obs_outcome == 1, 1, 0))%>%
+      #   group_by(type)%>%
+      #     summarise(`True Survival` = sum(TP),
+      #               `False Survival` = sum(FP),
+      #               `True Mortality` = sum(TN),
+      #               `False Mortality` = sum(FN))%>%
+      #     mutate(`True survival rate` = `True Survival`/(`True Survival`+`False Mortality`),
+      #            `True mortality rate` = `True Mortality`/(`True Mortality`+`False Survival`))
 
       # for out of sample data
       actuals.oos = mod.data$ytest
       preds.oos = as.vector(pSurv_hat.quant$median)
-      auc.oos <- pROC::auc( actuals.oos, preds.oos) %>% as.numeric()
+      #auc.oos <- pROC::auc( actuals.oos, preds.oos, quiet = TRUE) %>% as.numeric()
       
       
-      confusion.oos <- data.frame(obs_outcome = actuals.oos,
-                                 prob = preds.oos, 
-                                 type = "out-of-sample") %>%
-        mutate(pred_outcome = ifelse(prob > 0.8, 1, 0))%>%
-        mutate(TP = ifelse(pred_outcome == 1 & obs_outcome == 1, 1, 0),
-               FP = ifelse(pred_outcome == 1 & obs_outcome == 0, 1, 0),
-               TN = ifelse(pred_outcome == 0 & obs_outcome == 0, 1, 0),
-               FN = ifelse(pred_outcome == 0 & obs_outcome == 1, 1, 0))%>%
-        group_by(type)%>%
-        summarise(`True Survival` = sum(TP),
-                  `False Survival` = sum(FP),
-                  `True Mortality` = sum(TN),
-                  `False Mortality` = sum(FN))%>%
-        mutate(`True survival rate` = `True Survival`/(`True Survival`+`False Mortality`),
-               `True mortality rate` = `True Mortality`/(`True Mortality`+`False Survival`))
-      
+      # confusion.oos <- data.frame(obs_outcome = actuals.oos,
+      #                            prob = preds.oos, 
+      #                            type = "out-of-sample") %>%
+      #   mutate(pred_outcome = ifelse(prob > 0.8, 1, 0))%>%
+      #   mutate(TP = ifelse(pred_outcome == 1 & obs_outcome == 1, 1, 0),
+      #          FP = ifelse(pred_outcome == 1 & obs_outcome == 0, 1, 0),
+      #          TN = ifelse(pred_outcome == 0 & obs_outcome == 0, 1, 0),
+      #          FN = ifelse(pred_outcome == 0 & obs_outcome == 1, 1, 0))%>%
+      #   group_by(type)%>%
+      #   summarise(`True Survival` = sum(TP),
+      #             `False Survival` = sum(FP),
+      #             `True Mortality` = sum(TN),
+      #             `False Mortality` = sum(FN))%>%
+      #   mutate(`True survival rate` = `True Survival`/(`True Survival`+`False Mortality`),
+      #          `True mortality rate` = `True Mortality`/(`True Mortality`+`False Survival`))
+      # 
     
-      # get the range of responses for each sample:
+      # use the posterior draws from pSurv to estimate draws of AUC responses for each sample:
     
-      AUC.is.samples.df <- apply(pSurv_rep_samps %>% select(-.chain, -.iteration, -.draw), 
+      AUC.is.samples.df <- apply(pSurv_rep_samps , 
                          MARGIN = 1, function(prob){
-        as.numeric(pROC::auc(actuals, prob))
+        as.numeric(pROC::auc(actuals, prob, quiet = TRUE))
       })
       
-      AUC.oos.samples.df <- apply(pSurv_hat_samps %>% select(-.chain, -.iteration, -.draw), 
+      AUC.oos.samples.df <- apply(pSurv_hat_samps, 
                          MARGIN = 1, function(prob){
-                           as.numeric(pROC::auc(actuals.oos, prob))
+                           as.numeric(pROC::auc(actuals.oos, prob, quiet = TRUE))
                          })
       
       # get the confusion matrix over the draws--true postives/negatives, false positives/negatives
       # in-sample:
-      preds.is <- y_rep_samps %>% select(-.chain, -.iteration, -.draw) %>% as.matrix()
+      preds.is <- y_rep_samps #%>% select(-.chain, -.iteration, -.draw) %>% as.matrix()
       preds.is.class <- preds.is == 1
       
       ySurv = actuals == 1
@@ -299,7 +316,7 @@ nparallel <- 4
    
    
    # out-of-sample:
-   preds.oos <- y_hat_samps %>% select(-.chain, -.iteration, -.draw) %>% as.matrix()
+   preds.oos <- y_hat_samps #%>% select(-.chain, -.iteration, -.draw) %>% as.matrix()
    preds.oos.class <- preds.oos == 1
    
    ySurv = actuals.oos == 1
@@ -351,7 +368,7 @@ nparallel <- 4
   
       # PLOTS: parameters -----
       # traceplots (betas and alphas)
-   par.names <- colnames(beta_alpha_samps)[1:(ncol(beta_alpha_samps)-3)]
+   par.names <- colnames(beta_alpha_samps)[1:(ncol(beta_alpha_samps))]
    pdf( paste0(output.dir,"SPCD_stanoutput_cmdstan/images/traceplots_",model.name,".pdf"))
    #specify to save plots in 0x0 grid
    par(mfrow = c(8,3))
@@ -405,24 +422,79 @@ nparallel <- 4
  #   }
  }
  
- run.species.models(i = 16, 
-                    m = 2, 
+ run.species.models(i = 17, 
+                    m = 1, 
                     nparallel = nparallel,
                     niter = niter, 
                     nwarmup = nwarmup , 
                     nchain = nchain, 
-                    output.dir = output.dir)
- lapply(1:9, FUN = function(x){
- run.species.models(i = 16, 
-                    m = x, 
-                    nparallel = nparallel,
-                    niter = niter, 
-                    nwarmup = nwarmup , 
-                    nchain = nchain, 
-                    output.dir = output.dir)
- }
- )
+                    output.dir = output.dir, 
+                    print.progress = 0)
 
+ 
+# library(progressr)
+# progressr::handlers(handler_txtprogressbar(char = cli::col_red(cli::symbol$heart)))
+# options(cli.progress_handlers = "progressr")
+# #y <- purrr::map(1:30, slow_sqrt, .progress = TRUE)
+# # Define the rainbow heart format
+# rainbow_hearts <-  function(x) {
+#   # Map 7 colors using cli theme syntax
+#   colors <- c("#FF3B30", "#FF9500", "#FFCC00", "#4CD964", "#5AC8FA", "#5856D6", "#AF52DE")
+#   
+#   # Return custom formatted cli progress bar
+#   cli_progress_bar(
+#     name = "Processing",
+#     total = length(x),
+#     format = paste0(
+#       "{name} {cli::pb_bar} {cli::pb_current}/{cli::pb_total} | ",
+#       "{col_red('\u2665')}{col_orange('\u2665')}{col_yellow('\u2665')}{col_green('\u2665')}{col_blue('\u2665')}{col_indigo('\u2665')}{col_violet('\u2665')}"
+#     )
+#   )
+# }
+# 
+# # # Example usage with lapply
+# # data_list <- 1:50
+# # 
+# # result <- function(data_list){
+# #   lapply(cli_progress_along(data_list, format = rainbow_hearts), function(i) {
+# #   # Simulate a computation
+# #   Sys.sleep(1) 
+# #   return(i * 2)
+# # })
+# # }
+# 
+# model_list <- 1:9
+# 
+# run.spp.17 <- function(model_list){
+#   lapply(cli_progress_along(model_list, 
+#                             format = rainbow_hearts), FUN = function(x){
+#    run.species.models(i = 17, 
+#                       m = x, 
+#                       nparallel = nparallel,
+#                       niter = niter, 
+#                       nwarmup = nwarmup , 
+#                       nchain = nchain, 
+#                       output.dir = output.dir, 
+#                       print.progress = 0)
+#    }
+#  )
+# }
+# run.spp.17(model_list)
+
+
+#run.spp.17 <- function(model_list){
+  lapply(2:9, FUN = function(x){
+                              run.species.models(i = 17, 
+                                                 m = x, 
+                                                 nparallel = nparallel,
+                                                 niter = niter, 
+                                                 nwarmup = nwarmup , 
+                                                 nchain = nchain, 
+                                                 output.dir = output.dir, 
+                                                 print.progress = 0)
+                            }
+  )
+#}
 
 # do the summaries on diagnostics, time, etc
 #fit.1 <- readRDS(paste0(output.dir,"SPCD_stanoutput_cmdstan/", model.name, ".rds"))
