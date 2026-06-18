@@ -2,6 +2,7 @@ library(tidyverse)
 library(cmdstanr)
 library(posterior)
 library(bayesplot)
+library(qs2)
 color_scheme_set("brightblue")
 #check_cmdstan_toolchain()
 #cmdstan_path()
@@ -26,8 +27,8 @@ model.list <- 1:9
 species.file <- file.path(getwd(), "modelcode", "mort_model_general.stan")
 species.mod <- cmdstan_model(species.file)
 
-i <- 17
-m <- 6
+i <- 16
+m <- 5
 j <- 1
 
 niter <- 1000
@@ -40,7 +41,7 @@ nparallel <- 4
 #for(i in 16:1){# run for each of the 17 species
   
 
-#for(m in 1:9){ 
+
  run.species.models <-  function(i, 
                                  m, 
                                  nparallel,
@@ -78,12 +79,15 @@ nparallel <- 4
       # save the fit object for later 
       model.name <- paste0("mort_model_",model.number,"_SPCD_", SPCD.id, 
                            "_remper_correction_", remper.cor.vector[j], "_niter_", niter, "_nchain_", nchain)
-      remp.cor <- remper.cor.vector[j]
-      remper.correction <- remper.cor.vector[j]
-      
-     fit.1$save_object(file = paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/", model.name, ".rds"))
       
       
+      
+      
+      # this takes the longest to save
+     #fit.1$save_object(file = paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/", model.name, ".rds"))
+      #fit.1$save_object(file = paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/", model.name, ".qs"), format = "qs2")
+      
+     qs2::qs_save(fit.1, paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/", model.name, ".qs"))
       #fit.1 <- readRDS(paste0(output.dir,"SPCD_stanoutput_cmdstan/", model.name, ".rds"))
       # get diagnostics like R-hat and ESS
        
@@ -107,17 +111,17 @@ nparallel <- 4
       pSannual_hat_samps <-  fit.1$draws(variables = c("pSannualhat"), format = "df")
       
       # save all to their own objects:
-      saveRDS(log_lik_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO/log_lik_samps_", model.name, ".rds"))
-      saveRDS(beta_alpha_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/betas/u_beta_alpha_samps_", model.name, ".rds"))
+      qs2::qs_save(log_lik_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO/log_lik_samps_", model.name, ".qs"))
+      qs2::qs_save(beta_alpha_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/betas/u_beta_alpha_samps_", model.name, ".qs"))
       
-      saveRDS(y_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/y_rep_samps_", model.name, ".rds"))
-      saveRDS(y_hat_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/y_hat_samps_", model.name, ".rds"))
+      qs2::qs_save(y_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/y_rep_samps_", model.name, ".qs"))
+      qs2::qs_save(y_hat_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/y_hat_samps_", model.name, ".qs"))
       
-      saveRDS(pSurv_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSurv_rep_samps_", model.name, ".rds"))
-      saveRDS(pSurv_hat_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSurv_hat_samps_", model.name, ".rds"))
+      qs2::qs_save(pSurv_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSurv_rep_samps_", model.name, ".qs"))
+      qs2::qs_save(pSurv_hat_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSurv_hat_samps_", model.name, ".qs"))
       
-      saveRDS(pSannual_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSannual_rep_samps_", model.name, ".rds"))
-      saveRDS(pSannual_hat_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSannual_hat_samps_", model.name, ".rds"))
+      qs2::qs_save(pSannual_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSannual_rep_samps_", model.name, ".qs"))
+      qs2::qs_save(pSannual_hat_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSannual_hat_samps_", model.name, ".qs"))
       
       
       # sampler diagnostics -----
@@ -206,7 +210,7 @@ nparallel <- 4
       # model fit statistics -----
           # loo results
       loo_results <-  fit.1$loo()
-      saveRDS(loo_results, paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO/LOO_results_", model.name, ".rds"))
+      qs2::qs_save(loo_results, paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO/LOO_results_", model.name, ".qs"))
       
       # read in model data for comparison
       mod.data <- fromJSON(fit.1$data_file())
@@ -327,7 +331,7 @@ nparallel <- 4
    
    AUC.confusion_draws <- rbind(confusion.is_draws, confusion.oos_draws)
    
-   saveRDS(AUC.confusion_draws, paste0(output.dir,"SPCD_stanoutput_cmdstan/AUC/AUC_draws_", model.name, ".rds"))
+   qs2::qs_save(AUC.confusion_draws, paste0(output.dir,"SPCD_stanoutput_cmdstan/AUC/AUC_draws_", model.name, ".qs"))
      
    # # save a summary with 95% CI  
    #  AUC.confusion_draws %>% group_by(model.number, type, SPCD)%>%
@@ -408,9 +412,17 @@ nparallel <- 4
                     nwarmup = nwarmup , 
                     nchain = nchain, 
                     output.dir = output.dir)
- 
- #lapply(17:1, FUN = run.species.models())
-#}
+ lapply(1:9, FUN = function(x){
+ run.species.models(i = 16, 
+                    m = x, 
+                    nparallel = nparallel,
+                    niter = niter, 
+                    nwarmup = nwarmup , 
+                    nchain = nchain, 
+                    output.dir = output.dir)
+ }
+ )
+
 
 # do the summaries on diagnostics, time, etc
 #fit.1 <- readRDS(paste0(output.dir,"SPCD_stanoutput_cmdstan/", model.name, ".rds"))
