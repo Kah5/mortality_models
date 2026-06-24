@@ -8,10 +8,10 @@ data {
   vector<lower=1>[N] Remper; // list of remeasurement periods (lower bound here is 1, but observations are higher)
   
   // Out-of-sample data for generated quantities
-  int<lower=0> Nrep; // Number of trees in held-out observations
-  array[Nrep] int<lower=1, upper=Nspp> SPPrep; // index describing which out-of-sample observations belong to each species
-  array[Nrep] row_vector[K] xMrep; // out-of-sample predictor covariate matrix
-  vector<lower=1>[Nrep] Remperoos; // out-of-sample remeasurement period by tree
+  // int<lower=0> Nrep; // Number of trees in held-out observations
+  // array[Nrep] int<lower=1, upper=Nspp> SPPrep; // index describing which out-of-sample observations belong to each species
+  // array[Nrep] row_vector[K] xMrep; // out-of-sample predictor covariate matrix
+  // vector<lower=1>[Nrep] Remperoos; // out-of-sample remeasurement period by tree
 }
 parameters {
   vector[K] mu_beta; // population-level means for u_betas
@@ -44,31 +44,37 @@ model {
   // Likelihood
   for (n in 1:N) {
     //real logit_p_annual = ; // annual survival probability is f(species intercept + u_betas*covariates)
-    real pSannual = inv_logit(alpha_SPP[SPP[n]] + dot_product(xM[n], u_beta[SPP[n]])); // annual survival probability on the right scale
-    real mM = pow(pSannual, Remper[n]); // cumulative survival over remeasurement period = pSannual^remper
+    // {
+    // real pSannual = inv_logit(alpha_SPP[SPP[n]] + dot_product(xM[n], u_beta[SPP[n]])); // annual survival probability on the right scale
+    // }
+    real mM = pow(inv_logit(alpha_SPP[SPP[n]] + dot_product(xM[n], u_beta[SPP[n]])), Remper[n]); // cumulative survival over remeasurement period = pSannual^remper
     y[n] ~ bernoulli(mM); // bernoulli liklihood for survival over remper
   }
 }
 generated quantities {
   //in sample predictions
-  array[N] int<lower=0, upper=1> y_hat; // predicted survival for each tree 
-  vector<lower=0, upper=1>[N] mMhat; // predicted survival probability for each tree
-  array[N] real<lower=0, upper=1> pSannual_hat; // Annual survival probabilities for in-sample predictions
+  // array[N] int<lower=0, upper=1> y_hat; // predicted survival for each tree 
+  // vector<lower=0, upper=1>[N] mMhat; // predicted survival probability for each tree
+  // array[N] real<lower=0, upper=1> pSannual_hat; // Annual survival probabilities for in-sample predictions
+  vector[N] log_lik;
   for (n in 1:N) {
-    //real logit_p_annual_hat =; // regression equations
-    pSannual_hat[n] = inv_logit( alpha_SPP[SPP[n]] + dot_product(xM[n], u_beta[SPP[n]])); // annual survival probability
-    mMhat[n] = pow(pSannual_hat[n], Remper[n]); // cumulative survival over remeasurement period
-    y_hat[n] = bernoulli_rng(mMhat[n]); // predicted in sample survival statues
+    // //real logit_p_annual_hat =; // regression equations
+    // pSannual_hat[n] = inv_logit( alpha_SPP[SPP[n]] + dot_product(xM[n], u_beta[SPP[n]])); // annual survival probability
+    // mMhat[n] = pow(pSannual_hat[n], Remper[n]); // cumulative survival over remeasurement period
+    // y_hat[n] = bernoulli_rng(mMhat[n]); // predicted in sample survival statues
+    // 
+          // //get point-wise log liklihood
+  log_lik[n] = bernoulli_lpmf(y[n] | mM[n]);
   }
   
   //Out of sample predictions
-  array[Nrep] int<lower=0, upper=1> y_rep; //oos predicted survival
-  vector<lower=0, upper=1>[Nrep] mMrep; //oos predicted survival probability
-  array[Nrep] real<lower=0, upper=1> pSannual_rep; // annual survival probabilities for out-of-sample predictions
-  for (n in 1:Nrep) {
-    //real logit_p_annual_rep = ; // regression predictions with posteriors
-    pSannual_rep[n] = inv_logit(alpha_SPP[SPPrep[n]] + dot_product(xMrep[n], u_beta[SPPrep[n]])); // annual survival probability
-    mMrep[n] = pow(pSannual_rep[n], Remperoos[n]); // cumulative survival over remeasurement period
-    y_rep[n] = bernoulli_rng(mMrep[n]); // prediction oos survival
-  }
+  // array[Nrep] int<lower=0, upper=1> y_rep; //oos predicted survival
+  // vector<lower=0, upper=1>[Nrep] mMrep; //oos predicted survival probability
+  // array[Nrep] real<lower=0, upper=1> pSannual_rep; // annual survival probabilities for out-of-sample predictions
+  // for (n in 1:Nrep) {
+  //   //real logit_p_annual_rep = ; // regression predictions with posteriors
+  //   pSannual_rep[n] = inv_logit(alpha_SPP[SPPrep[n]] + dot_product(xMrep[n], u_beta[SPPrep[n]])); // annual survival probability
+  //   mMrep[n] = pow(pSannual_rep[n], Remperoos[n]); // cumulative survival over remeasurement period
+  //   y_rep[n] = bernoulli_rng(mMrep[n]); // prediction oos survival
+  // }
 }
