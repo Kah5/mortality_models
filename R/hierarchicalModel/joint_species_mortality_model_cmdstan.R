@@ -41,16 +41,17 @@ hierarchical.updated.mod <- cmdstan_model(hierarchical.updated.file )
 hierarchical.predict.file <- file.path(getwd(), "modelcode", "predict_hierarchical.stan")
 hierarchical.predict <- cmdstan_model(hierarchical.predict.file)
 
+hierarchical.hardcode.file <- file.path(getwd(), "modelcode", "test_reparam_hierarchical_hardcode.stan")
+hierarchical.hardcode.mod <- cmdstan_model(hierarchical.hardcode.file )
 
-
-m <- 1
+m <- 7
 j <- 1
 
-niter <- 100
-nwarmup <- 20
+niter <- 1000
+nwarmup <- 500
 nchain <- 4
 nparallel <- nchain
-print.progress = 10
+print.progress = 100
 
 run.hierarchical.models <-  function( 
                                 m, 
@@ -67,18 +68,82 @@ cat(paste("running hierarchical mortality model ", model.number, " remper correc
 model.name <- paste0("hierarchical_mort_model_",model.number, "_niter_", niter, "_nchain_", nchain)
 
 
-fit.1 <- hierarchical.updated.mod$sample(
+
+# # 2. Run Warmup with adaptation and save states
+
+
+warmup_fit <- hierarchical.hardcode.mod$sample(
+  data = paste0("SPCD_standata_json/hierarchical_data_model_",model.number,".json"), # path to json data files
+  iter_warmup = nwarmup,
+  iter_sampling = 0,
+  chains = nchain,
+  parallel_chains = nparallel,
+  init = 0.1,
+  save_warmup = TRUE
+)
+
+warmup_fit$metadata()$step_size_adaptation
+warmup_fit$inv_metric()
+warmup_fit$draws(inc_warmup=TRUE)
+
+qs2::qs_save(warmup_fit, paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/WARMUP_", model.name, ".qs"))
+#warmup_fit <- qs2::qs_read(paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/WARMUP_", model.name, ".qs"))
+
+fit.1 <- hierarchical.hardcode.mod$sample(
   data = paste0("SPCD_standata_json/hierarchical_data_model_",model.number,".json"), # path to json data files
   seed = 123,
   chains = nchain,
-  iter_warmup = nwarmup,
+  parallel_chains = nparallel,
+  iter_warmup = 0,
   iter_sampling = niter,
-  parallel_chains = nchain,
-  #adapt_delta = 0.95, # increased adapt_delta to reduce divergent transition warnings
-  init = 0.5, # added to reduce the log(0) probability warnings during initial sampling
-  refresh = print.progress # print update every 100 iters
-  
+  adapt_engaged = FALSE,
+  step_size = warmup_fit$metadata()$step_size_adaptation,
+  inv_metric = warmup_fit$inv_metric(),
+  init = warmup_fit$draws(inc_warmup = TRUE)[nwarmup, , ], # Last warmup iteration
+  refresh = print.progress
 )
+
+
+# fit.1 <- hierarchical.updated.mod$sample(
+#   data = paste0("SPCD_standata_json/hierarchical_data_model_",model.number,".json"), # path to json data files
+#   seed = 123,
+#   chains = nchain,
+#   iter_warmup = nwarmup,
+#   iter_sampling = niter,
+#   parallel_chains = nchain,
+#   #adapt_delta = 0.95, # increased adapt_delta to reduce divergent transition warnings
+#   init = 0.5, # added to reduce the log(0) probability warnings during initial sampling
+#   refresh = print.progress # print update every 100 iters
+#   
+# )
+
+# 
+#   seed = 123,
+#   chains = nchain,
+#   iter_warmup = nwarmup,
+#   iter_sampling = niter,
+#   parallel_chains = nchain,
+#   #adapt_delta = 0.95, # increased adapt_delta to reduce divergent transition warnings
+#   init = 0.5, # added to reduce the log(0) probability warnings during initial sampling
+#   refresh = print.progress # print update every 100 iters
+#   
+# )
+
+
+
+
+# fit.1 <- hierarchical.updated.mod$sample(
+#   data = paste0("SPCD_standata_json/hierarchical_data_model_",model.number,".json"), # path to json data files
+#   seed = 123,
+#   chains = nchain,
+#   iter_warmup = nwarmup,
+#   iter_sampling = niter,
+#   parallel_chains = nchain,
+#   #adapt_delta = 0.95, # increased adapt_delta to reduce divergent transition warnings
+#   init = 0.5, # added to reduce the log(0) probability warnings during initial sampling
+#   refresh = print.progress # print update every 100 iters
+#   
+# )
 
 #fit.1 <- qs2::qs_read(paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/notpreloaded", model.name, ".qs"))
 
@@ -175,7 +240,7 @@ for(s in 1:mod.data$Nspp){
   SPCD.id <- nspp[s,]$SPCD
   cat(paste("loo results for SPCD", SPCD.id, "species number", s, "\n"))
   
-  mod.data_species <- mod.data_df %>% filter(SPP == 17)
+  mod.data_species <- mod.data_df %>% filter(SPP == s)
 
   spp_r_eff_samps <- loo::relative_eff(llfun_logistic_remper, 
                              log = FALSE, # relative_eff wants likelihood not log-likelihood values
@@ -311,7 +376,7 @@ ggsave(height = 5, width = 10, units = "in",
     nwarmup = 500, 
     nchain = 4, 
     output.dir = output.dir, 
-    print.progress = 100)
+    print.progress = 50)
 
 
 
@@ -337,6 +402,10 @@ nparallel = 4
 niter = 1000 
 nwarmup = 500 
 nchain = 4
+
+#fit.6 <- qs2::qs_read( paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/",model.name.6, ".qs"))
+#model.name.6 <- paste0("hierarchical_mort_model_6_niter_", niter, "_nchain_", nchain)
+
 
 # options:
 model.number <- model.list[m]
@@ -384,7 +453,94 @@ summarize_posteriors <- function(x){
 # --generates predictions & does AUC estimation for species (s)
 # --lapply(species.num, predictions)
 # --save predictions
+Est_log_lik <- function(m,
+                        nparallel = 4, 
+                        niter = 1000, 
+                        nwarmup = 500, 
+                        nchain = 4, 
+                        output.dir = output.dir){
+  model.number <- m
+  cat(paste("getting log-liklihoods from hierarchical mortality model ", model.number, " remper correction", remper.cor.vector[j]))
+  model.name <- paste0("hierarchical_mort_model_",model.number, "_niter_", niter, "_nchain_", nchain)
+  
+  
+  fit.1 <- qs2::qs_read( paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/",model.name, ".qs"))
+  
+  mod.data <- fromJSON(fit.1$data_file())
+  beta_alpha_samps <- qs2::qs_read( paste0(output.dir,"SPCD_stanoutput_cmdstan/betas/u_beta_alpha_samps_",model.name, ".qs"))
+ 
+  
+  # used for data argument to loo_i
+  mod.data_df <- data.frame(mod.data$y, 
+                            mod.data$SPP, 
+                            mod.data$Remper,
+                            mod.data$xM)
+  colnames(mod.data_df) <- c("y", "SPP", "Remper", paste0("xM.", 1:mod.data$K))
+  
+  
+  
+  llfun_logistic_remper <- function(data_i, 
+                                    draws, 
+                                    log = TRUE) {
+    
+    x_i <- as.matrix(data_i[,4:ncol(data_i)])
+    species_i <- data_i$SPP
+    remper_i <- data_i$Remper
+    K <- 1:ncol(x_i)
+    
+    logit_pred <- draws[,paste0("alpha_SPP[",species_i, "]")] + draws[,paste0("u_beta[",species_i,",",K,"]")] %*% t(x_i)
+    p_surv_remper <- (1/(1 + exp(-logit_pred)))^remper_i
+    
+    dbinom(x = data_i$y, 
+           size = 1, 
+           prob =p_surv_remper, 
+           log = log)
+  }
+  
+  
+  for(s in 1:mod.data$Nspp){
+    
+    SPCD.id <- nspp[s,]$SPCD
+    cat(paste("loo results for SPCD", SPCD.id, "species number", s, "\n"))
+    
+    mod.data_species <- mod.data_df %>% filter(SPP == s)
+    
+    spp_r_eff_samps <- loo::relative_eff(llfun_logistic_remper, 
+                                         log = FALSE, # relative_eff wants likelihood not log-likelihood values
+                                         chain_id = rep(1:nchain, each = niter), 
+                                         data = mod.data_species, 
+                                         draws = beta_alpha_samps, 
+                                         cores = 4)
+    
+    
+    spp_loo_results <-
+      loo::loo(
+        llfun_logistic_remper,
+        
+        cores = 2,
+        # these next objects were computed above
+        r_eff = spp_r_eff_samps, 
+        draws = beta_alpha_samps,
+        data = mod.data_species
+      )
+    qs2::qs_save(spp_loo_results, paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO/LOO_results_", model.name,"_SPCD_", SPCD.id, ".qs"))
+    # clean up
+    rm(spp_loo_results, spp_r_eff_samps)
+    
+  }
+}
 
+# re-estimate the log_liklihoods for each of the 6 hierarchical models
+#lapply(1:6, Est_log_lik)
+
+for(mod.num in 1:6){
+  Est_log_lik(m = mod.num,
+  nparallel = 4, 
+  niter = 1000, 
+  nwarmup = 500, 
+  nchain = 4, 
+  output.dir = output.dir)
+}
 
 Run_gen_quants <- function(m, # model number 
                            nparallel = 4, 
@@ -484,14 +640,23 @@ get_species_gen_quantitites <- function(s){
     # get predicted draws for survival (0,1), annual and remper survival probabilities for in-sample ("hat") and held-out ("rep")
     u_betas_alpha.quant <- summarise_draws(beta_alpha_samps,  summarize_posteriors)
     
-  
-    
-    system.time(y_hat.quant <- summarise_draws(y_hat_samps, .cores = 4,  summarize_posteriors))
-    
-    
 
   
+    
+   # or break up into chunks of 1000
+   # ceiling(ncol(y_hat_samps)/1000)
+   # 
+   # system.time( y_hat.quant <- do.call(rbind,
+   #                                     lapply(1:(ncol(y_hat_samps)/1000), FUN = function(x){
+   #                                       summarise_draws( subset_draws(y_hat_samps, variable = paste0("y_hat[",x,"]")), .cores = 4, summarize_posteriors)
+   #                                       
+   #                                     })))
    
+   
+  system.time(y_hat.quant <- summarise_draws(y_hat_samps, .cores = 4,  summarize_posteriors))
+    
+    
+    
     y_rep.quant <-  summarise_draws(y_rep_samps, .cores = 4,  summarize_posteriors)
     
     # pSurv_ predicted survival probabilities over the remper for in sample and out of sample
@@ -517,7 +682,7 @@ get_species_gen_quantitites <- function(s){
     
     
     rm(convergence.stats)
-    gc()
+    #gc()
     
     
     cat(paste("\n Calculating AUC scores"))
@@ -591,11 +756,13 @@ get_species_gen_quantitites <- function(s){
     
     qs2::qs_save(AUC.confusion_draws, paste0(output.dir,"SPCD_stanoutput_cmdstan/AUC/AUC_draws_SPCD_",SPCD.id,"_", model.name, ".qs"))
     
-    
+    rm(AUC.is.samples.df, AUC.oos.samples.df, actuals.oos, actuals, 
+       y_rep_samps, y_rep.quant, y_hat.quant, y_hat_samps, u_betas_alpha.quant, 
+       preds.is.class, preds.oos.class, pSurv_hat_samps, pSurv_rep_samps)
     gc()
 
 }
-
+#lapply(7:1, get_species_gen_quantitites)
 lapply(17:1, get_species_gen_quantitites)
 
 }
@@ -603,18 +770,86 @@ lapply(17:1, get_species_gen_quantitites)
 
 # test for model 1
 Run_gen_quants(
-    m = 1, 
+    m = 2, 
     nparallel = nparallel,
     niter = 1000, 
     nwarmup = 500, 
     nchain = 4, 
-    output.dir = output.dir, 
-    print.progress = 100)
+    output.dir = output.dir)
 
+
+Run_gen_quants(
+  m = 3, 
+  nparallel = nparallel,
+  niter = 1000, 
+  nwarmup = 500, 
+  nchain = 4, 
+  output.dir = output.dir)
 # run for m = 2:6
+Run_gen_quants(
+  m = 4, 
+  nparallel = nparallel,
+  niter = 1000, 
+  nwarmup = 500, 
+  nchain = 4, 
+  output.dir = output.dir)
 
+Run_gen_quants(
+  m = 5, 
+  nparallel = nparallel,
+  niter = 1000, 
+  nwarmup = 500, 
+  nchain = 4, 
+  output.dir = output.dir)
 
-# summarise the hierarchical models 1-6 so far by species----
+Run_gen_quants(
+  m = 6, 
+  nparallel = nparallel,
+  niter = 1000, 
+  nwarmup = 500, 
+  nchain = 4, 
+  output.dir = output.dir)
 
-
+# # summarize the hierarchical models 1-6 so far by species----
+# SPCD.id <- 375
+# 
+# LOO_summarise_SPCD <- function(SPCD.id){
+#   
+#   spp.loo.files <- paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO/LOO_results_mort_model_", 1:9, 
+#                           "_SPCD_", SPCD.id, "_remper_correction_0.5_niter_1000_nchain_4.qs")
+#   Hierarchical.loo.files <- paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO/LOO_results_hierarchical_mort_model_",1:6,"_niter_1000_nchain_4_SPCD_", 
+#                                    SPCD.id, ".qs")
+#   loo.files.all <- c(spp.loo.files, Hierarchical.loo.files)
+#   loo_results_all <- lapply(loo.files.all, qs_read)
+#   
+#   
+#   # check pareto-k estimates:
+#   pareto.k.checks <- do.call(rbind, lapply(loo_results_all, function(x){data.frame(good = sum(x$diagnostics$pareto_k <= 0.7), 
+#                                                                                    bad = sum(x$diagnostics$pareto_k > 0.7), 
+#                                                                                    total = length(x$diagnostics$pareto_k))}))%>%
+#     mutate(percent.bad = (bad/total)*100)%>%
+#     mutate(model = c(paste0("model", 1:9),paste0("model", 1:6)),
+#            model.type = c(rep("Species", 9), rep("Hierarchical", 6)),
+#            SPCD = SPCD.id)
+#   
+#   
+#   
+#   loo_compare.out <- loo::loo_compare(loo_results_all) # best fit based on loo elpd differences
+#   loo_comparisons <- loo_compare.out %>% data.frame()%>%left_join(., pareto.k.checks) %>%
+#     mutate(elpd_se_ratio = abs(elpd_diff)/se_diff)%>%
+#     mutate(model.number = substr(model, start = 6, stop = 6))
+#   
+#   
+#   # Get model weights---
+#   # get pointwise log predictive densities
+#   lpd_point <- do.call(cbind,lapply(loo_results_all, function(x){x$pointwise[,"elpd_loo"]}))
+#   pbma_wts <- loo::pseudobma_weights(lpd_point, BB=FALSE)
+#   pbma_BB_wts <- loo::pseudobma_weights(lpd_point) # default is BB=TRUE
+#   stacking_wts <- loo::stacking_weights(lpd_point)
+#   mod.weights <- round(cbind(pbma_wts, pbma_BB_wts, stacking_wts),3)%>% data.frame() %>% 
+#     mutate(model = paste0("model", 1:9), 
+#            SPCD = SPCD.id)
+#   loo_comparisons <- loo_comparisons %>% left_join(., mod.weights, by = c("model", "SPCD"))
+#   return(loo_comparisons)
+# }
 
