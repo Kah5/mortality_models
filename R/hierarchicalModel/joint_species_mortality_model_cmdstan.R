@@ -38,13 +38,16 @@ model.list <- 1:9
 hierarchical.updated.file <- file.path(getwd(), "modelcode", "test_reparam_hierarchical.stan")
 hierarchical.updated.mod <- cmdstan_model(hierarchical.updated.file )
 
+hierarchical.updated.predict.file <- file.path(getwd(), "modelcode", "reparam_hierarchical_model_predict.stan")
+hierarchical.updated.predict <- cmdstan_model(hierarchical.updated.predict.file)
+
 hierarchical.predict.file <- file.path(getwd(), "modelcode", "predict_hierarchical.stan")
 hierarchical.predict <- cmdstan_model(hierarchical.predict.file)
 
 hierarchical.hardcode.file <- file.path(getwd(), "modelcode", "test_reparam_hierarchical_hardcode.stan")
 hierarchical.hardcode.mod <- cmdstan_model(hierarchical.hardcode.file )
 
-m <- 7
+m <- 1
 j <- 1
 
 niter <- 1000
@@ -596,7 +599,7 @@ get_species_gen_quantitites <- function(s){
     spp.mod.data$ytest <- mod.data$ytest[spec_rep.idx]
     
     #??generate_quantities()
-    gen_quants <- hierarchical.predict$generate_quantities(
+    gen_quants <- hierarchical.updated.predict$generate_quantities(
       fitted_params = fit.1, 
       
       data = spp.mod.data, # path to json data files
@@ -612,8 +615,8 @@ get_species_gen_quantitites <- function(s){
     
     pSurv_rep_samps <-  gen_quants$draws(variables = c("mMrep"), format = "draws_matrix")
     pSurv_hat_samps <-  gen_quants$draws(variables = c("mMhat"), format = "draws_matrix")
-    
-    
+    dim(pSurv_rep_samps)
+    dim(pSurv_hat_samps)
     # save all to their own objects:
     
     qs2::qs_save(y_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/y_rep_samps_SPCD_",SPCD.id, "_", model.name, ".qs"))
@@ -621,7 +624,8 @@ get_species_gen_quantitites <- function(s){
     
     qs2::qs_save(pSurv_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSurv_rep_samps_SPCD_",SPCD.id, "_",  model.name, ".qs"))
     qs2::qs_save(pSurv_hat_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSurv_hat_samps_SPCD_",SPCD.id, "_",  model.name, ".qs"))
-    
+    pSurv_hat_samps.old <- qs2::qs_read(paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSurv_hat_samps_SPCD_",SPCD.id, "_",  model.name, ".qs"))
+    dim(pSurv_hat_samps.old)
     
     #System.time(y_hat.quant <- gen_quants$summary(variables = c("y_rep"), summarize_posteriors))
     
@@ -693,12 +697,12 @@ get_species_gen_quantitites <- function(s){
     
     # use the posterior draws from pSurv to estimate draws of AUC responses for each sample:
     
-    AUC.is.samples.df <- apply(pSurv_rep_samps , 
+    AUC.is.samples.df <- apply(pSurv_hat_samps , 
                                MARGIN = 1, function(prob){
                                  as.numeric(pROC::auc(actuals, prob, quiet = TRUE))
                                })
     
-    AUC.oos.samples.df <- apply(pSurv_hat_samps, 
+    AUC.oos.samples.df <- apply(pSurv_rep_samps, 
                                 MARGIN = 1, function(prob){
                                   as.numeric(pROC::auc(actuals.oos, prob, quiet = TRUE))
                                 })
@@ -709,7 +713,7 @@ get_species_gen_quantitites <- function(s){
     # get the confusion matrix over the draws--true postives/negatives, false positives/negatives
     # in-sample:
     #preds.is <-  #%>% select(-.chain, -.iteration, -.draw) %>% as.matrix()
-    preds.is.class <- y_rep_samps == 1
+    preds.is.class <- y_hat_samps == 1
     
     
     confusion.is_draws <-   data.frame(      
@@ -729,7 +733,7 @@ get_species_gen_quantitites <- function(s){
     
     
     # out-of-sample:
-    preds.oos.class <- y_hat_samps == 1
+    preds.oos.class <- y_rep_samps == 1
     
     
     
@@ -770,7 +774,7 @@ lapply(17:1, get_species_gen_quantitites)
 
 # test for model 1
 Run_gen_quants(
-    m = 2, 
+    m = 1, 
     nparallel = nparallel,
     niter = 1000, 
     nwarmup = 500, 

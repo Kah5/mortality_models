@@ -14,23 +14,23 @@ data {
   vector<lower=1>[Nrep] Remperoos; // out-of-sample remeasurement period by tree
 }
 parameters {
-  vector[K] mu_beta; // population-level means for u_betas
-  matrix[Nspp, K] z_beta; // non-centered prior information for species u_betas
-  vector<lower=0>[K] sigma_beta; // scaling parameters for non-centered species u_betas
-  real mu_alpha; // global mean for the species intercept
-  real<lower=0> sigma_alpha; // scaling parameter for species-level non-centered intercept
-  vector[Nspp] z_alpha_SPP; // non-centered prior information for species-level random intercepts
-}
-transformed parameters {
+ 
+   
+   // Hyperparameters for species-level slopes
+  vector[K] mu_beta;
+  vector<lower=1e-6>[K] sigma_beta;
+
+  // Hyperparameters for species-level intercepts
+  real mu_alpha;
+  real<lower=1e-6> sigma_alpha;
+  
   matrix[Nspp, K] u_beta; // actual species RE for the beta effects
-  // calculate the non-centered u_betas from the sigm_beta and z_beta matrix
-  for (k in 1:K) {
-    u_beta[, k] = mu_beta[k] + sigma_beta[k] * z_beta[, k]; // multiply each column of z_beta by its sigma_beta[k]
-  }
+  vector[Nspp] alpha_SPP;
 
-  vector[Nspp] alpha_SPP = mu_alpha + sigma_alpha * z_alpha_SPP; // non-centered parameterization for species random effect on intercept
 }
-
+model{
+  
+}
 generated quantities {
   //in sample predictions
   array[N] int<lower=0, upper=1> y_hat; // predicted survival for each tree 
@@ -54,7 +54,7 @@ generated quantities {
   for (n in 1:Nrep) {
     //real logit_p_annual_rep = ; // regression predictions with posteriors
     //pSannual_rep[n] = inv_logit(alpha_SPP[SPPrep[n]] + dot_product(xMrep[n], u_beta[SPPrep[n]])); // annual survival probability
-    mMrep[n] = pow(inv_logit(alpha_SPP[SPPrep[n]] + dot_product(xMrep[n], u_beta[SPPrep[n]]), Remperoos[n]); // cumulative survival over remeasurement period
+    mMrep[n] = pow(inv_logit(alpha_SPP[SPPrep[n]] + dot_product(xMrep[n], u_beta[SPPrep[n]])), Remperoos[n]); // cumulative survival over remeasurement period
     y_rep[n] = bernoulli_rng(mMrep[n]); // prediction oos survival
   }
 }
