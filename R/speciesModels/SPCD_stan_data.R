@@ -4,9 +4,9 @@ SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   
   cleaned.data_old <- cleaned.data.full %>% filter(SPCD %in% SPCD.id)
   
-  cleaned.data %>% group_by(M) %>% summarise(n())
-  
-  cleaned.data %>% group_by(M, (dbhcur-dbhold) == 0) %>% summarise(n())
+  # cleaned.data %>% group_by(M) %>% summarise(n())
+  # 
+  # cleaned.data %>% group_by(M, (dbhcur-dbhold) == 0) %>% summarise(n())
   
   
   #View(cleaned.data_old %>% select(M))
@@ -62,43 +62,61 @@ if(remper.correction == "random"){
                          MATmin.scaled = (MATmin- plot.medians$MATmin.median)/plot.medians$MATmin.sd,
                          MATmax.scaled = (MATmax - plot.medians$MATmax.median)/plot.medians$MATmax.sd)
     }else{
-    cleaned.data <- cleaned.data %>% ungroup()  %>% group_by(SPCD) %>% 
+    cleaned.data.zscaled <- cleaned.data %>% ungroup()  %>% group_by(SPCD) %>% 
       mutate(rempercur = ifelse(M ==1, remper*remper.correction, remper), 
              annual.growth = DIA_DIFF/rempercur,
-             BAL.ratio = BAL/BA_total) %>% mutate(DIA.median = median(dbhcur, na.rm =TRUE), 
-                                                            DIA.sd = sd(dbhcur, na.rm = TRUE),  
+             BAL.ratio = BAL/BA_total) %>% mutate(DIA.median = median(dbhold, na.rm =TRUE), 
+                                                            DIA.sd = sd(dbhold, na.rm = TRUE), 
+                                                            DIA.IQR = IQR(dbhold, na.rm = FALSE),
+                                                            
                                                             DIA.DIFF.median = median(DIA_DIFF, na.rm =TRUE), 
                                                             DIA.DIFF.sd = sd(DIA_DIFF, na.rm =TRUE),
+                                                            DIA.DIFF.IQR = IQR(DIA_DIFF, na.rm =TRUE),
+                                                            
                                                             BAL.median = median(BAL, na.rm=TRUE),
                                                             BAL.sd = sd(BAL, na.rm = TRUE),
+                                                            BAL.IQR = IQR(BAL, na.rm = TRUE),
+                                                            
                                                             BAL.ratio.median = median(BAL.ratio, na.rm=TRUE),
                                                             BAL.ratio.sd = sd(BAL.ratio, na.rm = TRUE),
+                                                            BAL.ratio.IQR = IQR(BAL.ratio, na.rm = TRUE),
+                                                            
                                                             plt_ba_sq_ft_cur.median = median(plt_ba_sq_ft_cur, na.rm = TRUE),
                                                             plt_ba_sq_ft_cur.sd = sd(plt_ba_sq_ft_cur, na.rm = TRUE),
-                                                            
+                                                            plt_ba_sq_ft_cur.IQR = IQR(plt_ba_sq_ft_cur, na.rm = TRUE),
+                                                  
                                                             plt_ba_sq_ft_old.median = median(plt_ba_sq_ft_old, na.rm =TRUE),
                                                             plt_ba_sq_ft_old.sd = sd(plt_ba_sq_ft_old, na.rm =TRUE),
-                                                            
+                                                            plt_ba_sq_ft_old.IQR = IQR(plt_ba_sq_ft_old, na.rm =TRUE),
+                                                  
                                                             Ndep_Diff_per_yr.median = median(Difference_per_yr, na.rm = TRUE),
                                                             Ndep_Diff_per_yr.sd = sd(Difference_per_yr, na.rm = TRUE),
-                                                            
+                                                            Ndep_Diff_per_yr.IQR = IQR(Difference_per_yr, na.rm = TRUE),
+                                                  
                                                             Ndep.remper.rel.1950.median = median(Ndep.remper.rel.1950, na.rm = TRUE),
                                                             Ndep.remper.rel.1950.sd = sd(Ndep.remper.rel.1950, na.rm = TRUE),
-                                                            
+                                                            Ndep.remper.rel.1950.IQR = IQR(Ndep.remper.rel.1950, na.rm = TRUE),
+                                                  
                                                             RD.median = median(RD, na.rm=TRUE), 
                                                             RD.sd = sd(RD, na.rm =TRUE),
-                                                            nonSPCD_BA_tot.sd = sd(non_SPCD_BA, na.rm = TRUE),
-                                                            SPCD_BA.sd = sd(SPCD_BA, na.rm =
-                                                                              TRUE),
+                                                            RD.IQR = IQR(RD, na.rm =TRUE),
+                                                  
+                                                           
                                                             prop.focal.ba.median = median(SPCD_BA/BA_total, na.rm =TRUE), 
                                                             prop.focal.ba.sd = sd(SPCD_BA/BA_total, na.rm =TRUE), 
-                                                            BA_tot.median = median(BA_total, na.rm =
-                                                                                     TRUE),
+                                                            
+                                                            BA_tot.median = median(BA_total, na.rm =TRUE),
                                                             nonSPCD_BA_tot.median = median(non_SPCD_BA, na.rm = TRUE),
-                                                            SPCD_BA.median = median(SPCD_BA, na.rm =
-                                                                                      TRUE),
-                                                            annual.growth.median = median(annual.growth, na.rm = TRUE), 
-                                                            annual.growth.sd = sd(annual.growth, na.rm = TRUE)) %>% 
+                                                            nonSPCD_BA_tot.sd = sd(non_SPCD_BA, na.rm = TRUE),
+                                                  
+                                                  SPCD_BA.median = median(SPCD_BA, na.rm =TRUE),
+                                                  SPCD_BA.sd = sd(SPCD_BA, na.rm = TRUE),  
+                                                  SPCD_BA.IQR = sd(SPCD_BA, na.rm = TRUE), 
+                                                 
+                                                 annual.growth.median = median(annual.growth, na.rm = TRUE), 
+                                                 annual.growth.sd = sd(annual.growth, na.rm = TRUE), 
+                                                 annual.growth.IQR = IQR(annual.growth, na.rm = TRUE)) %>% 
+      
       # rescale to 
       ungroup() %>% mutate(DIA_scaled = (dbhcur - DIA.median)/DIA.sd,
                            DIA_DIFF_scaled = (DIA_DIFF - DIA.DIFF.median)/DIA.DIFF.sd,
@@ -131,8 +149,160 @@ if(remper.correction == "random"){
                            physio.scaled = (physio-plot.medians$physio.median)/plot.medians$physio.sd,
                            MATmin.scaled = (MATmin- plot.medians$MATmin.median)/plot.medians$MATmin.sd,
                            MATmax.scaled = (MATmax - plot.medians$MATmax.median)/plot.medians$MATmax.sd)
-   }
-  # rescale to values of 0 to 1
+  
+    
+    
+    cleaned.data <- cleaned.data %>% ungroup()  %>% group_by(SPCD) %>% 
+      mutate(rempercur = ifelse(M ==1, remper*remper.correction, remper), 
+             annual.growth = DIA_DIFF/rempercur,
+             BAL.ratio = 100*(BAL/BA_total)) %>% mutate(DIA.median = median(dbhold, na.rm =TRUE), 
+                                                  DIA.sd = sd(dbhold, na.rm = TRUE), 
+                                                  DIA.IQR = IQR(dbhold, na.rm = FALSE),
+                                                  
+                                                  logDIA.median = median(log(dbhold), na.rm =TRUE), 
+                                                  logDIA.sd = sd(log(dbhold), na.rm = TRUE), 
+                                                  
+                                                  DIA.DIFF.median = median(DIA_DIFF, na.rm =TRUE), 
+                                                  DIA.DIFF.sd = sd(DIA_DIFF, na.rm =TRUE),
+                                                  DIA.DIFF.IQR = IQR(DIA_DIFF, na.rm =TRUE),
+                                                  
+                                                  logDIA.DIFF.median = median(log(DIA_DIFF), na.rm =TRUE), 
+                                                  logDIA.DIFF.sd = sd(log(DIA_DIFF), na.rm =TRUE),
+                                                  
+                                                  
+                                                  BAL.median = median(BAL, na.rm=TRUE),
+                                                  BAL.sd = sd(BAL, na.rm = TRUE),
+                                                  BAL.IQR = IQR(BAL, na.rm = TRUE),
+                                                  
+                                                  BAL.ratio.median = median(BAL.ratio, na.rm=TRUE),
+                                                  BAL.ratio.sd = sd(BAL.ratio, na.rm = TRUE),
+                                                  BAL.ratio.IQR = IQR(BAL.ratio, na.rm = TRUE),
+                                                  
+                                                  logBAL.ratio.median = median(log1p(BAL.ratio), na.rm=TRUE),
+                                                  logBAL.ratio.sd = sd(log1p(BAL.ratio), na.rm = TRUE),
+                                                  logBAL.ratio.IQR = IQR(BAL.ratio, na.rm = TRUE),
+                                                  
+                                                  
+                                                  plt_ba_sq_ft_cur.median = median(plt_ba_sq_ft_cur, na.rm = TRUE),
+                                                  plt_ba_sq_ft_cur.sd = sd(plt_ba_sq_ft_cur, na.rm = TRUE),
+                                                  plt_ba_sq_ft_cur.IQR = IQR(plt_ba_sq_ft_cur, na.rm = TRUE),
+                                                  
+                                                  logplt_ba_sq_ft_cur.median = median(log(plt_ba_sq_ft_cur), na.rm = TRUE),
+                                                  logplt_ba_sq_ft_cur.sd = sd(log(plt_ba_sq_ft_cur), na.rm = TRUE),
+                                                  
+                                                  plt_ba_sq_ft_old.median = median(plt_ba_sq_ft_old, na.rm =TRUE),
+                                                  plt_ba_sq_ft_old.sd = sd(plt_ba_sq_ft_old, na.rm =TRUE),
+                                                  plt_ba_sq_ft_old.IQR = IQR(plt_ba_sq_ft_old, na.rm =TRUE),
+                                                  
+                                                  logplt_ba_sq_ft_old.median = median(log1p(plt_ba_sq_ft_old), na.rm =TRUE),
+                                                  logplt_ba_sq_ft_old.sd = sd(log1p(plt_ba_sq_ft_old), na.rm =TRUE),
+                                                  
+                                                  
+                                                  Ndep_Diff_per_yr.median = median(Difference_per_yr, na.rm = TRUE),
+                                                  Ndep_Diff_per_yr.sd = sd(Difference_per_yr, na.rm = TRUE),
+                                                  Ndep_Diff_per_yr.IQR = IQR(Difference_per_yr, na.rm = TRUE),
+                                                  
+                                                  Ndep.remper.rel.1950.median = median(Ndep.remper.rel.1950, na.rm = TRUE),
+                                                  Ndep.remper.rel.1950.sd = sd(Ndep.remper.rel.1950, na.rm = TRUE),
+                                                  Ndep.remper.rel.1950.IQR = IQR(Ndep.remper.rel.1950, na.rm = TRUE),
+                                                  
+                                                  RD.median = median(RD, na.rm=TRUE), 
+                                                  RD.sd = sd(RD, na.rm =TRUE),
+                                                  RD.IQR = IQR(RD, na.rm =TRUE),
+                                                  
+                                                  
+                                                  prop.focal.ba.median = median(SPCD_BA/BA_total, na.rm =TRUE), 
+                                                  prop.focal.ba.sd = sd(SPCD_BA/BA_total, na.rm =TRUE), 
+                                                  prop.focal.ba.IQR = IQR(SPCD_BA/BA_total, na.rm =TRUE), 
+                                                  
+                                                  BA_tot.median = median(BA_total, na.rm =TRUE),
+                                                  nonSPCD_BA_tot.median = median(non_SPCD_BA, na.rm = TRUE),
+                                                  nonSPCD_BA_tot.sd = sd(non_SPCD_BA, na.rm = TRUE),
+                                                  nonSPCD_BA_tot.IQR = IQR(non_SPCD_BA, na.rm = TRUE),
+                                                  
+                                                  SPCD_BA.median = median(SPCD_BA, na.rm =TRUE),
+                                                  SPCD_BA.sd = sd(SPCD_BA, na.rm = TRUE),  
+                                                  SPCD_BA.IQR = sd(SPCD_BA, na.rm = TRUE), 
+                                                  
+                                                  annual.growth.median = median(annual.growth, na.rm = TRUE), 
+                                                  annual.growth.sd = sd(annual.growth, na.rm = TRUE), 
+                                                  annual.growth.IQR = IQR(annual.growth, na.rm = TRUE), 
+                                                  logannual.growth.median = median(log(annual.growth), na.rm = TRUE), 
+                                                  logannual.growth.sd = sd(log(annual.growth), na.rm = TRUE)) %>% 
+      
+      # rescale to 
+      ungroup() %>% mutate( # log scale diameter, diameter difference and annual growth before standardizing
+                           DIA_scaled = (log(dbhold) - logDIA.median)/logDIA.sd,
+                           DIA_DIFF_scaled = (log(DIA_DIFF) - logDIA.DIFF.median)/logDIA.DIFF.sd,
+                           annual.growth.scaled = (log(annual.growth) - logannual.growth.median)/logannual.growth.sd,
+                           
+                           RD.scaled = (RD-RD.median)/RD.sd,
+                           BAL.scaled = (BAL-BAL.median)/BAL.sd,
+                           
+                           # keep the BAL ratio
+                           BAL.ratio.scaled = (log1p(BAL.ratio)-logBAL.ratio.median)/logBAL.ratio.sd,
+                           
+                           SPCD.BA.scaled = (SPCD_BA - SPCD_BA.median)/SPCD_BA.sd,
+                           non_SPCD.BA.scaled = (non_SPCD_BA - nonSPCD_BA_tot.median)/nonSPCD_BA_tot.sd,
+                           prop.focal.ba.scaled = ((SPCD_BA/BA_total) - prop.focal.ba.median)/prop.focal.ba.sd, 
+                           
+                           # using log scaling for basal areas
+                           plt_ba_sq_ft_cur.scaled = (log1p(plt_ba_sq_ft_cur)-logplt_ba_sq_ft_cur.median)/logplt_ba_sq_ft_cur.sd,
+                           plt_ba_sq_ft_old.scaled = (log1p(plt_ba_sq_ft_old) - logplt_ba_sq_ft_old.median)/logplt_ba_sq_ft_old.sd,
+                           
+                           
+                           Ndep_Diff_per_yr.scaled = (Difference_per_yr - Ndep_Diff_per_yr.median)/Ndep_Diff_per_yr.sd,
+                           Ndep.remper.rel.1950.scaled = (Ndep.remper.rel.1950 - Ndep.remper.rel.1950.median)/Ndep.remper.rel.1950.sd, 
+                           
+                           # unique slope and aspect values
+                           aspect.scaled = cos(aspect*(pi / 180)), # northness
+                           slope.scaled = sin(slope*(pi/180)), # sin transformed slopes
+                           
+
+                           
+                           # scaling by plot medians
+                           si.scaled = (si - plot.medians$si.median)/plot.medians$si.sd,
+                           
+                          # ba.scaled = (ba - plot.medians$ba.median)/plot.medians$ba.sd,
+                           
+                           # scale the log1p(damage.total)
+                           damage.scaled = (log1p(damage.total) - plot.medians$damage.median)/plot.medians$damage.sd,
+                           
+                           MAP.scaled = (MAP-plot.medians$MAP.median)/plot.medians$MAP.sd,
+                           elev.scaled = (elev-plot.medians$elev.median)/plot.medians$elev.sd,
+                           Ndep.scaled = (Ndep.remper.avg - plot.medians$Ndep.median)/plot.medians$Ndep.sd,
+                           physio.scaled = (physio - plot.medians$physio.median)/plot.medians$physio.sd,
+                           MATmin.scaled = (MATmin - plot.medians$MATmin.median)/plot.medians$MATmin.sd,
+                           MATmax.scaled = (MATmax - plot.medians$MATmax.median)/plot.medians$MATmax.sd)
+    
+    
+    
+    }
+  
+  # unique scaling of variables:----
+  
+  # slope and aspect:
+  
+  # slope.scaled = sin(slope*(pi / 180)) # sin transformed slope
+  # aspect.scaled = cos(aspect*(pi / 180)) # northness
+  # slope.aspect.int.scaled = sin(slope*(pi/180)*cos(aspect*(pi / 180)) # northness
+  
+  # hist(cleaned.data$annual.growth.scaled)
+  # hist(cleaned.data$BAL.ratio.scaled)
+  # hist(cleaned.data$DIA_scaled)
+  # hist(cleaned.data$MATmax.scaled)
+  # hist(cleaned.data$MAP.scaled)
+  # hist(cleaned.data$ppt.anom)
+  # hist(cleaned.data$tmax.anom)
+  # hist(cleaned.data$Ndep.scaled)
+  # #hist(cleaned.data$plt_ba_sq_ft_old.scaled/2)
+  # hist(cleaned.data$plt_ba_sq_ft_cur.scaled*cleaned.data$BAL.ratio.scaled)
+  # summary(cleaned.data$plt_ba_sq_ft_cur.scaled*cleaned.data$BAL.ratio.scaled)
+  # summary(cleaned.data$MAP.scaled*cleaned.data$BAL.ratio.scaled)
+  # #hist(cleaned.data$MATmax.scaled*cleaned.data$BAL.ratio.scaled)
+  # hist(cleaned.data$DIA_scaled*cleaned.data$BAL.ratio.scaled)
+  # hist(cleaned.data$annual.growth.scaled*cleaned.data$BAL.ratio.scaled)
+  # # rescale to values of 0 to 1
      # ungroup()%>% mutate(DIA_scaled = rescale(dbhold,, 
      #                    annual.growth.scaled = rescale(annual.growth,,
      #                    RD.scaled = rescale(RD,,
@@ -161,9 +331,17 @@ if(remper.correction == "random"){
      #                    ppt.anom = rescale(ppt.anom,, 
      #                    tmax.anom = rescale(tmax.anom,, 
      #                    tmin.anom = rescale(tmin.anom,)
-  # old method of scaling                      
-   
-
+  # # old method of scaling                   
+  # hist(log(cleaned.data.IQRscaled$annual.growth))
+  # hist(log(cleaned.data.IQRscaled$slope))
+  # hist(cleaned.data.IQRscaled$BAL.ratio)
+  # hist(cleaned.data.IQRscaled$annual.growth.scaled)
+  # hist(cleaned.data.zscaled$annual.growth.scaled)
+  # 
+  # hist(cleaned.data.IQRscaled$slope.scaled)
+  # hist(cleaned.data.zscaled$slope.scaled)
+  # 
+  
   SPP.df <- data.frame(SPCD = unique(cleaned.data$SPCD), 
                        SPP = 1:length(unique(cleaned.data$SPCD)))
   
@@ -175,7 +353,8 @@ if(remper.correction == "random"){
   # DIA_DIFF_scaled is 
   cleaned.data <- cleaned.data %>% mutate(ba.scaled = plt_ba_sq_ft_cur.scaled, 
             DIA_DIFF_scaled = annual.growth.scaled, 
-            BAL.scaled = BAL.ratio.scaled) %>% 
+            BAL.scaled = BAL.ratio.scaled, 
+            ba.scaled = plt_ba_sq_ft_old.scaled) %>% 
     filter(!is.na(BAL.scaled))
 
   #summary(cleaned.data$BAL.scaled)
@@ -188,23 +367,111 @@ if(remper.correction == "random"){
   train.data <- cleaned.data[train_ind,]
   test.data <- cleaned.data[-train_ind, ]
   
-  # Option B:
+  
+  
+xMfull <-   cleaned.data %>% dplyr::select(DIA_DIFF_scaled, 
+                                         DIA_scaled, 
+                                         #RD.scaled, 
+                                         ba.scaled, 
+                                         BAL.scaled, 
+                                         #non_SPCD.BA.scaled,
+                                         damage.scaled,
+                                         MATmax.scaled, 
+                                         #MATmin.scaled, 
+                                         MAP.scaled,
+                                         ppt.anom, 
+                                         #tmin.anom, 
+                                         tmax.anom, 
+                                         slope.scaled, 
+                                         aspect.scaled,
+                                         #elev.scaled, 
+                                         Ndep.scaled) %>% #,
+              #physio.scaled) %>%,
+              #physio.scaled) %>%
+              # generate growth interactions
+              mutate_at(.funs = list(growth.int = ~.*DIA_DIFF_scaled), 
+                        .vars = vars(DIA_scaled:Ndep.scaled)) %>% 
+              # generate diameter interactions
+              mutate_at(.funs = list(DIA.int = ~.*DIA_scaled), 
+                        .vars = vars(ba.scaled:Ndep.scaled)) %>%
+              
+              
+              # # generate RD.scaled interactions
+              # mutate_at(.funs = list(RD.scaled.int = ~.*RD.scaled), 
+              #           .vars = vars(ba.scaled:physio.scaled))%>%
+              
+              # generate ba interactions
+              mutate_at(.funs = list(ba.int = ~.*ba.scaled), 
+                        .vars = vars(BAL.scaled:Ndep.scaled))%>%
+              # generate BAL interactions
+              mutate_at(.funs = list(BAL.int = ~.*BAL.scaled), 
+                        .vars = vars(damage.scaled:Ndep.scaled))%>%
+              
+              # generate damage interactions
+              mutate_at(.funs = list(damage.int = ~.*damage.scaled), 
+                        .vars = vars(MATmax.scaled:Ndep.scaled)) %>%
+              
+              # generate MATmax interactions
+              mutate_at(.funs = list(MATmax.scaled.int = ~.*MATmax.scaled), 
+                        .vars = vars(MAP.scaled:Ndep.scaled))%>%
+              # # generate MATmin.scaled interactions
+              # mutate_at(.funs = list(MATmin.scaled.int = ~.*MATmin.scaled), 
+              #           .vars = vars(MAP.scaled:physio.scaled))%>%
+              
+              # generate MAP.scaled interactions
+              mutate_at(.funs = list(MAP.scaled.int = ~.*MAP.scaled), 
+                        .vars = vars(ppt.anom:Ndep.scaled))%>%
+              
+              mutate_at(.funs = list(ppt.anom.int = ~.*ppt.anom), 
+                        .vars = vars(tmax.anom:Ndep.scaled))%>%
+              # # generate tmin.anom interactions
+              # mutate_at(.funs = list(tmin.anom.int = ~.*tmin.anom), 
+              #           .vars = vars(tmax.anom:Ndep.scaled))%>%
+              
+              # generate tmax.anom interactions
+              mutate_at(.funs = list(tmax.anom.int = ~.*tmax.anom), 
+                        .vars = vars(slope.scaled:Ndep.scaled)) %>%
+              # generate slope.scaled interactions
+              mutate_at(.funs = list(slope.int = ~.*slope.scaled), 
+                        .vars = vars(aspect.scaled:Ndep.scaled))%>%
+              # generate aspect.scaled interactions
+              mutate_at(.funs = list(aspect.int = ~.*aspect.scaled), 
+                        .vars = vars(Ndep.scaled))#%>%
+            
+  
+ # summary(xMfull) 
+ # hist(xMfull$DIA_DIFF_scaled)
+ # hist(xMfull$DIA_scaled)
+ # 
+ # hist(log(cleaned.data$DIA_DIFF))
+ # hist(log(cleaned.data$dbhold))
+ # 
+ # hist(log(1+cleaned.data$DIA_DIFF))
+ # hist(log(1+cleaned.data$annual.growth))
+ # 
+ # hist(cleaned.data$MAP.scaled)
+ # hist(cleaned.data$elev.scaled)
+ # hist(cleaned.data$elev)
+ # 
+ # hist(cleaned.data$DIA_scaled)
+ # 
+ # Option B:
   # 1. Annual growth 
   
   
-  ggplot(test.data, aes(x= as.character(M), y = annual.growth))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
-  ggplot(test.data, aes(x= as.character(M), y = prop.focal.ba.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
-  ggplot(test.data, aes(x= as.character(M), y = plt_ba_sq_ft_old.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
-  ggplot(test.data, aes(x= as.character(M), y = plt_ba_sq_ft_cur.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
-  ggplot(test.data, aes(x= as.character(M), y = ba.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
-  ggplot(test.data, aes(x= as.character(M), y = BAL.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
-  ggplot(test.data, aes(x= as.character(M), y = BAL.ratio.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
-  
-  #ggplot(test.data, aes(x= as.character(M), y = SPCD.density.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
-  ggplot(test.data, aes(x= as.character(M), y = non_SPCD.BA.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
-  #ggplot(test.data, aes(x= as.character(M), y = non.SPCD.density.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
-  
-  
+  # ggplot(test.data, aes(x= as.character(M), y = annual.growth))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  # ggplot(test.data, aes(x= as.character(M), y = prop.focal.ba.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  # ggplot(test.data, aes(x= as.character(M), y = plt_ba_sq_ft_old.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  # ggplot(test.data, aes(x= as.character(M), y = plt_ba_sq_ft_cur.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  # ggplot(test.data, aes(x= as.character(M), y = ba.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  # ggplot(test.data, aes(x= as.character(M), y = BAL.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  # ggplot(test.data, aes(x= as.character(M), y = BAL.ratio.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  # 
+  # #ggplot(test.data, aes(x= as.character(M), y = SPCD.density.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  # ggplot(test.data, aes(x= as.character(M), y = non_SPCD.BA.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  # #ggplot(test.data, aes(x= as.character(M), y = non.SPCD.density.scaled))+geom_violin()+facet_wrap(~SPCD, scales = "free_y")
+  # 
+  # 
   
   # model.1 data
   mod.data.1 <- list(N = nrow(train.data), 
@@ -314,8 +581,8 @@ if(remper.correction == "random"){
   
   
   xM <- mod.data.6$xM
-  summary(xM[,1]*xM[,2])
-  summary(xM[,"DIA_scaled_growth.int"])
+  # summary(xM[,1]*xM[,2])
+  # summary(xM[,"DIA_scaled_growth.int"])
   # model.7 data
   # 7. model 5 + competition interactions
   mod.data.7 <- list(N = nrow(train.data), 
@@ -871,7 +1138,7 @@ if(remper.correction == "random"){
        model.name, 
        file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_1.Rdata"))
   # save to json file for use in cmdstan
-  write_json(mod_data, file = paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
+  write_json(mod.data, paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
                                      remper.correction,"model_1.json"), pretty = TRUE, auto_unbox = TRUE)
   
   mod.data <- mod.data.2
@@ -888,7 +1155,7 @@ if(remper.correction == "random"){
        model.name, 
        file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_2.Rdata"))
   # save to json file for use in cmdstan
-  write_json(mod_data, file = paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
+  write_json(mod.data, paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
                                      remper.correction,"model_2.json"), pretty = TRUE, auto_unbox = TRUE)
   
   mod.data <- mod.data.3
@@ -905,7 +1172,7 @@ if(remper.correction == "random"){
        model.name, 
        file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_3.Rdata"))
   # save to json file for use in cmdstan
-  write_json(mod_data, file = paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
+  write_json(mod.data, paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
                                      remper.correction,"model_3.json"), pretty = TRUE, auto_unbox = TRUE)
   
   mod.data <- mod.data.4
@@ -922,7 +1189,7 @@ if(remper.correction == "random"){
        model.name, 
        file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_4.Rdata"))
   # save to json file for use in cmdstan
-  write_json(mod_data, file = paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
+  write_json(mod.data, paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
                                      remper.correction,"model_4.json"), pretty = TRUE, auto_unbox = TRUE)
   
   mod.data <- mod.data.5
@@ -939,7 +1206,7 @@ if(remper.correction == "random"){
        model.name, 
        file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_5.Rdata"))
   # save to json file for use in cmdstan
-  write_json(mod_data, file = paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
+  write_json(mod.data,  paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
                                      remper.correction,"model_5.json"), pretty = TRUE, auto_unbox = TRUE)
   
   mod.data <- mod.data.6
@@ -956,7 +1223,7 @@ if(remper.correction == "random"){
        model.name, 
        file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_6.Rdata"))
   # save to json file for use in cmdstan
-  write_json(mod_data, file = paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
+  write_json(mod.data, paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
                                      remper.correction,"model_6.json"), pretty = TRUE, auto_unbox = TRUE)
   
   
@@ -974,7 +1241,7 @@ if(remper.correction == "random"){
        model.name, 
        file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_7.Rdata"))
   # save to json file for use in cmdstan
-  write_json(mod_data, file = paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
+  write_json(mod.data, paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
                                      remper.correction,"model_7.json"), pretty = TRUE, auto_unbox = TRUE)
   
   
@@ -992,7 +1259,7 @@ if(remper.correction == "random"){
        model.name, 
        file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_8.Rdata"))
   # save to json file for use in cmdstan
-  write_json(mod_data, file = paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
+  write_json(mod.data, paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
                                      remper.correction,"model_8.json"), pretty = TRUE, auto_unbox = TRUE)
   
   
@@ -1013,6 +1280,8 @@ if(remper.correction == "random"){
        file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_",remper.correction,"model_9.Rdata"))
   
   # save to json file for use in cmdstan
-  write_json(mod_data, file = paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
+  write_json(mod.data, paste0("SPCD_standata_json/SPCD_",SPCD.id,"remper_correction_",
                                      remper.correction,"model_9.json"), pretty = TRUE, auto_unbox = TRUE)
 }
+
+

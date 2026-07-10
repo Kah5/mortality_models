@@ -119,7 +119,7 @@ plot.medians <- unique(
     
     slope.median = median(slope, na.rm = TRUE),
     aspect.median = median(aspect, na.rm = TRUE),
-    damage.median = median(damage.total, na.rm =
+    damage.median = median(log1p(damage.total), na.rm =
                              TRUE),
     elev.median = median(elev, na.rm = TRUE),
     Ndep.median = median(Ndep.remper.avg, na.rm =
@@ -152,7 +152,7 @@ plot.medians <- unique(
                  TRUE),
     slope.sd = sd(slope, na.rm = TRUE),
     aspect.sd = sd(aspect, na.rm = TRUE),
-    damage.sd = sd(damage.total, na.rm =
+    damage.sd = sd(log1p(damage.total), na.rm =
                      TRUE),
     elev.sd = sd(elev, na.rm = TRUE),
     Ndep.sd = sd(Ndep.remper.avg, na.rm =
@@ -161,7 +161,41 @@ plot.medians <- unique(
     MAP.sd = sd(MAP, na.rm = TRUE),
     MATmin.sd = sd(MATmin, na.rm =
                      TRUE),
-    MATmax.sd = sd(MATmax, na.rm = TRUE)
+    MATmax.sd = sd(MATmax, na.rm = TRUE), 
+    
+    # get IQR
+    RD.IQR = IQR(RD, na.rm = TRUE),
+    ba.IQR = IQR(ba, na.rm = TRUE),
+    
+    BA_tot.IQR = IQR(BA_total, na.rm =
+                     TRUE),
+    nonSPCD_BA_tot.IQR = IQR(non_SPCD_BA, na.rm = TRUE),
+    SPCD_BA.IQR = IQR(SPCD_BA, na.rm =
+                      TRUE),
+    
+    plt_ba_sq_ft_cur.IQR = IQR(plt_ba_sq_ft_cur, na.rm = TRUE),
+    plt_ba_sq_ft_old.IQR = IQR(plt_ba_sq_ft_old, na.rm =
+                               TRUE),
+    
+    Difference_per_yr.IQR = IQR(Difference_per_yr, na.rm = TRUE),
+    Ndep.remper.rel.1950.IQR = IQR(Ndep.remper.rel.1950, na.rm =
+                                   TRUE),
+    
+    
+    si.IQR = IQR(si, na.rm =
+                 TRUE),
+    slope.IQR = IQR(slope, na.rm = TRUE),
+    aspect.IQR = IQR(aspect, na.rm = TRUE),
+    damage.IQR = IQR(damage.total, na.rm =
+                     TRUE),
+    elev.IQR = IQR(elev, na.rm = TRUE),
+    Ndep.IQR = IQR(Ndep.remper.avg, na.rm =
+                   TRUE),
+    physio.IQR = IQR(physio, na.rm = TRUE),
+    MAP.IQR = IQR(MAP, na.rm = TRUE),
+    MATmin.IQR = IQR(MATmin, na.rm =
+                     TRUE),
+    MATmax.IQR = IQR(MATmax, na.rm = TRUE)
   )
 
 saveRDS(plot.medians, "data/plot.medians_SPCD_all.rds")
@@ -236,3 +270,104 @@ for(i in 1:length(unique(nspp[1:17,]$SPCD))){
                  remper.correction = 0.5, 
                  cleaned.data.full = cleaned.data.full)
  }
+
+
+# now compile a json file for the hierarchical data for all of the models:
+# run a giant for loop that runs models 1-9:
+for(m in 1:9) {
+  
+  
+  model.no <- m
+  
+  cat(paste0("saving hierarchical model number ", model.no, "\n"))
+  
+  xM.list <-
+    xMrep.list <-
+    y.list <-
+    y.test.list <-
+    nSPP.list <-
+    nSPP.rep.list <- remper.list <- remper.rep.list <-
+    test.data.list <- train.data.list <- list()
+  
+  for (i in 1:17) {
+    # SPCD.id
+    SPCD.id <- nspp[i, ]$SPCD
+    load(
+      paste0(
+        "SPCD_standata_general_full_standardized_v3/SPCD_",
+        SPCD.id,
+        "remper_correction_0.5model_",
+        model.no,
+        ".Rdata"
+      )
+    ) # load the species code data
+    
+    
+    
+    xM.list[[i]] <- mod.data$xM
+    xMrep.list[[i]] <- mod.data$xMrep
+    y.list[[i]] <- mod.data$y
+    y.test.list[[i]] <- mod.data$ytest
+    nSPP.list[[i]] <- rep(i, length(mod.data$y))
+    nSPP.rep.list[[i]] <- rep(i, length(mod.data$ytest))
+    
+    remper.list[[i]] <- train.data$remper
+    remper.rep.list[[i]] <- test.data$remper
+    
+    
+    train.data.list[[i]] <- train.data
+    test.data.list[[i]] <- test.data
+  }
+  
+  
+  
+  test.data <- do.call(rbind, test.data.list)
+  train.data <- do.call(rbind, train.data.list)
+  
+
+
+  
+  mod.data.full <-  list(
+    xM = do.call(rbind, xM.list),
+    xMrep = do.call(rbind, xMrep.list),
+    y = unlist(y.list),
+    ytest = unlist(y.test.list),
+    SPP = unlist(nSPP.list),
+    SPPrep = unlist(nSPP.rep.list),
+    Remper = unlist(remper.list),
+    Remperoos = unlist(remper.rep.list)
+  )
+  mod.data.full$K <- ncol(mod.data.full$xM)
+  mod.data.full$N <- length(mod.data.full$y)
+  
+  mod.data.full$Nspp <- 17
+  mod.data.full$Nrep <- length(mod.data.full$ytest)
+  
+  
+  write_json (
+    mod.data.full,
+    paste0(
+      "SPCD_standata_json/hierarchical_data_model_",
+      model.no,
+      ".json"
+    ), pretty = TRUE, auto_unbox = TRUE)
+  
+  
+  # summary(mod.data.full$xM)[,"BAL.scaled_ba.int"]
+  # 
+  # hist(mod.data.full$xM[,"slope.scaled"])
+  # hist(mod.data.full$xM[,"BAL.scaled"])
+  # hist(mod.data.full$xM[,"ba.scaled"])
+  # hist(mod.data.full$xM[,"MAP.scaled"])
+  # 
+  # cov.data <- mod.data.full$xM
+  # 
+  # probs = c(0, 0.001, 0.01, 0.05, 0.5, 0.95, 0.99, 0.999, 1)
+  # quant.summary <- t(apply(cov.data, 2, quantile, probs = probs, na.rm =TRUE))
+  # quant.summary %>% data.frame()%>% arrange(desc( X100.))
+  # quant.summary %>% data.frame()%>% arrange( X0.)
+  # 
+  # 
+  # check BAL.scaled, MAP.scaled, Ndep.scaled, ba.scaled, DIA_DIFFcaled, MATmax, growth Ndep
+
+}  
