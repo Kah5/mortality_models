@@ -1,6 +1,9 @@
 SPCD.stan.data <- function(SPCD.id, remper.correction, cleaned.data.full){
   cleaned.data <- cleaned.data.full %>% filter(SPCD %in% SPCD.id) %>% 
-                                        filter(dbhold >= 5 & ! dbhcur-dbhold == 0)
+                                        filter(dbhold >= 5 & 
+                                                 ! dbhcur-dbhold == 0 & 
+                                                 ! DIA_DIFF == 0 & 
+                                                 plt_ba_sq_ft_old > 0)
   
   cleaned.data_old <- cleaned.data.full %>% filter(SPCD %in% SPCD.id)
   
@@ -62,100 +65,18 @@ if(remper.correction == "random"){
                          MATmin.scaled = (MATmin- plot.medians$MATmin.median)/plot.medians$MATmin.sd,
                          MATmax.scaled = (MATmax - plot.medians$MATmax.median)/plot.medians$MATmax.sd)
     }else{
-    cleaned.data.zscaled <- cleaned.data %>% ungroup()  %>% group_by(SPCD) %>% 
-      mutate(rempercur = ifelse(M ==1, remper*remper.correction, remper), 
-             annual.growth = DIA_DIFF/rempercur,
-             BAL.ratio = BAL/BA_total) %>% mutate(DIA.median = median(dbhold, na.rm =TRUE), 
-                                                            DIA.sd = sd(dbhold, na.rm = TRUE), 
-                                                            DIA.IQR = IQR(dbhold, na.rm = FALSE),
-                                                            
-                                                            DIA.DIFF.median = median(DIA_DIFF, na.rm =TRUE), 
-                                                            DIA.DIFF.sd = sd(DIA_DIFF, na.rm =TRUE),
-                                                            DIA.DIFF.IQR = IQR(DIA_DIFF, na.rm =TRUE),
-                                                            
-                                                            BAL.median = median(BAL, na.rm=TRUE),
-                                                            BAL.sd = sd(BAL, na.rm = TRUE),
-                                                            BAL.IQR = IQR(BAL, na.rm = TRUE),
-                                                            
-                                                            BAL.ratio.median = median(BAL.ratio, na.rm=TRUE),
-                                                            BAL.ratio.sd = sd(BAL.ratio, na.rm = TRUE),
-                                                            BAL.ratio.IQR = IQR(BAL.ratio, na.rm = TRUE),
-                                                            
-                                                            plt_ba_sq_ft_cur.median = median(plt_ba_sq_ft_cur, na.rm = TRUE),
-                                                            plt_ba_sq_ft_cur.sd = sd(plt_ba_sq_ft_cur, na.rm = TRUE),
-                                                            plt_ba_sq_ft_cur.IQR = IQR(plt_ba_sq_ft_cur, na.rm = TRUE),
-                                                  
-                                                            plt_ba_sq_ft_old.median = median(plt_ba_sq_ft_old, na.rm =TRUE),
-                                                            plt_ba_sq_ft_old.sd = sd(plt_ba_sq_ft_old, na.rm =TRUE),
-                                                            plt_ba_sq_ft_old.IQR = IQR(plt_ba_sq_ft_old, na.rm =TRUE),
-                                                  
-                                                            Ndep_Diff_per_yr.median = median(Difference_per_yr, na.rm = TRUE),
-                                                            Ndep_Diff_per_yr.sd = sd(Difference_per_yr, na.rm = TRUE),
-                                                            Ndep_Diff_per_yr.IQR = IQR(Difference_per_yr, na.rm = TRUE),
-                                                  
-                                                            Ndep.remper.rel.1950.median = median(Ndep.remper.rel.1950, na.rm = TRUE),
-                                                            Ndep.remper.rel.1950.sd = sd(Ndep.remper.rel.1950, na.rm = TRUE),
-                                                            Ndep.remper.rel.1950.IQR = IQR(Ndep.remper.rel.1950, na.rm = TRUE),
-                                                  
-                                                            RD.median = median(RD, na.rm=TRUE), 
-                                                            RD.sd = sd(RD, na.rm =TRUE),
-                                                            RD.IQR = IQR(RD, na.rm =TRUE),
-                                                  
-                                                           
-                                                            prop.focal.ba.median = median(SPCD_BA/BA_total, na.rm =TRUE), 
-                                                            prop.focal.ba.sd = sd(SPCD_BA/BA_total, na.rm =TRUE), 
-                                                            
-                                                            BA_tot.median = median(BA_total, na.rm =TRUE),
-                                                            nonSPCD_BA_tot.median = median(non_SPCD_BA, na.rm = TRUE),
-                                                            nonSPCD_BA_tot.sd = sd(non_SPCD_BA, na.rm = TRUE),
-                                                  
-                                                  SPCD_BA.median = median(SPCD_BA, na.rm =TRUE),
-                                                  SPCD_BA.sd = sd(SPCD_BA, na.rm = TRUE),  
-                                                  SPCD_BA.IQR = sd(SPCD_BA, na.rm = TRUE), 
-                                                 
-                                                 annual.growth.median = median(annual.growth, na.rm = TRUE), 
-                                                 annual.growth.sd = sd(annual.growth, na.rm = TRUE), 
-                                                 annual.growth.IQR = IQR(annual.growth, na.rm = TRUE)) %>% 
-      
-      # rescale to 
-      ungroup() %>% mutate(DIA_scaled = (dbhcur - DIA.median)/DIA.sd,
-                           DIA_DIFF_scaled = (DIA_DIFF - DIA.DIFF.median)/DIA.DIFF.sd,
-                           annual.growth.scaled = (annual.growth - annual.growth.median)/annual.growth.sd,
-                           
-                           RD.scaled = (RD-RD.median)/RD.sd,
-                           BAL.scaled = (BAL-BAL.median)/BAL.sd,
-                           BAL.ratio.scaled = (BAL.ratio-BAL.ratio.median)/BAL.ratio.sd,
-                           SPCD.BA.scaled = (SPCD_BA - SPCD_BA.median)/SPCD_BA.sd,
-                           non_SPCD.BA.scaled = (non_SPCD_BA - nonSPCD_BA_tot.median)/nonSPCD_BA_tot.sd,
-                           prop.focal.ba.scaled = ((SPCD_BA/BA_total) - prop.focal.ba.median)/prop.focal.ba.sd, 
-                           
-                           plt_ba_sq_ft_cur.scaled = (plt_ba_sq_ft_cur-plt_ba_sq_ft_cur.median)/plt_ba_sq_ft_cur.sd,
-                           plt_ba_sq_ft_old.scaled = (plt_ba_sq_ft_old - plt_ba_sq_ft_old.median)/plt_ba_sq_ft_old.sd,
-                           Ndep_Diff_per_yr.scaled = (Difference_per_yr - Ndep_Diff_per_yr.median)/Ndep_Diff_per_yr.sd,
-                           Ndep.remper.rel.1950.scaled = (Ndep.remper.rel.1950 - Ndep.remper.rel.1950.median)/Ndep.remper.rel.1950.sd, 
-                           
-                           
-                      
-                           
-                           
-                           si.scaled = (si - plot.medians$si.median)/plot.medians$si.sd,
-                           ba.scaled = (ba - plot.medians$ba.median)/plot.medians$ba.sd,
-                           aspect.scaled = (aspect - plot.medians$aspect.median)/plot.medians$aspect.sd,
-                           slope.scaled = (slope - plot.medians$slope.median)/plot.medians$slope.sd,
-                           damage.scaled = (damage.total - plot.medians$damage.median)/plot.medians$damage.sd,
-                           MAP.scaled = (MAP-plot.medians$MAP.median)/plot.medians$MAP.sd,
-                           elev.scaled = (elev-plot.medians$elev.median)/plot.medians$elev.sd,
-                           Ndep.scaled = (Ndep.remper.avg- plot.medians$Ndep.median)/plot.medians$Ndep.sd,
-                           physio.scaled = (physio-plot.medians$physio.median)/plot.medians$physio.sd,
-                           MATmin.scaled = (MATmin- plot.medians$MATmin.median)/plot.medians$MATmin.sd,
-                           MATmax.scaled = (MATmax - plot.medians$MATmax.median)/plot.medians$MATmax.sd)
-  
     
     
     cleaned.data <- cleaned.data %>% ungroup()  %>% group_by(SPCD) %>% 
       mutate(rempercur = ifelse(M ==1, remper*remper.correction, remper), 
              annual.growth = DIA_DIFF/rempercur,
-             BAL.ratio = 100*(BAL/BA_total)) %>% mutate(DIA.median = median(dbhold, na.rm =TRUE), 
+             BAL.ratio = 100*(BAL_old/BA_OLD_total), 
+             aspect.cos = cos(aspect*(pi / 180)), # northness
+             slope.sin = sin(slope*(pi/180)) # sin transformed slopes
+             
+      ) %>% 
+      
+      mutate(DIA.median = median(dbhold, na.rm =TRUE), 
                                                   DIA.sd = sd(dbhold, na.rm = TRUE), 
                                                   DIA.IQR = IQR(dbhold, na.rm = FALSE),
                                                   
@@ -194,8 +115,8 @@ if(remper.correction == "random"){
                                                   plt_ba_sq_ft_old.sd = sd(plt_ba_sq_ft_old, na.rm =TRUE),
                                                   plt_ba_sq_ft_old.IQR = IQR(plt_ba_sq_ft_old, na.rm =TRUE),
                                                   
-                                                  logplt_ba_sq_ft_old.median = median(log1p(plt_ba_sq_ft_old), na.rm =TRUE),
-                                                  logplt_ba_sq_ft_old.sd = sd(log1p(plt_ba_sq_ft_old), na.rm =TRUE),
+                                                  logplt_ba_sq_ft_old.median = median(log1p(BA_OLD_total), na.rm =TRUE),
+                                                  logplt_ba_sq_ft_old.sd = sd(log1p(BA_OLD_total), na.rm =TRUE),
                                                   
                                                   
                                                   Ndep_Diff_per_yr.median = median(Difference_per_yr, na.rm = TRUE),
@@ -206,6 +127,13 @@ if(remper.correction == "random"){
                                                   Ndep.remper.rel.1950.sd = sd(Ndep.remper.rel.1950, na.rm = TRUE),
                                                   Ndep.remper.rel.1950.IQR = IQR(Ndep.remper.rel.1950, na.rm = TRUE),
                                                   
+             
+             
+             Ndep.remper.avg.median = median(Ndep.remper.avg, na.rm = TRUE),
+             Ndep.remper.avg.sd = sd(Ndep.remper.avg, na.rm = TRUE),
+             Ndep.remper.avg.IQR = IQR(Ndep.remper.avg, na.rm = TRUE),
+             
+             
                                                   RD.median = median(RD, na.rm=TRUE), 
                                                   RD.sd = sd(RD, na.rm =TRUE),
                                                   RD.IQR = IQR(RD, na.rm =TRUE),
@@ -216,6 +144,7 @@ if(remper.correction == "random"){
                                                   prop.focal.ba.IQR = IQR(SPCD_BA/BA_total, na.rm =TRUE), 
                                                   
                                                   BA_tot.median = median(BA_total, na.rm =TRUE),
+                                                  
                                                   nonSPCD_BA_tot.median = median(non_SPCD_BA, na.rm = TRUE),
                                                   nonSPCD_BA_tot.sd = sd(non_SPCD_BA, na.rm = TRUE),
                                                   nonSPCD_BA_tot.IQR = IQR(non_SPCD_BA, na.rm = TRUE),
@@ -228,7 +157,22 @@ if(remper.correction == "random"){
                                                   annual.growth.sd = sd(annual.growth, na.rm = TRUE), 
                                                   annual.growth.IQR = IQR(annual.growth, na.rm = TRUE), 
                                                   logannual.growth.median = median(log(annual.growth), na.rm = TRUE), 
-                                                  logannual.growth.sd = sd(log(annual.growth), na.rm = TRUE)) %>% 
+                                                  logannual.growth.sd = sd(log(annual.growth), na.rm = TRUE), 
+             
+                                                  slope.sin.median = median(slope.sin, na.rm =TRUE), 
+                                                  slope.sin.sd = sd(slope.sin, na.rm = TRUE),
+                                                  
+                                                  aspect.cos.median = median(aspect.cos, na.rm =TRUE), 
+                                                  aspect.cos.sd = sd(aspect.cos, na.rm = TRUE),
+             
+            ppt.anom.median = median(slope.sin, na.rm =TRUE), 
+            ppt.anom.sd = sd(slope.sin, na.rm = TRUE),
+             
+            tmax.anom.median = median(tmax.anom, na.rm =TRUE), 
+            tmax.anom.sd = sd(tmax.anom, na.rm = TRUE)
+            
+            
+             ) %>% 
       
       # rescale to 
       ungroup() %>% mutate( # log scale diameter, diameter difference and annual growth before standardizing
@@ -240,7 +184,7 @@ if(remper.correction == "random"){
                            BAL.scaled = (BAL-BAL.median)/BAL.sd,
                            
                            # keep the BAL ratio
-                           BAL.ratio.scaled = (log1p(BAL.ratio)-logBAL.ratio.median)/logBAL.ratio.sd,
+                           BAL.ratio.scaled = ((BAL.ratio)-BAL.ratio.median)/BAL.ratio.sd,
                            
                            SPCD.BA.scaled = (SPCD_BA - SPCD_BA.median)/SPCD_BA.sd,
                            non_SPCD.BA.scaled = (non_SPCD_BA - nonSPCD_BA_tot.median)/nonSPCD_BA_tot.sd,
@@ -248,17 +192,20 @@ if(remper.correction == "random"){
                            
                            # using log scaling for basal areas
                            plt_ba_sq_ft_cur.scaled = (log1p(plt_ba_sq_ft_cur)-logplt_ba_sq_ft_cur.median)/logplt_ba_sq_ft_cur.sd,
-                           plt_ba_sq_ft_old.scaled = (log1p(plt_ba_sq_ft_old) - logplt_ba_sq_ft_old.median)/logplt_ba_sq_ft_old.sd,
+                           plt_ba_sq_ft_old.scaled = (log1p(BA_OLD_total) - logplt_ba_sq_ft_old.median)/logplt_ba_sq_ft_old.sd,
                            
                            
-                           Ndep_Diff_per_yr.scaled = (Difference_per_yr - Ndep_Diff_per_yr.median)/Ndep_Diff_per_yr.sd,
-                           Ndep.remper.rel.1950.scaled = (Ndep.remper.rel.1950 - Ndep.remper.rel.1950.median)/Ndep.remper.rel.1950.sd, 
-                           
+                           # Ndep_Diff_per_yr.scaled = (Difference_per_yr - Ndep_Diff_per_yr.median)/Ndep_Diff_per_yr.sd,
+                           # Ndep.remper.rel.1950.scaled = (Ndep.remper.rel.1950 - Ndep.remper.rel.1950.median)/Ndep.remper.rel.1950.sd, 
+                           # 
+                           Ndep.scaled = (Ndep.remper.avg - Ndep.remper.avg.median)/Ndep.remper.avg.sd,
                            # unique slope and aspect values
-                           aspect.scaled = cos(aspect*(pi / 180)), # northness
-                           slope.scaled = sin(slope*(pi/180)), # sin transformed slopes
+                           aspect.scaled = (aspect.cos - aspect.cos.median)/aspect.cos.sd, # northness
+                           slope.scaled = (slope.sin - slope.sin.median)/slope.sin.sd, # sin transformed slopes
                            
-
+                           ppt.anom.scaled = (ppt.anom - ppt.anom.median)/ppt.anom.sd, # northness
+                           tmax.anom.scaled = (tmax.anom - tmax.anom.median)/tmax.anom.sd, # sin transformed slopes
+                           
                            
                            # scaling by plot medians
                            si.scaled = (si - plot.medians$si.median)/plot.medians$si.sd,
@@ -283,19 +230,20 @@ if(remper.correction == "random"){
   
   # slope and aspect:
   
-  # slope.scaled = sin(slope*(pi / 180)) # sin transformed slope
-  # aspect.scaled = cos(aspect*(pi / 180)) # northness
-  # slope.aspect.int.scaled = sin(slope*(pi/180)*cos(aspect*(pi / 180)) # northness
-  
-  # hist(cleaned.data$annual.growth.scaled)
-  # hist(cleaned.data$BAL.ratio.scaled)
-  # hist(cleaned.data$DIA_scaled)
+  # # slope.scaled = sin(slope*(pi / 180)) # sin transformed slope
+  # # aspect.scaled = cos(aspect*(pi / 180)) # northness
+  # # slope.aspect.int.scaled = sin(slope*(pi/180)*cos(aspect*(pi / 180)) # northness
+  # 
+  hist(cleaned.data$slope.scaled)
+  hist(cleaned.data$aspect.scaled)
+  hist(scale(cleaned.data$BAL.ratio))
+  hist(cleaned.data$DIA_scaled)
   # hist(cleaned.data$MATmax.scaled)
   # hist(cleaned.data$MAP.scaled)
   # hist(cleaned.data$ppt.anom)
   # hist(cleaned.data$tmax.anom)
   # hist(cleaned.data$Ndep.scaled)
-  # #hist(cleaned.data$plt_ba_sq_ft_old.scaled/2)
+  hist(cleaned.data$plt_ba_sq_ft_old.scaled)
   # hist(cleaned.data$plt_ba_sq_ft_cur.scaled*cleaned.data$BAL.ratio.scaled)
   # summary(cleaned.data$plt_ba_sq_ft_cur.scaled*cleaned.data$BAL.ratio.scaled)
   # summary(cleaned.data$MAP.scaled*cleaned.data$BAL.ratio.scaled)
@@ -334,7 +282,9 @@ if(remper.correction == "random"){
   # # old method of scaling                   
   # hist(log(cleaned.data.IQRscaled$annual.growth))
   # hist(log(cleaned.data.IQRscaled$slope))
-  # hist(cleaned.data.IQRscaled$BAL.ratio)
+  sd(cleaned.data$BAL.ratio.scaled)
+  hist(scale(log(cleaned.data$Ndep.remper.avg)))
+  hist(scale(cleaned.data$Ndep.remper.avg))
   # hist(cleaned.data.IQRscaled$annual.growth.scaled)
   # hist(cleaned.data.zscaled$annual.growth.scaled)
   # 
@@ -379,13 +329,15 @@ xMfull <-   cleaned.data %>% dplyr::select(DIA_DIFF_scaled,
                                          MATmax.scaled, 
                                          #MATmin.scaled, 
                                          MAP.scaled,
-                                         ppt.anom, 
+                                         ppt.anom.scaled, 
                                          #tmin.anom, 
-                                         tmax.anom, 
+                                         tmax.anom.scaled, 
                                          slope.scaled, 
                                          aspect.scaled,
                                          #elev.scaled, 
                                          Ndep.scaled) %>% #,
+        rename("ppt.anom" = "ppt.anom.scaled", 
+               "tmax.anom" = "tmax.anom.scaled") %>% 
               #physio.scaled) %>%,
               #physio.scaled) %>%
               # generate growth interactions
@@ -438,7 +390,7 @@ xMfull <-   cleaned.data %>% dplyr::select(DIA_DIFF_scaled,
               mutate_at(.funs = list(aspect.int = ~.*aspect.scaled), 
                         .vars = vars(Ndep.scaled))#%>%
             
-  
+
  # summary(xMfull) 
  # hist(xMfull$DIA_DIFF_scaled)
  # hist(xMfull$DIA_scaled)
