@@ -33,29 +33,48 @@ remper.cor.vector <- c(0.5)
 model.list <- 1:9
 
 
-# compile the model once to save time:
+# # compile the model once to save time:
+# 
+# # profiled stan hierarchical model with:
+# #     - looped probability estimation 
+# #     - this was code that was causing issue
+# hierarchical.old.file <- file.path(getwd(), "modelcode", "slow_hierarchical_model.stan")
+# hierarchical.old.mod <- cmdstan_model(hierarchical.old.file )
+# 
+# # profiled stan hierarchical model with:
+# #     - vectorised probability estimation (there was a loop from 1:N over cacluation of mM, the remper scale probability of survival), this eliminates this
+# 
+# hierarchical.vectorize.file <- file.path(getwd(), "modelcode", "reparam_hierarchical_model.stan")
+# hierarchical.vectorize.mod <- cmdstan_model(hierarchical.vectorize.file )
+# 
+# 
+# QR.vector.file <- file.path(getwd(), "modelcode", "QR_reparam_hierarchical.stan")
+# QR.vector.mod <- cmdstan_model(QR.vector.file  )
+# 
+# 
+# # profiled stan hierarchical model with:
+# #     - vectorised probability estimation (there was a loop from 1:N over cacluation of mM, the remper scale probability of survival), this eliminates this
+# #     - log scale probabilities for liklihood (instead of pow() then log()) to prevent numerical overflow
+# #         - done in a survival_log_lik custom function instead of using bernoulli_lmpf() or bernoulli()
+# hierarchical.updated.file <- file.path(getwd(), "modelcode", "test_reparam_hierarchical.stan")
+# hierarchical.updated.mod <- cmdstan_model(hierarchical.updated.file )
+# 
+# vector.updated.file <- file.path(getwd(), "modelcode", "vector_survll_hierarchical.stan")
+# vector.updated.mod <- cmdstan_model(vector.updated.file )
+# 
+# 
+# hierarchical.updated.predict.file <- file.path(getwd(), "modelcode", "reparam_hierarchical_model_predict.stan")
+# hierarchical.updated.predict <- cmdstan_model(hierarchical.updated.predict.file)
+# 
+# hierarchical.predict.file <- file.path(getwd(), "modelcode", "predict_hierarchical.stan")
+# hierarchical.predict <- cmdstan_model(hierarchical.predict.file)
+# 
+# hierarchical.hardcode.file <- file.path(getwd(), "modelcode", "test_reparam_hierarchical_hardcode.stan")
+# hierarchical.hardcode.mod <- cmdstan_model(hierarchical.hardcode.file )
+# 
 
-hierarchical.updated.file <- file.path(getwd(), "modelcode", "test_reparam_hierarchical.stan")
-hierarchical.updated.mod <- cmdstan_model(hierarchical.updated.file )
 
-hierarchical.updated.predict.file <- file.path(getwd(), "modelcode", "reparam_hierarchical_model_predict.stan")
-hierarchical.updated.predict <- cmdstan_model(hierarchical.updated.predict.file)
-
-hierarchical.predict.file <- file.path(getwd(), "modelcode", "predict_hierarchical.stan")
-hierarchical.predict <- cmdstan_model(hierarchical.predict.file)
-
-hierarchical.hardcode.file <- file.path(getwd(), "modelcode", "test_reparam_hierarchical_hardcode.stan")
-hierarchical.hardcode.mod <- cmdstan_model(hierarchical.hardcode.file )
-
-m <- 1
-j <- 1
-
-niter <- 1000
-nwarmup <- 500
-nchain <- 4
-nparallel <- nchain
-print.progress = 100
-
+# FUNCTION: run.hierarchical.models -----------------------------------------
 run.hierarchical.models <-  function( 
                                 m, 
                                 nparallel,
@@ -70,85 +89,42 @@ model.number <- model.list[m]
 cat(paste("running hierarchical mortality model ", model.number, " remper correction", remper.cor.vector[j]))
 model.name <- paste0("hierarchical_mort_model_",model.number, "_niter_", niter, "_nchain_", nchain)
 
-
-
-# # 2. Run Warmup with adaptation and save states
-
-
-warmup_fit <- hierarchical.hardcode.mod$sample(
-  data = paste0("SPCD_standata_json/hierarchical_data_model_",model.number,".json"), # path to json data files
-  iter_warmup = nwarmup,
-  iter_sampling = 0,
-  chains = nchain,
-  parallel_chains = nparallel,
-  init = 0.1,
-  save_warmup = TRUE
-)
-
-warmup_fit$metadata()$step_size_adaptation
-warmup_fit$inv_metric()
-warmup_fit$draws(inc_warmup=TRUE)
-
-qs2::qs_save(warmup_fit, paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/WARMUP_", model.name, ".qs"))
-#warmup_fit <- qs2::qs_read(paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/WARMUP_", model.name, ".qs"))
-
-fit.1 <- hierarchical.hardcode.mod$sample(
+fit.1 <- hierarchical.updated.mod$sample(
   data = paste0("SPCD_standata_json/hierarchical_data_model_",model.number,".json"), # path to json data files
   seed = 123,
   chains = nchain,
-  parallel_chains = nparallel,
-  iter_warmup = 0,
+  iter_warmup = nwarmup,
   iter_sampling = niter,
-  adapt_engaged = FALSE,
-  step_size = warmup_fit$metadata()$step_size_adaptation,
-  inv_metric = warmup_fit$inv_metric(),
-  init = warmup_fit$draws(inc_warmup = TRUE)[nwarmup, , ], # Last warmup iteration
-  refresh = print.progress
+  parallel_chains = nchain,
+  #adapt_delta = 0.95, # increased adapt_delta to reduce divergent transition warnings
+  init = 0, # added to reduce the log(0) probability warnings during initial sampling
+  refresh = print.progress # print update every 100 iters
+
 )
 
+profiles <- fit.1$profiles()
+profile_df <- bind_rows(profiles, .id = "chain")
 
-# fit.1 <- hierarchical.updated.mod$sample(
-#   data = paste0("SPCD_standata_json/hierarchical_data_model_",model.number,".json"), # path to json data files
-#   seed = 123,
-#   chains = nchain,
-#   iter_warmup = nwarmup,
-#   iter_sampling = niter,
-#   parallel_chains = nchain,
-#   #adapt_delta = 0.95, # increased adapt_delta to reduce divergent transition warnings
-#   init = 0.5, # added to reduce the log(0) probability warnings during initial sampling
-#   refresh = print.progress # print update every 100 iters
-#   
-# )
+profile_df
 
-# 
-#   seed = 123,
-#   chains = nchain,
-#   iter_warmup = nwarmup,
-#   iter_sampling = niter,
-#   parallel_chains = nchain,
-#   #adapt_delta = 0.95, # increased adapt_delta to reduce divergent transition warnings
-#   init = 0.5, # added to reduce the log(0) probability warnings during initial sampling
-#   refresh = print.progress # print update every 100 iters
-#   
-# )
+diagnostics <- fit.1$sampler_diagnostics()
+diagnostics_df <- as_draws_df(diagnostics, .id = "chain")
 
+diagnostics_summary <- diagnostics_df %>% group_by(.chain) %>% 
+  summarise(tot.max.treedepth = sum(treedepth__ == 10), 
+            n_divergent = sum(divergent__), 
+            tot_leapfrog = sum(n_leapfrog__), 
+            avg_accept_stat = mean(accept_stat__)) %>% 
+  rename("chain" = ".chain")%>%
+  mutate(chain = as.character(chain))
 
+profile.stats.1 <- profile_df %>% left_join(., diagnostics_summary) %>% 
+  mutate(model.no = 1, 
+         model = "test_reparam_hierachical")
 
+all.model.params <- fit.1$metadata()$model_params
+length(all.model.params) #213867 for model 1
 
-# fit.1 <- hierarchical.updated.mod$sample(
-#   data = paste0("SPCD_standata_json/hierarchical_data_model_",model.number,".json"), # path to json data files
-#   seed = 123,
-#   chains = nchain,
-#   iter_warmup = nwarmup,
-#   iter_sampling = niter,
-#   parallel_chains = nchain,
-#   #adapt_delta = 0.95, # increased adapt_delta to reduce divergent transition warnings
-#   init = 0.5, # added to reduce the log(0) probability warnings during initial sampling
-#   refresh = print.progress # print update every 100 iters
-#   
-# )
-
-#fit.1 <- qs2::qs_read(paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/notpreloaded", model.name, ".qs"))
 
 
 
@@ -172,10 +148,10 @@ qs2::qs_save(beta_alpha_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/betas/u
 
 
 
-qs2::qs_save(fit.1, paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/", model.name, ".qs"))
+#qs2::qs_save(fit.1, paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/", model.name, ".qs"))
 #fit.1 <- qs2::qs_read( paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/", model.name, ".qs"))
 
-
+tree_depths <- fit.1$sampler_diagnostics()$tree_depth
 # sampler diagnostics -----
 # divergent transitions, time per chain, cores, etc
 sampler_diag <- fit.1$time()$chains %>%
@@ -301,7 +277,7 @@ for(s in 1:mod.data$Nspp){
 gc()
 
 
-
+#mcmc_trace( beta_alpha_samps, pars = par.names[1:19])
 
 
 # PLOTS: parameters -----
@@ -337,21 +313,71 @@ summarize_posteriors <- function(x){
 
 
 u_betas_alpha.quant <- summarise_draws(beta_alpha_samps,  summarize_posteriors)
+
+
 # just plot the species effects once overall
 u_betas_alpha.quant <- u_betas_alpha.quant %>% rename("ci.lo" = `2.5%`, 
                                                       "ci.hi" = `97.5%`)
-u_betas_alpha.quant$SPCD <- SPCD.id
-u_betas_alpha.quant$Covariate <-  u_betas_alpha.quant$variable
-# get overlapping zero to color the error bars
-u_betas_alpha.quant$`significance` <- ifelse(u_betas_alpha.quant$ci.lo < 0 & u_betas_alpha.quant$ci.hi < 0, "significant", 
-                                             ifelse(u_betas_alpha.quant$ci.lo > 0 & u_betas_alpha.quant$ci.hi > 0, "significant", "not overlapping zero"))
 
-ggplot(data = na.omit(u_betas_alpha.quant), aes(x = Covariate, y = median, color = significance))+geom_point()+
-  geom_errorbar(data = na.omit(u_betas_alpha.quant), aes(x = Covariate , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
+alphas_SPP <- u_betas_alpha.quant %>% filter(variable %in% c(paste0("alpha_SPP[",1:17,"]"), "mu_alpha")) 
+
+sigmas <- u_betas_alpha.quant %>% filter(variable %in% c(paste0("sigma_beta[",1:mod.data$K,"]"), "sigma_alpha")) 
+  
+ggplot(data = alphas_SPP, aes(x = variable, y = median))+geom_point()+
+  geom_errorbar(data = alphas_SPP, aes(x = variable , ymin = ci.lo, ymax = ci.hi), width = 0.1)+
   geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+theme_bw(base_size = 10)+
-  theme( axis.text.x = element_text(angle = 65, hjust = 1), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Parameter")+
+  theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Parameter")+
+  
+  ggtitle(paste0("Species Model Posterior Estimates (alphas)" ))
+
+ggplot(data = sigmas, aes(x = variable, y = median))+geom_point()+
+  geom_errorbar(data = sigmas, aes(x = variable , ymin = ci.lo, ymax = ci.hi), width = 0.1)+
+  geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+theme_bw(base_size = 10)+
+  theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Parameter")+
+  
+  ggtitle(paste0("Species Model Sigmas (alphas)" ))
+
+
+mu_betas<- u_betas_alpha.quant %>% filter(variable %in% paste0("mu_beta[",1:mod.data$K, "]")) %>% 
+  mutate(spp = 18, 
+         cov.num = 1:mod.data$K)
+
+
+
+
+u_betas_SPP <- u_betas_alpha.quant %>% 
+  filter(variable %in% paste0("u_beta[",rep(1:17, mod.data$K),",",rep(1:mod.data$K, each = 17), "]")) %>%
+  mutate(spp =rep(1:17, mod.data$K), 
+         cov.num = rep(1:mod.data$K, each = 17))
+
+u_betas <- rbind(mu_betas, u_betas_SPP[,1:15])
+
+
+# get covariate names
+# load( paste0("SPCD_standata_general_full_standardized_v3/SPCD_",nspp[17,]$SPCD,"remper_correction_0.5model_",9,".Rdata"))
+# cov.data.list <- data.frame(Predictor = colnames(mod.data.test$xM), 
+#            cov.num = 1:mod.data$K)
+# write.csv(cov.data.list, paste0(output.dir, "data/Covariates_all_numbers.csv"))
+cov.data.list <- read.csv( paste0(output.dir, "data/Covariates_all_numbers.csv"))
+hier.spp.df <- data.frame(spp = 1:18, 
+                          SPCD = c(nspp$SPCD, 1000), 
+                          Species = c(nspp$Species, "Population"))
+
+u_betas_SPP <- u_betas %>% left_join(., cov.data.list) %>% left_join(., hier.spp.df)
+# get overlapping zero to color the error bars
+u_betas_SPP$`significance` <- ifelse(u_betas_SPP$ci.lo < 0 & u_betas_SPP$ci.hi < 0, "significant", 
+                                             ifelse(u_betas_SPP$ci.lo > 0 & u_betas_SPP$ci.hi > 0, "significant", "not overlapping zero"))
+
+u_betas_SPP$Predictor <- factor(u_betas_SPP$Predictor, levels = unique(u_betas_SPP$Predictor))
+u_betas_SPP$Species <- factor(u_betas_SPP$Species, levels = c(unique(nspp$Species), "Population"))
+
+ggplot(data = na.omit(u_betas_SPP), aes(x = Species, y = median, color = significance))+geom_point()+
+  geom_errorbar(data = na.omit(u_betas_SPP), aes(x = Species , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
+  geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+theme_bw(base_size = 10)+
+  theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Parameter")+
   scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
-  ggtitle(paste0("Species Model Posterior Estimates\nSPCD ",SPCD.id, " model ", model.number ))
+  ggtitle(paste0("Species Model Posterior Estimates" ))+
+  facet_wrap(~Predictor)
 
 ggsave(height = 5, width = 10, units = "in",
        paste0(output.dir, "/images/Estimated_effects_on_survival_",model.name,".png"))
@@ -615,8 +641,18 @@ get_species_gen_quantitites <- function(s){
     
     pSurv_rep_samps <-  gen_quants$draws(variables = c("mMrep"), format = "draws_matrix")
     pSurv_hat_samps <-  gen_quants$draws(variables = c("mMhat"), format = "draws_matrix")
-    dim(pSurv_rep_samps)
-    dim(pSurv_hat_samps)
+    #dim(pSurv_rep_samps)
+    #dim(pSurv_hat_samps)
+    
+    #surv.stat = ifelse(spp.mod.data$y == 1, "live", "dead")
+    # sample posterior predictive checkes
+    # ppc_bars(y = spp.mod.data$y, yrep = y_hat_samps, freq = FALSE)
+    # ppc_bars(y = spp.mod.data$ytest, yrep = y_rep_samps)
+    # ppc_intervals(y = spp.mod.data$y, yrep = pSurv_hat_samps)
+    # ppc_dens_overlay(y = spp.mod.data$ytest, yrep = pSurv_rep_samps)
+    # ppc_stat(y = spp.mod.data$y, yrep = y_hat_samps, stat = "mean")
+     
+    #ppc_intervals(y = spp.mod.data$y, yrep = y_hat_samps, prob = 0.5, prob_outer = 0.95, group = surv.stat )
     # save all to their own objects:
     
     qs2::qs_save(y_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/y_rep_samps_SPCD_",SPCD.id, "_", model.name, ".qs"))
@@ -624,8 +660,8 @@ get_species_gen_quantitites <- function(s){
     
     qs2::qs_save(pSurv_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSurv_rep_samps_SPCD_",SPCD.id, "_",  model.name, ".qs"))
     qs2::qs_save(pSurv_hat_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSurv_hat_samps_SPCD_",SPCD.id, "_",  model.name, ".qs"))
-    pSurv_hat_samps.old <- qs2::qs_read(paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSurv_hat_samps_SPCD_",SPCD.id, "_",  model.name, ".qs"))
-    dim(pSurv_hat_samps.old)
+    #pSurv_hat_samps.old <- qs2::qs_read(paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSurv_hat_samps_SPCD_",SPCD.id, "_",  model.name, ".qs"))
+    #dim(pSurv_hat_samps.old)
     
     #System.time(y_hat.quant <- gen_quants$summary(variables = c("y_rep"), summarize_posteriors))
     
@@ -766,7 +802,7 @@ get_species_gen_quantitites <- function(s){
     gc()
 
 }
-#lapply(7:1, get_species_gen_quantitites)
+#lapply(8:1, get_species_gen_quantitites)
 lapply(17:1, get_species_gen_quantitites)
 
 }
@@ -780,7 +816,13 @@ Run_gen_quants(
     nwarmup = 500, 
     nchain = 4, 
     output.dir = output.dir)
-
+Run_gen_quants(
+  m = 2, 
+  nparallel = nparallel,
+  niter = 1000, 
+  nwarmup = 500, 
+  nchain = 4, 
+  output.dir = output.dir)
 
 Run_gen_quants(
   m = 3, 
@@ -814,46 +856,4 @@ Run_gen_quants(
   nchain = 4, 
   output.dir = output.dir)
 
-# # summarize the hierarchical models 1-6 so far by species----
-# SPCD.id <- 375
-# 
-# LOO_summarise_SPCD <- function(SPCD.id){
-#   
-#   spp.loo.files <- paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO/LOO_results_mort_model_", 1:9, 
-#                           "_SPCD_", SPCD.id, "_remper_correction_0.5_niter_1000_nchain_4.qs")
-#   Hierarchical.loo.files <- paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO/LOO_results_hierarchical_mort_model_",1:6,"_niter_1000_nchain_4_SPCD_", 
-#                                    SPCD.id, ".qs")
-#   loo.files.all <- c(spp.loo.files, Hierarchical.loo.files)
-#   loo_results_all <- lapply(loo.files.all, qs_read)
-#   
-#   
-#   # check pareto-k estimates:
-#   pareto.k.checks <- do.call(rbind, lapply(loo_results_all, function(x){data.frame(good = sum(x$diagnostics$pareto_k <= 0.7), 
-#                                                                                    bad = sum(x$diagnostics$pareto_k > 0.7), 
-#                                                                                    total = length(x$diagnostics$pareto_k))}))%>%
-#     mutate(percent.bad = (bad/total)*100)%>%
-#     mutate(model = c(paste0("model", 1:9),paste0("model", 1:6)),
-#            model.type = c(rep("Species", 9), rep("Hierarchical", 6)),
-#            SPCD = SPCD.id)
-#   
-#   
-#   
-#   loo_compare.out <- loo::loo_compare(loo_results_all) # best fit based on loo elpd differences
-#   loo_comparisons <- loo_compare.out %>% data.frame()%>%left_join(., pareto.k.checks) %>%
-#     mutate(elpd_se_ratio = abs(elpd_diff)/se_diff)%>%
-#     mutate(model.number = substr(model, start = 6, stop = 6))
-#   
-#   
-#   # Get model weights---
-#   # get pointwise log predictive densities
-#   lpd_point <- do.call(cbind,lapply(loo_results_all, function(x){x$pointwise[,"elpd_loo"]}))
-#   pbma_wts <- loo::pseudobma_weights(lpd_point, BB=FALSE)
-#   pbma_BB_wts <- loo::pseudobma_weights(lpd_point) # default is BB=TRUE
-#   stacking_wts <- loo::stacking_weights(lpd_point)
-#   mod.weights <- round(cbind(pbma_wts, pbma_BB_wts, stacking_wts),3)%>% data.frame() %>% 
-#     mutate(model = paste0("model", 1:9), 
-#            SPCD = SPCD.id)
-#   loo_comparisons <- loo_comparisons %>% left_join(., mod.weights, by = c("model", "SPCD"))
-#   return(loo_comparisons)
-# }
 
