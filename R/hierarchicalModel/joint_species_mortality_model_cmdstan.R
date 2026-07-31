@@ -1,3 +1,10 @@
+# Author: Kelly A. Heilman
+# joint_species_mortality_model_cmdstan.R
+# About this script------------------------
+# All cmdstan hierarchical models were fit in python, using cmdstanpy and saved as cmdstan .csv files
+# Used cyverse DE
+# stan code used in "modelcode/QR_reparam_hierarchical.stan"
+# generated quantities from posterior parameter estimates stan "modelcode/hierarchical_QR_gen_quants.stan"
 library(tidyverse)
 library(cmdstanr)
 library(posterior)
@@ -5,855 +12,427 @@ library(bayesplot)
 library(qs2)
 library(jsonlite)
 library(pROC)
+library(loo)
+library(data.table)
 color_scheme_set("brightblue")
 
-#output.folder <- "/home/rstudio/"
-output.dir = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
+# set up input and output directories----
 
+output.dir <- "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
+csv.subdir <- "SPCD_stanoutput_cmdstan/fittedmodels"   # <- parent folder holding one subfolder per model
+json.dir   <- file.path("SPCD_standata_json") # <- persistent location of the model input jsons
 
-# # get the complete species list
-nspp <- data.frame(SPCD = c(316, 318, 833, 832, 261, 531, 802, 129, 762,  12, 541,  97, 621, 400, 371, 241, 375))
-nspp$Species <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$GENUS, FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$SPECIES)
-nspp$COMMON <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$GENUS, FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$SPECIES)
+nspp <- data.frame(SPCD = c(316, 318, 833, 832, 261, 531, 802, 129, 762, 12, 541, 97, 621, 400, 371, 241, 375))
+nspp$Species <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD), ]$GENUS,
+                      FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD), ]$SPECIES)
+nspp$COMMON <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD), ]$COMMON_NAME
 
+spp.table <- data.frame(SPCD.id = nspp[1:17, ]$SPCD, spp = 1:17, COMMON = nspp[1:17, ]$COMMON)
 
-# read in the test data for all the species
-spp.table <- data.frame(SPCD.id = nspp[1:17,]$SPCD, 
-                        spp = 1:17, 
-                        COMMON = nspp[1:17,]$COMMON)
-model.no <- 6
-
-set.seed(22)
-
-options(mc.cores = parallel::detectCores())
-SPCD.df <- data.frame(SPCD = nspp[1:17, ]$SPCD, 
-                      spcd.id = 1:17)
+# setting up remeasurement default length
 remper.cor.vector <- c(0.5)
-#model.number <- 6
-model.list <- 1:9
+j <- 1
+model.list <- 1:9 # number of models
+
+# compile the Stan model used for prediction of generated quantities
+gq.file <- file.path(getwd(), "modelcode", "hierarchical_QR_gen_quants.stan")
+gq.mod  <- cmdstan_model(gq.file)
 
 
-# # compile the model once to save time:
-# 
-# # profiled stan hierarchical model with:
-# #     - looped probability estimation 
-# #     - this was code that was causing issue
-# hierarchical.old.file <- file.path(getwd(), "modelcode", "slow_hierarchical_model.stan")
-# hierarchical.old.mod <- cmdstan_model(hierarchical.old.file )
-# 
-# # profiled stan hierarchical model with:
-# #     - vectorised probability estimation (there was a loop from 1:N over cacluation of mM, the remper scale probability of survival), this eliminates this
-# 
-# hierarchical.vectorize.file <- file.path(getwd(), "modelcode", "reparam_hierarchical_model.stan")
-# hierarchical.vectorize.mod <- cmdstan_model(hierarchical.vectorize.file )
-# 
-# 
-# QR.vector.file <- file.path(getwd(), "modelcode", "QR_reparam_hierarchical.stan")
-# QR.vector.mod <- cmdstan_model(QR.vector.file  )
-# 
-# 
-# # profiled stan hierarchical model with:
-# #     - vectorised probability estimation (there was a loop from 1:N over cacluation of mM, the remper scale probability of survival), this eliminates this
-# #     - log scale probabilities for liklihood (instead of pow() then log()) to prevent numerical overflow
-# #         - done in a survival_log_lik custom function instead of using bernoulli_lmpf() or bernoulli()
-# hierarchical.updated.file <- file.path(getwd(), "modelcode", "test_reparam_hierarchical.stan")
-# hierarchical.updated.mod <- cmdstan_model(hierarchical.updated.file )
-# 
-# vector.updated.file <- file.path(getwd(), "modelcode", "vector_survll_hierarchical.stan")
-# vector.updated.mod <- cmdstan_model(vector.updated.file )
-# 
-# 
-# hierarchical.updated.predict.file <- file.path(getwd(), "modelcode", "reparam_hierarchical_model_predict.stan")
-# hierarchical.updated.predict <- cmdstan_model(hierarchical.updated.predict.file)
-# 
-# hierarchical.predict.file <- file.path(getwd(), "modelcode", "predict_hierarchical.stan")
-# hierarchical.predict <- cmdstan_model(hierarchical.predict.file)
-# 
-# hierarchical.hardcode.file <- file.path(getwd(), "modelcode", "test_reparam_hierarchical_hardcode.stan")
-# hierarchical.hardcode.mod <- cmdstan_model(hierarchical.hardcode.file )
-# 
+# 1. Set up functions to get each model csvs and only select what we need---
 
 
-# FUNCTION: run.hierarchical.models -----------------------------------------
-run.hierarchical.models <-  function( 
-                                m, 
-                                nparallel,
-                                niter, 
-                                nwarmup, 
-                                nchain, 
-                                output.dir, 
-                                print.progress = 500){
+# each model's chain csvs live in their own folder 
+# folder labels indicate the model number ("hierarchical_model_[model.number]")
+# all models are labeled with save date time and a chain number, but
+# function to list the model directory
+get_model_dir <- function(model.number, output.dir, csv.subdir) {
+  file.path(output.dir, csv.subdir, paste0("hierarchical_model_", model.number))
+}
+#get_model_dir(model.number = 1, output.dir = output.dir, csv.subdir = csv.subdir)
 
+# function to list the csv files in the model directory
+get_model_csv_files <- function(model.number, output.dir, csv.subdir) {
+  model_dir <- get_model_dir(model.number, output.dir, csv.subdir)
+  if (!dir.exists(model_dir)) {
+    stop("No folder found for model ", model.number, " at: ", model_dir)
+  }
+  files <- Sys.glob(file.path(model_dir, "*.csv"))
+  files <- files[!grepl("profile", files, ignore.case = TRUE)]  # profile csvs are separate, handled below
+  if (length(files) == 0) {
+    stop("No cmdstanpy output CSVs found for model ", model.number, " in: ", model_dir)
+  }
+  files
+}
 
-model.number <- model.list[m]
-cat(paste("running hierarchical mortality model ", model.number, " remper correction", remper.cor.vector[j]))
-model.name <- paste0("hierarchical_mort_model_",model.number, "_niter_", niter, "_nchain_", nchain)
-
-fit.1 <- hierarchical.updated.mod$sample(
-  data = paste0("SPCD_standata_json/hierarchical_data_model_",model.number,".json"), # path to json data files
-  seed = 123,
-  chains = nchain,
-  iter_warmup = nwarmup,
-  iter_sampling = niter,
-  parallel_chains = nchain,
-  #adapt_delta = 0.95, # increased adapt_delta to reduce divergent transition warnings
-  init = 0, # added to reduce the log(0) probability warnings during initial sampling
-  refresh = print.progress # print update every 100 iters
-
-)
-
-profiles <- fit.1$profiles()
-profile_df <- bind_rows(profiles, .id = "chain")
-
-profile_df
-
-diagnostics <- fit.1$sampler_diagnostics()
-diagnostics_df <- as_draws_df(diagnostics, .id = "chain")
-
-diagnostics_summary <- diagnostics_df %>% group_by(.chain) %>% 
-  summarise(tot.max.treedepth = sum(treedepth__ == 10), 
-            n_divergent = sum(divergent__), 
-            tot_leapfrog = sum(n_leapfrog__), 
-            avg_accept_stat = mean(accept_stat__)) %>% 
-  rename("chain" = ".chain")%>%
-  mutate(chain = as.character(chain))
-
-profile.stats.1 <- profile_df %>% left_join(., diagnostics_summary) %>% 
-  mutate(model.no = 1, 
-         model = "test_reparam_hierachical")
-
-all.model.params <- fit.1$metadata()$model_params
-length(all.model.params) #213867 for model 1
+#get_model_csv_files(model.number = 1, output.dir = output.dir, csv.subdir = csv.subdir)
 
 
 
+# Read the model input data from json locations (cmdstanpy did not save data) --
 
-# this takes the longest to save
-cat(paste("\n Saving stan mortality model fit "))
-fit.1$sampler_diagnostics()
-fit.1$time()
-all_draws <- fit.1$draws()
+get_model_data <- function(model.number, json.dir) {
+  json_path <- file.path(json.dir, paste0("hierarchical_data_model_", model.number, ".json"))
+  if (!file.exists(json_path)) {
+    stop("Data json not found for model ", model.number, " at: ", json_path)
+  }
+  fromJSON(json_path)
+}
 
-#log_lik_samps <-  fit.1$draws(variables = c("log_lik"), format = "draws_matrix")
-#qs2::qs_save(log_lik_samps, paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO/log_lik_samps_", model.name, ".qs"))
-qs2::qs_save(fit.1, paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/",model.name, ".qs"))
-#fit.1 <- qs2::qs_read( paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/",model.name, ".qs"))
+#get_model_data(model.number = 1, json.dir = json.dir)
 
-beta_alpha_samps <-  fit.1$draws(variables = 
-                                   c("alpha_SPP",  "mu_alpha", "sigma_alpha",
-                                     "u_beta", "mu_beta", "sigma_beta"), 
-                                 format = "draws_matrix")
-qs2::qs_save(beta_alpha_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/betas/u_beta_alpha_samps_", model.name, ".qs"))
-#beta_alpha_samps <- qs2::qs_read(paste0(output.dir,"SPCD_stanoutput_cmdstan/betas/u_beta_alpha_samps_", model.name, ".qs"))
-
-
-
-#qs2::qs_save(fit.1, paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/", model.name, ".qs"))
-#fit.1 <- qs2::qs_read( paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/", model.name, ".qs"))
-
-tree_depths <- fit.1$sampler_diagnostics()$tree_depth
-# sampler diagnostics -----
-# divergent transitions, time per chain, cores, etc
-sampler_diag <- fit.1$time()$chains %>%
-  mutate(total_allchains = fit.1$time()$total, 
-         ncores = nchain,
-         nchain = nchain, 
-         niter = niter, 
-         nwarmup = nwarmup,
-         model.number = model.number, 
-         model.type = "Hierarchical", 
-         SPCD = "Hierarchical", 
-         remper.correction = remper.cor.vector[j])%>%
-  mutate(num_divergent = fit.1$diagnostic_summary()$num_divergent, 
-         num_max_treedepth = fit.1$diagnostic_summary()$num_max_treedepth, 
-         ebfmi = fit.1$diagnostic_summary()$ebfmi)
-
-write.csv(sampler_diag, paste0(output.dir, 
-                               "SPCD_stanoutput_cmdstan/diagnostics/sample_diagnostics_", 
-                               model.name, ".csv"), row.names = FALSE)
-rm(sampler_diag)
-# Extract posterior draws and save separately ----
-#cat(paste("\n Extracting posterior draws"))
-
-# get loo results and save the log_lik, ypredictions, and mmhat and mmrep
-# model fit statistics -----
-
-#log_lik_samps <- qs2::qs_read("C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/SPCD_stanoutput_cmdstan/LOO/log_lik_samps_hierarchical_mort_model_1_remper_correction_0.5_niter_1000_nchain_4.qs")
-
-# calculate the log_lik_samps by species for each model:---
-
-# read in model data for comparison
-mod.data <- fromJSON(fit.1$data_file())
-#parameter_draws_1 <- beta_alpha_samps
-
-# used for data argument to loo_i
-mod.data_df <- data.frame(mod.data$y, 
-                          mod.data$SPP, 
-                          mod.data$Remper,
-                          mod.data$xM)
-colnames(mod.data_df) <- c("y", "SPP", "Remper", paste0("xM.", 1:mod.data$K))
-
-
-
-llfun_logistic_remper <- function(data_i, 
-                                  draws, 
-                                  log = TRUE) {
-  
-  x_i <- as.matrix(data_i[,4:ncol(data_i)])
-  species_i <- data_i$SPP
-  remper_i <- data_i$Remper
-  K <- 1:ncol(x_i)
-  
-  logit_pred <- draws[,paste0("alpha_SPP[",species_i, "]")] + draws[,paste0("u_beta[",species_i,",",K,"]")] %*% t(x_i)
-  p_surv_remper <- (1/(1 + exp(-logit_pred)))^remper_i
-  
-  dbinom(x = data_i$y, 
-         size = 1, 
-         prob =p_surv_remper, 
-         log = log)
+# Function to get the model metadata only:
+get_model_metadata <- function(csv_files) {
+  read_cmdstan_csv(csv_files, variables = "", sampler_diagnostics = NULL)
 }
 
 
-for(s in 1:mod.data$Nspp){
-  
-  SPCD.id <- nspp[s,]$SPCD
-  cat(paste("loo results for SPCD", SPCD.id, "species number", s, "\n"))
-  
-  mod.data_species <- mod.data_df %>% filter(SPP == s)
-
-  spp_r_eff_samps <- loo::relative_eff(llfun_logistic_remper, 
-                             log = FALSE, # relative_eff wants likelihood not log-likelihood values
-                             chain_id = rep(1:nchain, each = niter), 
-                             data = mod.data_species, 
-                             draws = beta_alpha_samps, 
-                             cores = 2)
-  
-  
-  spp_loo_results <-
-    loo::loo(
-      llfun_logistic_remper,
-      
-      cores = 2,
-      # these next objects were computed above
-      r_eff = spp_r_eff_samps, 
-      draws = beta_alpha_samps,
-      data = mod.data_species
-    )
-  qs2::qs_save(spp_loo_results, paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO/LOO_results_", model.name,"_SPCD_", SPCD.id, ".qs"))
-  # clean up
-  rm(spp_loo_results, spp_r_eff_samps)
-  
+# function to only read in the post_warmup_draws of named variables
+read_draws <- function(csv_files, variables, format = "draws_matrix") {
+  read_cmdstan_csv(csv_files, variables = variables, format = format)$post_warmup_draws
 }
 
 
-# 
-# 
-# 
-# # compute relative efficiency (this is slow and optional but is recommended to allow 
-# # for adjusting PSIS effective sample size based on MCMC effective sample size)
-# 
-# # the sameloo::loo_compare(loo_species_all, loo_ss_species_all)
-# 
-# 
-# for(s in 1:mod.data$Nspp){
-# 
-#     SPCD.id <- nspp[s,]$SPCD
-#     cat(paste("loo results for SPCD", SPCD.id, "species number", s, "\n"))
-#     
-#     spec.idx <- mod.data$SPP %in% s
-#     
-#     # subset the log_liklihood samples for each species
-#     spp_log_lik_samps <- log_lik_samps[,spec.idx]
-#     
-#     # get r_eff for the species
-#     spp_r_eff_samps <- loo::relative_eff(exp(spp_log_lik_samps), chain_id = rep(1:nchain, each = niter))
-#     # get loo results and save
-#     spp_loo_results <-  loo::loo(spp_log_lik_samps, r_eff = spp_r_eff_samps, cores = 2)
-#     qs2::qs_save(spp_loo_results, paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO/LOO_results_", model.name,"_SPCD_", SPCD.id, ".qs"))
-#     # clean up
-#     rm(spp_loo_results, spp_log_lik_samps, spp_r_eff_samps)
-# }
-# rm(log_lik_samps)
-gc()
+# 2.Functions to get sampler diagnostics and save a summary---
+# note that we did not save the profile files with the csv files, so there wont actually be any profiles
 
-
-#mcmc_trace( beta_alpha_samps, pars = par.names[1:19])
-
-
-# PLOTS: parameters -----
-# traceplots (betas and alphas)
-par.names <- colnames(beta_alpha_samps)[1:(ncol(beta_alpha_samps))]
-pdf( paste0(output.dir,"SPCD_stanoutput_cmdstan/images/traceplots_",model.name,".pdf"))
-#specify to save plots in 0x0 grid
-par(mfrow = c(8,3))
-for (p in 1:length(par.names)) {   
-  print(mcmc_trace( beta_alpha_samps, pars = par.names[p]))
-}
-dev.off()
-
-
-
-
-# get summary of the beta parameters
-summarize_posteriors <- function(x){
-  c(
-    median = median(x), 
-    quantile(x, probs = c(0.025)), 
-    quantile(x, probs = c(0.975)),
-    mean = mean(x), 
-    sd = sd(x), 
-    min = min(x), 
-    max = max(x), 
-    rhat = rhat_basic(x), 
-    ess_bulk = ess_bulk(x), 
-    ess_tail = ess_tail(x, na.rm =TRUE)
-  )
-} 
-
-
-
-u_betas_alpha.quant <- summarise_draws(beta_alpha_samps,  summarize_posteriors)
-
-
-# just plot the species effects once overall
-u_betas_alpha.quant <- u_betas_alpha.quant %>% rename("ci.lo" = `2.5%`, 
-                                                      "ci.hi" = `97.5%`)
-
-alphas_SPP <- u_betas_alpha.quant %>% filter(variable %in% c(paste0("alpha_SPP[",1:17,"]"), "mu_alpha")) 
-
-sigmas <- u_betas_alpha.quant %>% filter(variable %in% c(paste0("sigma_beta[",1:mod.data$K,"]"), "sigma_alpha")) 
+get_model_profiles <- function(model.number, output.dir, csv.subdir) {
   
-ggplot(data = alphas_SPP, aes(x = variable, y = median))+geom_point()+
-  geom_errorbar(data = alphas_SPP, aes(x = variable , ymin = ci.lo, ymax = ci.hi), width = 0.1)+
-  geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+theme_bw(base_size = 10)+
-  theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Parameter")+
-  
-  ggtitle(paste0("Species Model Posterior Estimates (alphas)" ))
-
-ggplot(data = sigmas, aes(x = variable, y = median))+geom_point()+
-  geom_errorbar(data = sigmas, aes(x = variable , ymin = ci.lo, ymax = ci.hi), width = 0.1)+
-  geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+theme_bw(base_size = 10)+
-  theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Parameter")+
-  
-  ggtitle(paste0("Species Model Sigmas (alphas)" ))
-
-
-mu_betas<- u_betas_alpha.quant %>% filter(variable %in% paste0("mu_beta[",1:mod.data$K, "]")) %>% 
-  mutate(spp = 18, 
-         cov.num = 1:mod.data$K)
-
-
-
-
-u_betas_SPP <- u_betas_alpha.quant %>% 
-  filter(variable %in% paste0("u_beta[",rep(1:17, mod.data$K),",",rep(1:mod.data$K, each = 17), "]")) %>%
-  mutate(spp =rep(1:17, mod.data$K), 
-         cov.num = rep(1:mod.data$K, each = 17))
-
-u_betas <- rbind(mu_betas, u_betas_SPP[,1:15])
-
-
-# get covariate names
-# load( paste0("SPCD_standata_general_full_standardized_v3/SPCD_",nspp[17,]$SPCD,"remper_correction_0.5model_",9,".Rdata"))
-# cov.data.list <- data.frame(Predictor = colnames(mod.data.test$xM), 
-#            cov.num = 1:mod.data$K)
-# write.csv(cov.data.list, paste0(output.dir, "data/Covariates_all_numbers.csv"))
-cov.data.list <- read.csv( paste0(output.dir, "data/Covariates_all_numbers.csv"))
-hier.spp.df <- data.frame(spp = 1:18, 
-                          SPCD = c(nspp$SPCD, 1000), 
-                          Species = c(nspp$Species, "Population"))
-
-u_betas_SPP <- u_betas %>% left_join(., cov.data.list) %>% left_join(., hier.spp.df)
-# get overlapping zero to color the error bars
-u_betas_SPP$`significance` <- ifelse(u_betas_SPP$ci.lo < 0 & u_betas_SPP$ci.hi < 0, "significant", 
-                                             ifelse(u_betas_SPP$ci.lo > 0 & u_betas_SPP$ci.hi > 0, "significant", "not overlapping zero"))
-
-u_betas_SPP$Predictor <- factor(u_betas_SPP$Predictor, levels = unique(u_betas_SPP$Predictor))
-u_betas_SPP$Species <- factor(u_betas_SPP$Species, levels = c(unique(nspp$Species), "Population"))
-
-ggplot(data = na.omit(u_betas_SPP), aes(x = Species, y = median, color = significance))+geom_point()+
-  geom_errorbar(data = na.omit(u_betas_SPP), aes(x = Species , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-  geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+theme_bw(base_size = 10)+
-  theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0), panel.grid  = element_blank(), legend.position = "none")+ylab("Effect on survival")+xlab("Parameter")+
-  scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))+
-  ggtitle(paste0("Species Model Posterior Estimates" ))+
-  facet_wrap(~Predictor)
-
-ggsave(height = 5, width = 10, units = "in",
-       paste0(output.dir, "/images/Estimated_effects_on_survival_",model.name,".png"))
-
-
+  model_dir <- get_model_dir(model.number, output.dir, csv.subdir)
+  profile_files <- Sys.glob(file.path(model_dir, "*profile*.csv"))
+  if (length(profile_files) == 0) {
+    warning("No profiling CSVs found for model ", model.number, " -- skipping profile join.")
+    return(NULL)
+  }
+  profile_list <- setNames(lapply(profile_files, data.table::fread), seq_along(profile_files))
+  bind_rows(profile_list, .id = "chain")
 }
 
-
-
-# test for model 1
-# run.hierarchical.models(
-#   m = 1, 
-#   nparallel = nparallel,
-#   niter = 1000, 
-#   nwarmup = 500, 
-#   nchain = 4, 
-#   output.dir = output.dir, 
-#   print.progress = 100)
-
-
-  run.hierarchical.models(
-    m = 7, 
-    nparallel = 4,
-    niter = 1000, 
-    nwarmup = 500, 
-    nchain = 4, 
-    output.dir = output.dir, 
-    print.progress = 50)
-
-
-
-lapply(7:9, FUN = function(x){
-  run.hierarchical.models(
-    m = x, 
-    nparallel = 4,
-    niter = 1000, 
-    nwarmup = 500, 
-    nchain = 4, 
-    output.dir = output.dir, 
-    print.progress = 100)
-})
-
-
-
-
-
-
-# get the model output for model 1 and generate predictions:
-m <- 1
-nparallel = 4
-niter = 1000 
-nwarmup = 500 
-nchain = 4
-
-#fit.6 <- qs2::qs_read( paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/",model.name.6, ".qs"))
-#model.name.6 <- paste0("hierarchical_mort_model_6_niter_", niter, "_nchain_", nchain)
-
-
-# options:
-model.number <- model.list[m]
-cat(paste("running hierarchical mortality model ", model.number, " remper correction", remper.cor.vector[j]))
-model.name <- paste0("hierarchical_mort_model_",model.number, "_niter_", niter, "_nchain_", nchain)
-
-
-fit.1 <- qs2::qs_read( paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/",model.name, ".qs"))
-
-# get the model data
-mod.data <-  fromJSON(fit.1$data_file())
-#parameter_draws_1 <- beta_alpha_samps
-
-# used for data argument to loo_i
-mod.data_df <- data.frame(mod.data$y, 
-                          mod.data$SPP, 
-                          mod.data$Remper,
-                          mod.data$xM)
-colnames(mod.data_df) <- c("y", "SPP", "Remper", paste0("xM.", 1:mod.data$K))
-
-
-
-
-
-# use model$generate_quantities in cmdstan to generate prediction for each species---
-# summary function used to summarise posteriors
-summarize_posteriors <- function(x){
-  c(
-    median = median(x), 
-    quantile(x, probs = c(0.025)), 
-    quantile(x, probs = c(0.975)),
-    mean = mean(x), 
-    sd = sd(x), 
-    min = min(x), 
-    max = max(x), 
-    rhat = rhat_basic(x), 
-    ess_bulk = ess_bulk(x), 
-    ess_tail = ess_tail(x, na.rm =TRUE)
-  )
-} 
-
-
-#function to generate predicted y and p_surv from hierarchical posteriors:
-# --Read in the posteriors from the hierarchical model number (m)
-# --generates predictions & does AUC estimation for species (s)
-# --lapply(species.num, predictions)
-# --save predictions
-Est_log_lik <- function(m,
-                        nparallel = 4, 
-                        niter = 1000, 
-                        nwarmup = 500, 
-                        nchain = 4, 
-                        output.dir = output.dir){
-  model.number <- m
-  cat(paste("getting log-liklihoods from hierarchical mortality model ", model.number, " remper correction", remper.cor.vector[j]))
-  model.name <- paste0("hierarchical_mort_model_",model.number, "_niter_", niter, "_nchain_", nchain)
+# sampler diagnostics summary--used in save_model_diagnostics function
+summarize_sampler_diagnostics <- function(csv_files, nchain) {
+  info <- get_model_metadata(csv_files)
+  diag_draws <- info$post_warmup_sampler_diagnostics
+  diag_df <- posterior::as_draws_df(diag_draws)
   
+  max_td <- suppressWarnings(as.numeric(info$metadata$max_treedepth))
+  if (is.na(max_td)) max_td <- 10  # cmdstan default if max_treedepth was not listed in data
   
-  fit.1 <- qs2::qs_read( paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/",model.name, ".qs"))
+  diagnostics_summary <- diag_df %>%
+    group_by(.chain) %>%
+    summarise(
+      tot.max.treedepth = sum(treedepth__ == max_td),
+      n_divergent       = sum(divergent__),
+      tot_leapfrog      = sum(n_leapfrog__),
+      avg_accept_stat   = mean(accept_stat__),
+      # manual E-BFMI 
+      ebfmi             = mean(diff(energy__)^2) / stats::var(energy__)
+    ) %>%
+    rename(chain = .chain) %>%
+    mutate(chain = as.character(chain))
   
-  mod.data <- fromJSON(fit.1$data_file())
-  beta_alpha_samps <- qs2::qs_read( paste0(output.dir,"SPCD_stanoutput_cmdstan/betas/u_beta_alpha_samps_",model.name, ".qs"))
- 
+  list(diagnostics_summary = diagnostics_summary, metadata = info$metadata)
+}
+
+save_model_diagnostics <- function(model.number, niter, nwarmup, nchain, output.dir, csv.subdir) {
   
-  # used for data argument to loo_i
-  mod.data_df <- data.frame(mod.data$y, 
-                            mod.data$SPP, 
-                            mod.data$Remper,
-                            mod.data$xM)
-  colnames(mod.data_df) <- c("y", "SPP", "Remper", paste0("xM.", 1:mod.data$K))
+  model.name <- paste0("hierarchical_mort_model_", model.number, "_niter_", niter, "_nchain_", nchain)
+  csv_files  <- get_model_csv_files(model.number, output.dir, csv.subdir)
   
+  cat(paste("\nReading diagnostics for hierarchical mortality model", model.number,
+            "remper correction", remper.cor.vector[j], "\n"))
   
+  diag <- summarize_sampler_diagnostics(csv_files, nchain)
+  profile_df <- get_model_profiles(model.number, output.dir, csv.subdir)
   
-  llfun_logistic_remper <- function(data_i, 
-                                    draws, 
-                                    log = TRUE) {
-    
-    x_i <- as.matrix(data_i[,4:ncol(data_i)])
-    species_i <- data_i$SPP
-    remper_i <- data_i$Remper
-    K <- 1:ncol(x_i)
-    
-    logit_pred <- draws[,paste0("alpha_SPP[",species_i, "]")] + draws[,paste0("u_beta[",species_i,",",K,"]")] %*% t(x_i)
-    p_surv_remper <- (1/(1 + exp(-logit_pred)))^remper_i
-    
-    dbinom(x = data_i$y, 
-           size = 1, 
-           prob =p_surv_remper, 
-           log = log)
+  profile.stats <- if (!is.null(profile_df)) {
+    profile_df %>%
+      left_join(diag$diagnostics_summary, by = "chain") %>%
+      mutate(model.no = model.number, model = model.name)
+  } else {
+    diag$diagnostics_summary %>% mutate(model.no = model.number, model = model.name)
   }
   
+  # add a flag for max tree depth and divergent transitions
+  cat( paste("Model",model.number, "hit maxtreedepth", sum(profile.stats$tot.max.treedepth), "times and had", sum(profile.stats$n_divergent), "divergent transitions" ))
   
-  for(s in 1:mod.data$Nspp){
-    
-    SPCD.id <- nspp[s,]$SPCD
+  
+  write.csv(profile.stats,
+            paste0(output.dir, "SPCD_stanoutput_cmdstan/diagnostics/sample_diagnostics_", model.name, ".csv"),
+            row.names = FALSE)
+  
+  rm(diag, profile_df, profile.stats); gc()
+  invisible(csv_files)
+}
+
+
+# 3. special function for getting beta_alpha_draws ---
+
+# specific to get the beta_alpha draws once
+get_beta_alpha_draws <- function(csv_files, model.name, output.dir, save = TRUE, format = "draws_matrix") {
+  vars <- c("alpha_SPP", "mu_alpha", "sigma_alpha", "u_beta", "mu_beta", "sigma_theta")
+  beta_alpha_samps <- read_draws(csv_files, variables = vars, format = format)
+  
+  if (save) {
+    qs2::qs_save(beta_alpha_samps,
+                 paste0(output.dir, "SPCD_stanoutput_cmdstan/betas/u_beta_alpha_samps_", model.name, ".qs"))
+  }
+  beta_alpha_samps
+}
+
+# get only necessary parameters for generated quantities
+get_gq_fitted_params_csv <- function(csv_files, model.number, model.name, output.dir, nchain) {
+  
+  all.vars <- get_model_metadata(csv_files)
+  # all stan variables:
+  # all.vars$metadata$stan_variables
+  
+  # get basenames of the variables
+  base_names <- sub("\\[.*\\]$", "", all.vars$metadata$model_params)
+  
+  # keep only variables we will use
+  exclude_vars <- c("mM", "log_lik", # both are of length >100,000 each, so we dont need
+                    "z_theta", "sigma_theta", "mu_theta", "z_alpha_SPP","theta_beta") 
+  
+  
+  GQ.vars <- all.vars$metadata$model_params[!base_names %in% exclude_vars]
+  
+  # get the draws_array for use:
+  draws_for_GQ <- read_cmdstan_csv(csv_files, variables = GQ.vars, 
+                                   format = "draws_array")
+  return(draws_for_GQ)
+  
+}
+
+
+# 4. function to run LOO stats and save `loo` objects----
+
+
+get_species_loo <- function(model.number, niter, nwarmup, nchain, output.dir, csv.subdir, json.dir) {
+  # set up species names and csv files
+  model.name <- paste0("hierarchical_mort_model_", model.number, "_niter_", niter, "_nchain_", nchain)
+  csv_files  <- get_model_csv_files(model.number, output.dir, csv.subdir)
+  
+  # read in model data from a local json directory
+  mod.data <- get_model_data(model.number, json.dir)
+  
+  # only read in log_lik_draws, this will take awhile
+  cat(paste0("Reading in log_liklihood draws: Model ", model.number))
+  
+  log_lik_draws <- read_draws(csv_files, variables = "log_lik", format = "draws_matrix")
+  
+  n_draws_per_chain <- nrow(log_lik_draws) / nchain
+  chain_id <- rep(seq_len(nchain), each = n_draws_per_chain)
+  
+  for (s in seq_len(mod.data$Nspp)) {
+    SPCD.id <- nspp[s, ]$SPCD
     cat(paste("loo results for SPCD", SPCD.id, "species number", s, "\n"))
     
-    mod.data_species <- mod.data_df %>% filter(SPP == s)
+    # get species index
+    spec.idx <- which(mod.data$SPP == s)
+    spp_log_lik <- log_lik_draws[, spec.idx, drop = FALSE]
     
-    spp_r_eff_samps <- loo::relative_eff(llfun_logistic_remper, 
-                                         log = FALSE, # relative_eff wants likelihood not log-likelihood values
-                                         chain_id = rep(1:nchain, each = niter), 
-                                         data = mod.data_species, 
-                                         draws = beta_alpha_samps, 
-                                         cores = 4)
+    spp_r_eff_samps <- loo::relative_eff(exp(spp_log_lik), chain_id = chain_id, cores = 2)
+    spp_loo_results <- loo::loo(spp_log_lik, r_eff = spp_r_eff_samps, cores = 2)
     
+    qs2::qs_save(spp_loo_results,
+                 paste0(output.dir, "SPCD_stanoutput_cmdstan/LOO/LOO_results_", model.name, "_SPCD_", SPCD.id, ".qs"))
     
-    spp_loo_results <-
-      loo::loo(
-        llfun_logistic_remper,
-        
-        cores = 2,
-        # these next objects were computed above
-        r_eff = spp_r_eff_samps, 
-        draws = beta_alpha_samps,
-        data = mod.data_species
-      )
-    qs2::qs_save(spp_loo_results, paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO/LOO_results_", model.name,"_SPCD_", SPCD.id, ".qs"))
-    # clean up
-    rm(spp_loo_results, spp_r_eff_samps)
-    
+    rm(spp_loo_results, spp_r_eff_samps, spp_log_lik); gc()
   }
+  
+  rm(log_lik_draws); gc()
+  invisible(NULL)
 }
 
-# re-estimate the log_liklihoods for each of the 6 hierarchical models
-#lapply(1:6, Est_log_lik)
-
-for(mod.num in 1:6){
-  Est_log_lik(m = mod.num,
-  nparallel = 4, 
-  niter = 1000, 
-  nwarmup = 500, 
-  nchain = 4, 
-  output.dir = output.dir)
+# 5. Get generated quantities predictions species -----
+summarize_posteriors <- function(x) {
+  c(median = median(x),
+    quantile(x, probs = c(0.025)),
+    quantile(x, probs = c(0.975)),
+    mean = mean(x), sd = sd(x), min = min(x), max = max(x),
+    rhat = rhat_basic(x), ess_bulk = ess_bulk(x), ess_tail = ess_tail(x, na.rm = TRUE))
 }
 
-Run_gen_quants <- function(m, # model number 
-                           nparallel = 4, 
-                           niter = 1000, 
-                           nwarmup = 500, 
-                           nchain = 4, 
-                           output.dir = output.dir){
+run_gen_quants <- function(model.number, niter, nwarmup, nchain, output.dir, csv.subdir,
+                           json.dir, gq.mod, nparallel = 4) {
   
-  # options:
-  model.number <- model.list[m]
-  cat(paste("running hierarchical mortality model ", model.number, " remper correction", remper.cor.vector[j]))
-  model.name <- paste0("hierarchical_mort_model_",model.number, "_niter_", niter, "_nchain_", nchain)
+  model.name <- paste0("hierarchical_mort_model_", model.number, "_niter_", niter, "_nchain_", nchain)
+  csv_files  <- get_model_csv_files(model.number, output.dir, csv.subdir)
+  
+  mod.data <- get_model_data(model.number, json.dir)
   
   
-  fit.1 <- qs2::qs_read( paste0(output.dir,"SPCD_stanoutput_cmdstan/fittedmodels/",model.name, ".qs"))
+  # read the beta/alpha draws once per model & save:
+  beta_alpha_samps <- get_beta_alpha_draws(csv_files, model.name, output.dir, save = TRUE)
+  # plot up beta_alpha_samps traceplots:
+  par.names <- colnames(beta_alpha_samps)[1:(ncol(beta_alpha_samps))]
+  pdf( paste0(output.dir,"SPCD_stanoutput_cmdstan/images/traceplots_",model.name,".pdf"))
+  #specify to save plots in 0x0 grid
+  par(mfrow = c(8,3))
+  for (p in 1:length(par.names)) {   
+    print(mcmc_trace( beta_alpha_samps, pars = par.names[p]))
+  }
+  dev.off()
   
-  # get the model data
-  mod.data <-  fromJSON(fit.1$data_file())
-  #parameter_draws_1 <- beta_alpha_samps
-  
-  # used for data argument to loo_i
-  mod.data_df <- data.frame(mod.data$y, 
-                            mod.data$SPP, 
-                            mod.data$Remper,
-                            mod.data$xM)
-  colnames(mod.data_df) <- c("y", "SPP", "Remper", paste0("xM.", 1:mod.data$K))
   
   
-
+  cat(paste0("Extracting parameters needed for Generated Quantities: Model ", model.number))
+  # get the draws array for generated quantities
+  GQ_post_draws <- posterior::as_draws_array(
+    get_gq_fitted_params_csv(csv_files = csv_files, 
+                             model.number = model.number, 
+                             model.name = model.name, 
+                             output.dir = output.dir, 
+                             nchain = nchain) 
+  )
   
-get_species_gen_quantitites <- function(s){
-    SPCD.id <- nspp[s,]$SPCD
-    cat(paste("generating posterior predictions of SPCD", SPCD.id, "species number", s, "\n"))
+  
+  
+  # example for all the species alphas and all of the first betas
+  # mcmc_trace(beta_alpha_samps, pars = c(paste0("alpha_SPP[",1:17,"]")))
+  # mcmc_trace(beta_alpha_samps, pars = c(paste0("u_beta[",1:17,",",1,"]")))
+  
+  get_species_gen_quantities <- function(s) {
+    SPCD.id <- nspp[s, ]$SPCD
+    cat(paste("generating posterior predictions for SPCD", SPCD.id, "species number", s, "\n"))
     
-    spec.idx <- mod.data$SPP %in% s
+    spec.idx     <- mod.data$SPP    %in% s
     spec_rep.idx <- mod.data$SPPrep %in% s
     
     spp.mod.data <- mod.data
     
-    # get insample obs for species
-    spp.mod.data$SPP <- mod.data$SPP[spec.idx]
-    spp.mod.data$xM <- as.matrix(mod.data$xM[spec.idx,])
+    # need the full xMfit and N for recaluculating the QR decomposition
+    # spp.mod.data$xM_fit     <- as.matrix(mod.data$xM) 
+    # spp.mod.data$N_fit <- mod.data$N
+    
+    # set up species-specific data for gen quants
+    spp.mod.data$SPP    <- mod.data$SPP[spec.idx]
+    spp.mod.data$xM     <- as.matrix(mod.data$xM[spec.idx, ])
     spp.mod.data$Remper <- mod.data$Remper[spec.idx]
-    spp.mod.data$N <- length(spp.mod.data$SPP)
-    spp.mod.data$y <- mod.data$y[spec.idx]
+    spp.mod.data$N      <- length(spp.mod.data$SPP)
+    spp.mod.data$y      <- mod.data$y[spec.idx]
     
-    
-    
-    spp.mod.data$SPPrep <- mod.data$SPPrep[spec_rep.idx]
-    spp.mod.data$xMrep <- as.matrix(mod.data$xMrep[spec_rep.idx,])
+    spp.mod.data$SPPrep    <- mod.data$SPPrep[spec_rep.idx]
+    spp.mod.data$xMrep     <- as.matrix(mod.data$xMrep[spec_rep.idx, ])
     spp.mod.data$Remperoos <- mod.data$Remperoos[spec_rep.idx]
-    spp.mod.data$Nrep <- length(spp.mod.data$SPPrep)
-    spp.mod.data$ytest <- mod.data$ytest[spec_rep.idx]
+    spp.mod.data$Nrep      <- length(spp.mod.data$SPPrep)
+    spp.mod.data$ytest     <- mod.data$ytest[spec_rep.idx]
     
-    #??generate_quantities()
-    gen_quants <- hierarchical.updated.predict$generate_quantities(
-      fitted_params = fit.1, 
-      
-      data = spp.mod.data, # path to json data files
-      seed = 123,
-      parallel_chains = nparallel
+    
+    
+    
+    
+    
+    gen_quants <- gq.mod$generate_quantities(
+      fitted_params  = GQ_post_draws,#csv_files,      # feed it cmdstancsv paths
+      data           = spp.mod.data,
+      seed           = 123,
+      parallel_chains = nchain
     )
     
     
-    cat(paste("\n Extracting posterior draws--this can take some time...\n"))
-    y_rep_samps <- gen_quants$draws(variables = c("y_rep"), format = "draws_matrix")
-    y_hat_samps <-  gen_quants$draws(variables = c("y_hat"), format = "draws_matrix")
-   
-    
-    pSurv_rep_samps <-  gen_quants$draws(variables = c("mMrep"), format = "draws_matrix")
-    pSurv_hat_samps <-  gen_quants$draws(variables = c("mMhat"), format = "draws_matrix")
-    #dim(pSurv_rep_samps)
-    #dim(pSurv_hat_samps)
-    
-    #surv.stat = ifelse(spp.mod.data$y == 1, "live", "dead")
-    # sample posterior predictive checkes
-    # ppc_bars(y = spp.mod.data$y, yrep = y_hat_samps, freq = FALSE)
-    # ppc_bars(y = spp.mod.data$ytest, yrep = y_rep_samps)
-    # ppc_intervals(y = spp.mod.data$y, yrep = pSurv_hat_samps)
-    # ppc_dens_overlay(y = spp.mod.data$ytest, yrep = pSurv_rep_samps)
-    # ppc_stat(y = spp.mod.data$y, yrep = y_hat_samps, stat = "mean")
-     
-    #ppc_intervals(y = spp.mod.data$y, yrep = y_hat_samps, prob = 0.5, prob_outer = 0.95, group = surv.stat )
-    # save all to their own objects:
-    
-    qs2::qs_save(y_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/y_rep_samps_SPCD_",SPCD.id, "_", model.name, ".qs"))
-    qs2::qs_save(y_hat_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/y_hat_samps_SPCD_",SPCD.id, "_", model.name, ".qs"))
-    
-    qs2::qs_save(pSurv_rep_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSurv_rep_samps_SPCD_",SPCD.id, "_",  model.name, ".qs"))
-    qs2::qs_save(pSurv_hat_samps,paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSurv_hat_samps_SPCD_",SPCD.id, "_",  model.name, ".qs"))
-    #pSurv_hat_samps.old <- qs2::qs_read(paste0(output.dir,"SPCD_stanoutput_cmdstan/predicted_mort/pSurv_hat_samps_SPCD_",SPCD.id, "_",  model.name, ".qs"))
-    #dim(pSurv_hat_samps.old)
-    
-    #System.time(y_hat.quant <- gen_quants$summary(variables = c("y_rep"), summarize_posteriors))
-    
-    rm(gen_quants)
-    gc()
     
     
-    cat(paste("\n Getting model diagnostics and summaries"))
-    # convergence statistics summaries ----
-    beta_alpha_samps <-  fit.1$draws(variables = 
-                                         c("alpha_SPP",  "mu_alpha", "sigma_alpha",
-                                           "u_beta", "mu_beta", "sigma_beta"), 
-                                       format = "draws_matrix")
+    y_rep_samps     <- gen_quants$draws(variables = "y_rep",  format = "draws_matrix")
+    y_hat_samps     <- gen_quants$draws(variables = "y_hat",  format = "draws_matrix")
+    pSurv_rep_samps <- gen_quants$draws(variables = "mMrep",  format = "draws_matrix")
+    pSurv_hat_samps <- gen_quants$draws(variables = "mMhat",  format = "draws_matrix")
     
+    qs2::qs_save(y_rep_samps,     paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/y_rep_samps_SPCD_", SPCD.id, "_", model.name, ".qs"))
+    qs2::qs_save(y_hat_samps,     paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/y_hat_samps_SPCD_", SPCD.id, "_", model.name, ".qs"))
+    qs2::qs_save(pSurv_rep_samps, paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/pSurv_rep_samps_SPCD_", SPCD.id, "_", model.name, ".qs"))
+    qs2::qs_save(pSurv_hat_samps, paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/pSurv_hat_samps_SPCD_", SPCD.id, "_", model.name, ".qs"))
     
-    # get predicted draws for survival (0,1), annual and remper survival probabilities for in-sample ("hat") and held-out ("rep")
-    u_betas_alpha.quant <- summarise_draws(beta_alpha_samps,  summarize_posteriors)
+    rm(gen_quants); gc()
     
-
-  
+    # --- convergence / diagnostics table -----------------------------------
+    u_betas_alpha.quant <- summarise_draws(beta_alpha_samps, summarize_posteriors)
+    y_hat.quant     <- summarise_draws(y_hat_samps,     .cores = 4, summarize_posteriors)
+    y_rep.quant     <- summarise_draws(y_rep_samps,     .cores = 4, summarize_posteriors)
+    pSurv_hat.quant <- summarise_draws(pSurv_hat_samps, .cores = 4, summarize_posteriors)
+    pSurv_rep.quant <- summarise_draws(pSurv_rep_samps, .cores = 4, summarize_posteriors)
     
-   # or break up into chunks of 1000
-   # ceiling(ncol(y_hat_samps)/1000)
-   # 
-   # system.time( y_hat.quant <- do.call(rbind,
-   #                                     lapply(1:(ncol(y_hat_samps)/1000), FUN = function(x){
-   #                                       summarise_draws( subset_draws(y_hat_samps, variable = paste0("y_hat[",x,"]")), .cores = 4, summarize_posteriors)
-   #                                       
-   #                                     })))
-   
-   
-  system.time(y_hat.quant <- summarise_draws(y_hat_samps, .cores = 4,  summarize_posteriors))
+    convergence.stats <- rbind(u_betas_alpha.quant, y_hat.quant, y_rep.quant,
+                               pSurv_hat.quant, pSurv_rep.quant) %>%
+      mutate(model.number = model.number, model.type = "Hierarchical",
+             SPCD = SPCD.id, remper.correction = remper.cor.vector[j])
     
+    write.csv(convergence.stats,
+              paste0(output.dir, "SPCD_stanoutput_cmdstan/diagnostics/Rhats_ESS_quantiles_SPCD_", SPCD.id, "_", model.name, ".csv"))
+    rm(convergence.stats, u_betas_alpha.quant); gc()
     
+    # --- AUC + confusion matrix over posterior draws ------------------------
+    actuals     <- spp.mod.data$y
+    actuals.oos <- spp.mod.data$ytest
     
-    y_rep.quant <-  summarise_draws(y_rep_samps, .cores = 4,  summarize_posteriors)
+    AUC.is.samples.df  <- apply(pSurv_hat_samps, 1, function(p) as.numeric(pROC::auc(actuals, p, quiet = TRUE)))
+    AUC.oos.samples.df <- apply(pSurv_rep_samps, 1, function(p) as.numeric(pROC::auc(actuals.oos, p, quiet = TRUE)))
+    rm(pSurv_hat_samps, pSurv_rep_samps, y_hat.quant, y_rep.quant, pSurv_hat.quant, pSurv_rep.quant); gc()
     
-    # pSurv_ predicted survival probabilities over the remper for in sample and out of sample
-    pSurv_hat.quant <-  summarise_draws(pSurv_hat_samps, .cores = 4,  summarize_posteriors)
-    pSurv_rep.quant <-  summarise_draws(pSurv_rep_samps, .cores = 4,  summarize_posteriors)
-    
-    
-    
-    
-    convergence.stats <- rbind(u_betas_alpha.quant, 
-                               y_hat.quant, 
-                               y_rep.quant, 
-                               pSurv_hat.quant, 
-                               pSurv_rep.quant)%>%
-      mutate(model.number = model.number, 
-             model.type = "Hierarchical",
-             SPCD = SPCD.id, 
-             remper.correction = 0.5)
-    
-    
-    write.csv(convergence.stats, 
-              paste0(output.dir, "SPCD_stanoutput_cmdstan/diagnostics/Rhats_ESS_quantiles_SPCD_",SPCD.id, "_", model.name, ".csv"))
-    
-    
-    rm(convergence.stats)
-    #gc()
-    
-    
-    cat(paste("\n Calculating AUC scores"))
-    # AUC scores
-    # for in sample data
-    actuals = spp.mod.data$y
-    actuals.oos = spp.mod.data$ytest
-    
-    # use the posterior draws from pSurv to estimate draws of AUC responses for each sample:
-    
-    AUC.is.samples.df <- apply(pSurv_hat_samps , 
-                               MARGIN = 1, function(prob){
-                                 as.numeric(pROC::auc(actuals, prob, quiet = TRUE))
-                               })
-    
-    AUC.oos.samples.df <- apply(pSurv_rep_samps, 
-                                MARGIN = 1, function(prob){
-                                  as.numeric(pROC::auc(actuals.oos, prob, quiet = TRUE))
-                                })
-    
-    rm(pSurv_hat_samps, pSurv_rep_samps)
-    gc()
-    
-    # get the confusion matrix over the draws--true postives/negatives, false positives/negatives
-    # in-sample:
-    #preds.is <-  #%>% select(-.chain, -.iteration, -.draw) %>% as.matrix()
     preds.is.class <- y_hat_samps == 1
+    confusion.is_draws <- data.frame(
+      TP_draws = rowSums(preds.is.class[, actuals == 1, drop = FALSE]),
+      FP_draws = rowSums(preds.is.class[, actuals == 0, drop = FALSE]),
+      TN_draws = rowSums(!preds.is.class[, actuals == 0, drop = FALSE]),
+      FN_draws = rowSums(!preds.is.class[, actuals == 1, drop = FALSE])
+    ) %>%
+      mutate(`True survival rate` = TP_draws / (TP_draws + FN_draws),
+             `True mortality rate` = TN_draws / (TN_draws + FP_draws),
+             model.number = model.number, type = "in-sample",
+             model.type = "Hierarchical", SPCD = SPCD.id)
     
-    
-    confusion.is_draws <-   data.frame(      
-      TP_draws = rowSums(preds.is.class[,actuals == 1, drop = FALSE]),
-      FP_draws = rowSums(preds.is.class[,actuals == 0, drop = FALSE]),
-      
-      TN_draws = rowSums(!preds.is.class[,actuals == 0, drop = FALSE]),
-      FN_draws = rowSums(!preds.is.class[,actuals == 1, drop = FALSE])
-    )%>%
-      mutate(`True survival rate` = TP_draws/(TP_draws+FN_draws), 
-             `True mortality rate` = TN_draws/(TN_draws+FP_draws), 
-             model.number = model.number, 
-             type = "in-sample", 
-             model.type = "Hierarchical", 
-             SPCD = SPCD.id
-      )
-    
-    
-    # out-of-sample:
     preds.oos.class <- y_rep_samps == 1
+    confusion.oos_draws <- data.frame(
+      TP_draws = rowSums(preds.oos.class[, actuals.oos == 1, drop = FALSE]),
+      FP_draws = rowSums(preds.oos.class[, actuals.oos == 0, drop = FALSE]),
+      TN_draws = rowSums(!preds.oos.class[, actuals.oos == 0, drop = FALSE]),
+      FN_draws = rowSums(!preds.oos.class[, actuals.oos == 1, drop = FALSE])
+    ) %>%
+      mutate(`True survival rate` = TP_draws / (TP_draws + FN_draws),
+             `True mortality rate` = TN_draws / (TN_draws + FP_draws),
+             model.number = model.number, type = "out-of-sample",
+             model.type = "Hierarchical", SPCD = SPCD.id)
     
-    
-    
-    confusion.oos_draws <-   data.frame(      
-      TP_draws = rowSums(preds.oos.class[,actuals.oos == 1, drop = FALSE]),
-      FP_draws = rowSums(preds.oos.class[,actuals.oos == 0, drop = FALSE]),
-      
-      TN_draws = rowSums(!preds.oos.class[,actuals.oos == 0, drop = FALSE]),
-      FN_draws = rowSums(!preds.oos.class[,actuals.oos == 1, drop = FALSE])
-    )%>%
-      mutate(`True survival rate` = TP_draws/(TP_draws+FN_draws), 
-             `True mortality rate` = TN_draws/(TN_draws+FP_draws), 
-             model.number = model.number, 
-             type = "out-of-sample", 
-             model.type = "Hierarchical", 
-             SPCD = SPCD.id
-      )
-    
-    # combine the AUCs and confusion matrices together with draws;
-    confusion.is_draws$AUC <- AUC.is.samples.df
-    confusion.oos_draws$AUC <- AUC.oos.samples.df 
-    
+    confusion.is_draws$AUC  <- AUC.is.samples.df
+    confusion.oos_draws$AUC <- AUC.oos.samples.df
     AUC.confusion_draws <- rbind(confusion.is_draws, confusion.oos_draws)
     
-    qs2::qs_save(AUC.confusion_draws, paste0(output.dir,"SPCD_stanoutput_cmdstan/AUC/AUC_draws_SPCD_",SPCD.id,"_", model.name, ".qs"))
+    qs2::qs_save(AUC.confusion_draws,
+                 paste0(output.dir, "SPCD_stanoutput_cmdstan/AUC/AUC_draws_SPCD_", SPCD.id, "_", model.name, ".qs"))
     
-    rm(AUC.is.samples.df, AUC.oos.samples.df, actuals.oos, actuals, 
-       y_rep_samps, y_rep.quant, y_hat.quant, y_hat_samps, u_betas_alpha.quant, 
-       preds.is.class, preds.oos.class, pSurv_hat_samps, pSurv_rep_samps)
+    
+    # AUC.confusion_draws %>% group_by(SPCD, type) %>% summarise(median(AUC), 
+    #                                                            quantile(AUC, 0.025), 
+    #                                                            quantile(AUC, 0.975))
+    rm(AUC.is.samples.df, AUC.oos.samples.df, actuals, actuals.oos,
+       y_rep_samps, y_hat_samps, preds.is.class, preds.oos.class,
+       confusion.is_draws, confusion.oos_draws, AUC.confusion_draws)
     gc()
-
+    invisible(NULL)
+  }
+  
+  cat(paste0("Generating Quantities by species: Model ", model.number))
+  
+  
+  lapply(rev(seq_len(mod.data$Nspp)), get_species_gen_quantities)
+  rm(beta_alpha_samps); gc()
+  invisible(NULL)
 }
-#lapply(8:1, get_species_gen_quantitites)
-lapply(17:1, get_species_gen_quantitites)
 
+
+# 6. Get model diagnostics for all the species -----
+
+
+niter <- 1000; nwarmup <- 1000; nchain <- 4
+
+for (m in model.list) {
+  save_model_diagnostics(model.number = m, niter = niter, nwarmup = nwarmup,
+                         nchain = nchain, output.dir = output.dir, csv.subdir = csv.subdir)
+  
+  get_species_loo(model.number = m, niter = niter, nwarmup = nwarmup,
+                  nchain = nchain, output.dir = output.dir, csv.subdir = csv.subdir, json.dir = json.dir)
+  
+  run_gen_quants(model.number = m, niter = niter, nwarmup = nwarmup, nchain = nchain,
+                 output.dir = output.dir, csv.subdir = csv.subdir, json.dir = json.dir,
+                 gq.mod = gq.mod, nparallel = 4)
 }
-
-
-# test for model 1
-Run_gen_quants(
-    m = 1, 
-    nparallel = nparallel,
-    niter = 1000, 
-    nwarmup = 500, 
-    nchain = 4, 
-    output.dir = output.dir)
-Run_gen_quants(
-  m = 2, 
-  nparallel = nparallel,
-  niter = 1000, 
-  nwarmup = 500, 
-  nchain = 4, 
-  output.dir = output.dir)
-
-Run_gen_quants(
-  m = 3, 
-  nparallel = nparallel,
-  niter = 1000, 
-  nwarmup = 500, 
-  nchain = 4, 
-  output.dir = output.dir)
-# run for m = 2:6
-Run_gen_quants(
-  m = 4, 
-  nparallel = nparallel,
-  niter = 1000, 
-  nwarmup = 500, 
-  nchain = 4, 
-  output.dir = output.dir)
-
-Run_gen_quants(
-  m = 5, 
-  nparallel = nparallel,
-  niter = 1000, 
-  nwarmup = 500, 
-  nchain = 4, 
-  output.dir = output.dir)
-
-Run_gen_quants(
-  m = 6, 
-  nparallel = nparallel,
-  niter = 1000, 
-  nwarmup = 500, 
-  nchain = 4, 
-  output.dir = output.dir)
-
-
