@@ -278,14 +278,11 @@ run_gen_quants <- function(model.number, niter, nwarmup, nchain, output.dir, csv
   
   cat(paste0("Extracting parameters needed for Generated Quantities: Model ", model.number))
   # get the draws array for generated quantities
-  GQ_post_draws <- posterior::as_draws_array(
-    get_gq_fitted_params_csv(csv_files = csv_files, 
+  GQ_post_draws <- get_gq_fitted_params_csv(csv_files = csv_files, 
                              model.number = model.number, 
                              model.name = model.name, 
                              output.dir = output.dir, 
-                             nchain = nchain) 
-  )
-  
+                             nchain = nchain)
   
   
   # example for all the species alphas and all of the first betas
@@ -324,7 +321,7 @@ run_gen_quants <- function(model.number, niter, nwarmup, nchain, output.dir, csv
     
     
     gen_quants <- gq.mod$generate_quantities(
-      fitted_params  = GQ_post_draws,#csv_files,      # feed it cmdstancsv paths
+      fitted_params  = GQ_post_draws$post_warmup_draws, # use post_warmup_draws
       data           = spp.mod.data,
       seed           = 123,
       parallel_chains = nchain
@@ -424,7 +421,7 @@ run_gen_quants <- function(model.number, niter, nwarmup, nchain, output.dir, csv
 
 
 niter <- 1000; nwarmup <- 1000; nchain <- 4
-
+model.list <- 5:9
 for (m in model.list) {
   save_model_diagnostics(model.number = m, niter = niter, nwarmup = nwarmup,
                          nchain = nchain, output.dir = output.dir, csv.subdir = csv.subdir)
