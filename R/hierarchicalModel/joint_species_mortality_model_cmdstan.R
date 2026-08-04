@@ -127,8 +127,9 @@ summarize_sampler_diagnostics <- function(csv_files, nchain) {
       # manual E-BFMI 
       ebfmi             = mean(diff(energy__)^2) / stats::var(energy__)
     ) %>%
-    rename(chain = .chain) %>%
-    mutate(chain = as.character(chain))
+    rename(chain_id = .chain) %>% 
+    left_join(info$time$chains) %>%# add the time per chain
+    mutate(ncores = nchain)# assuming even though more cores are accessible, cmdstanpy still only uses 1 core per chain
   
   list(diagnostics_summary = diagnostics_summary, metadata = info$metadata)
 }
@@ -421,11 +422,11 @@ run_gen_quants <- function(model.number, niter, nwarmup, nchain, output.dir, csv
 
 
 niter <- 1000; nwarmup <- 1000; nchain <- 4
-model.list <- 5:9
+model.list <- 1:9
 for (m in model.list) {
   save_model_diagnostics(model.number = m, niter = niter, nwarmup = nwarmup,
                          nchain = nchain, output.dir = output.dir, csv.subdir = csv.subdir)
-  
+
   get_species_loo(model.number = m, niter = niter, nwarmup = nwarmup,
                   nchain = nchain, output.dir = output.dir, csv.subdir = csv.subdir, json.dir = json.dir)
   
