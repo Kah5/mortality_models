@@ -10,15 +10,17 @@ color_scheme_set("brightblue")
 
 output.dir = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
 
-nspp <- data.frame(SPCD = c(316, 318, 833, 832, 261, 531, 802, 129, 762,  12, 541,  97, 621, 400, 371, 241, 375))
-nspp$Species <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$GENUS, FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$SPECIES)
-nspp$COMMON_NAME <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$COMMON_NAME
-
+spp.table <- read.csv(file = paste0(output.dir, "/data/Hierarchical_obs_model_7.csv"))
+spp.table
+nspp <- spp.table
+# nspp <- data.frame(SPCD = c(316, 318, 833, 832, 261, 531, 802, 129, 762,  12, 541,  97, 621, 400, 371, 241, 375))
+# nspp$Species <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$GENUS, FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$SPECIES)
+# nspp$COMMON_NAME <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$COMMON_NAME
+# 
 
 
 options(mc.cores = parallel::detectCores())
-SPCD.df <- data.frame(SPCD = nspp[1:17, ]$SPCD, 
-                      spcd.id = 1:17)
+SPCD.df <- data.frame(spp.table[,c("SPCD", "SPP")])
 remper.cor.vector <- c(0.5)
 #model.number <- 6
 model.list <- 1:9
@@ -78,10 +80,14 @@ diagnostic.files <- list.files(path = paste0(output.dir,"SPCD_stanoutput_cmdstan
                                pattern = paste0("sample_diagnostics_mort_model"), full.names = TRUE)
 
 diags_all <- do.call(rbind, lapply(diagnostic.files, read.csv))
-diag.summary<- diags_all %>%  #group_by(SPCD, model.type, model.number, chain_id)%>%
-  mutate(chain_core_hours = total*(1/60)*(1/60)*(ncores/nchain)) %>%
+diag.summary <- diags_all %>%  #group_by(SPCD, model.type, model.number, chain_id)%>%
+  mutate(chain_core_hours = total*(1/60)*(1/60)*(ncores/nchain), 
+         chain_core_hours_sampling = sampling*(1/60)*(1/60)*(ncores/nchain), 
+         chain_core_hours_warmup = warmup*(1/60)*(1/60)*(ncores/nchain)) %>%
   group_by(SPCD, model.type, model.number)%>%
   summarise(total_core_hours = sum(chain_core_hours), 
+            sampling_core_hours = sum(chain_core_hours_sampling),
+            warmup_core_hours = sum(chain_core_hours_warmup),
             total_iter = sum(niter), 
             total_warmup = sum(nwarmup), 
             
@@ -115,10 +121,17 @@ diags_heir <- do.call(rbind, lapply(hier.diagnostic.files, read.csv))%>%
 
 # get the number of individuals per species and weight by species--
 hier.data <- fromJSON(paste0("SPCD_standata_json/hierarchical_data_model_",1,".json"))
-sample.trees <- data.frame(SPP = hier.data$SPP) %>% 
-  left_join(.,data.frame(SPP = 1:17, SPCD = nspp$SPCD)) %>%
-  group_by(SPCD) %>% 
-  summarise(ntrees = n()) %>% ungroup()%>%
+# sample.trees <- data.frame(SPP = hier.data$SPP) %>% 
+#   left_join(.,data.frame(SPP = 1:17, SPCD = nspp$SPCD)) %>%
+#   group_by(SPCD) %>% 
+#   summarise(ntrees = n()) %>% ungroup()%>%
+#   mutate(total_trees = sum(ntrees)) %>% 
+#   mutate(weight_species = ntrees/total_trees)
+
+sample.trees <- spp.table %>%
+  rename("ntrees" = "n")%>%
+  group_by(SPCD, COMMON) %>% 
+  ungroup()%>%
   mutate(total_trees = sum(ntrees)) %>% 
   mutate(weight_species = ntrees/total_trees)
 
@@ -135,21 +148,28 @@ diagnostic_heir <- expand.grid(model.number = unique(diags_heir$model.number),
 
 diag_heir.summary <- diagnostic_heir %>% 
   group_by(SPCD, model.type, model.number, chain_id)%>%
-  mutate(chain_core_hours = total*weight_species*(1/60)*(1/60)*(ncores/nchain)) %>%
+  mutate(chain_core_hours = total*weight_species*(1/60)*(1/60)*(ncores/nchain), 
+         chain_core_hours_sampling = sampling*weight_species*(1/60)*(1/60)*(ncores/nchain), 
+         chain_core_hours_warmup = warmup*weight_species*(1/60)*(1/60)*(ncores/nchain)) %>%
   group_by(SPCD, model.type, model.number)%>%
   summarise(total_core_hours = sum(chain_core_hours), 
+            sampling_core_hours = sum(chain_core_hours_sampling),
+            warmup_core_hours = sum(chain_core_hours_warmup),
             total_iter = sum(niter), 
             total_warmup = sum(nwarmup), 
             
             total_divergent = sum(n_divergent),
             total_max_treedepth = sum(tot.max.treedepth))
 
+
+
 # check that there are no divergent transitions
 diag_heir.summary %>% filter(total_divergent > 0)  
 diags_heir %>% filter(n_divergent > 0)  
 
 # no hierarchical models have samples that exceeded max tree depth
-diag_heir.summary %>% filter( total_max_treedepth > 0)  %>% select(SPCD, model.number, total_max_treedepth)
+diag_heir.summary %>% filter( total_max_treedepth > 0)  %>% 
+  select(SPCD, model.number, total_max_treedepth)
 
 # combine and save all the species outputs.
 diag_heir.converg.df <- left_join(diag_heir.summary, convergence_all)
@@ -163,91 +183,139 @@ hist(hier.convergence.df$ess_bulk.median)
 hist(hier.convergence.df$ess_bulk.ci.lo)
 
 all_diagnostics <- rbind(diag_heir.converg.df, diag_converg.df)
+all_diagnostics$COMMON <- ref_species[match(all_diagnostics$SPCD, ref_species$SPCD),]$COMMON_NAME
+
 saveRDS(all_diagnostics, paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/sampler_diagnostics_all_models.RDS"))
 
+# total core hours
 all_diagnostics |>
   ggplot()+geom_bar(aes(x = model.number, y = total_core_hours, fill = model.type), stat = "identity", position = "dodge")+
   facet_wrap(~SPCD, scales = "free_y")
 
+# sampling core hours--same # of samples
+all_diagnostics |>
+  ggplot()+geom_bar(aes(x = as.character(model.number), y = sampling_core_hours, fill = model.type), stat = "identity", position = "dodge")+
+  facet_wrap(~COMMON, scales = "free_y")+
+  theme_bw(base_size = 12)+ylab("Core Hours for Sampling (4000 draws)")+xlab("Model")+
+  theme(panel.background = element_blank())
+
+# standardized to 500 warmup samples 
+all_diagnostics |>
+  ggplot()+geom_bar(aes(x = model.number, y = (warmup_core_hours/total_warmup)*2000, fill = model.type), stat = "identity", position = "dodge")+
+  facet_wrap(~SPCD, scales = "free_y")
 
 # get loo results and compare---
 # need to do for each species...!!
-SPCD.id <- 97
+SPCD.id <- 261
 
 # function to read in LOO output and summarise for each species:
 # udpate hardcoded file numbers when hierarchical models are run!
 
 LOO_summarise_SPCD <- function(SPCD.id){
-
-  cat(paste0("Doing LOO comparison for ", SPCD.id))
-
- # all file names for species models and hierarchical models
- all.species.files <- list.files(path = paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO/"), 
-             pattern ="LOO_results_mort_model", full.names = T)
- 
- all.Hierarchical.files <- list.files(path = paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO/"), 
-                                      pattern ="LOO_results_hierarchical_mort_model", full.names = T)
+  
+    cat(paste0("Doing LOO comparison for ", SPCD.id))
+  
+   # all file names for species models and hierarchical models
+   all.species.files <- list.files(path = paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO/"), 
+               pattern ="LOO_results_mort_model", full.names = T)
    
- # get only the species we are looking at
- spp.loo.files <- grep(SPCD.id, all.species.files, value = TRUE)
- Hierarchical.loo.files <- grep(SPCD.id,  all.Hierarchical.files, value = TRUE)
- 
- # get the model numbers for each species and hierarchical models
- # we were using length to name before, but this will ensure we don't accidently rename a model incorrectly
- spp.model_numbers <- as.numeric(str_extract(spp.loo.files, "(?<=LOO_results_mort_model_)\\d+"))
- hier.model_numbers <- as.numeric(str_extract( Hierarchical.loo.files, "(?<=LOO_results_hierarchical_mort_model_)\\d+"))
+   all.Hierarchical.files <- list.files(path = paste0(output.dir,"SPCD_stanoutput_cmdstan/LOO/"), 
+                                        pattern ="LOO_results_hierarchical_mort_model", full.names = T)
+     
+   # get only the species we are looking at
+   spp.loo.files <- grep( paste0("_", SPCD.id, "(_|\\.)"),  
+                          all.species.files, 
+                          value = TRUE, 
+                          perl = TRUE)
+   Hierarchical.loo.files <-   grep( paste0("_", SPCD.id, "(_|\\.)"),  
+                                      all.Hierarchical.files, 
+                                      value = TRUE, 
+                                      perl = TRUE)
+   
 
- all.mod.numbers <- 1:9
- 
- # add some warnings to list the models that need to be run
- if(length(spp.loo.files) < 9){
-   cat(paste0("SPCD ", SPCD.id, " is missing Species-level model ", all.mod.numbers[!1:9 %in% spp.model_numbers], "\n"))
- }  
- 
- if(length(Hierarchical.loo.files) < 9){
-   cat(paste0("SPCD ", SPCD.id, " is missing Hierarchical model ", all.mod.numbers[!1:9 %in% hier.model_numbers], "\n"))
- }  
- 
-  loo.files.all <- c(spp.loo.files, Hierarchical.loo.files)
-  loo_results_all <- lapply(loo.files.all, qs_read)
+   
+   # get the model numbers for each species and hierarchical models
+   # we were using length to name before, but this will ensure we don't accidently rename a model incorrectly
+   spp.model_numbers <- as.numeric(str_extract(spp.loo.files, "(?<=LOO_results_mort_model_)\\d+"))
+   hier.model_numbers <- as.numeric(str_extract( Hierarchical.loo.files, "(?<=LOO_results_hierarchical_mort_model_)\\d+"))
   
-
-  model.full.names <-  c(paste0("Species_model_",  spp.model_numbers), 
-    paste0("Hierarchical_model_", hier.model_numbers))
+   all.mod.numbers <- 1:9
+   
+   # add some warnings to list the models that need to be run
+   if(length(spp.loo.files) < 9){
+     cat(paste0("SPCD ", SPCD.id, " is missing Species-level model ", all.mod.numbers[!1:9 %in% spp.model_numbers], "\n"))
+   }  
+   
+   if(length(Hierarchical.loo.files) < 9){
+     cat(paste0("SPCD ", SPCD.id, " is missing Hierarchical model ", all.mod.numbers[!1:9 %in% hier.model_numbers], "\n"))
+   }  
+   
+    loo.files.all <- c(spp.loo.files, Hierarchical.loo.files)
+    loo_results_all <- lapply(loo.files.all, qs_read)
+    
   
-  # add names to the list:
-  names(loo_results_all) <- model.full.names
- 
-  # check pareto-k estimates:
-  pareto.k.checks <- do.call(rbind, lapply(loo_results_all, function(x){data.frame(good = sum(x$diagnostics$pareto_k <= 0.7),
-                                                                                   bad = sum(x$diagnostics$pareto_k > 0.7),
-                                                                                   total = length(x$diagnostics$pareto_k))}))%>%
-    mutate(percent.bad = (bad/total)*100)%>%
-    mutate(model.name = c(paste0("model ", spp.model_numbers), paste0("model ", hier.model_numbers)),
-           model =model.full.names,
-           model.type = c(rep("Species", length(spp.loo.files)), rep("Hierarchical", length( Hierarchical.loo.files))),
-           SPCD = SPCD.id)
-
-
-
-  loo_compare.out <- loo::loo_compare(loo_results_all) # best fit based on loo elpd differences
-  loo_comparisons <- loo_compare.out %>% data.frame()%>%
-    left_join(., pareto.k.checks) %>%
-    mutate(elpd_se_ratio = abs(elpd_diff)/se_diff)%>%
-    mutate(model.number = substr(model.name, start = 7, stop = 7))
-
-
-  # Get model weights---
-  # get pointwise log predictive densities
-  lpd_point <- do.call(cbind,lapply(loo_results_all, function(x){x$pointwise[,"elpd_loo"]}))
-  pbma_wts <- loo::pseudobma_weights(lpd_point, BB=FALSE)
-  pbma_BB_wts <- loo::pseudobma_weights(lpd_point) # default is BB=TRUE
-  stacking_wts <- loo::stacking_weights(lpd_point)
-  mod.weights <- round(cbind(pbma_wts, pbma_BB_wts, stacking_wts),3)%>% data.frame() %>%
-    mutate(model = model.full.names,
-           SPCD = SPCD.id)
-  loo_comparisons <- loo_comparisons %>% left_join(., mod.weights, by = c("model", "SPCD"))
-  return(loo_comparisons)
+    model.full.names <-  c(paste0("Species_model_",  spp.model_numbers), 
+      paste0("Hierarchical_model_", hier.model_numbers))
+    
+    # add names to the list:
+    names(loo_results_all) <- model.full.names
+   
+    # check pareto-k estimates:
+    pareto.k.checks <- do.call(rbind, lapply(loo_results_all, function(x){data.frame(good = sum(x$diagnostics$pareto_k <= 0.7),
+                                                                                     bad = sum(x$diagnostics$pareto_k > 0.7),
+                                                                                     total = length(x$diagnostics$pareto_k))}))%>%
+      mutate(percent.bad = (bad/total)*100)%>%
+      mutate(model.name = c(paste0("model ", spp.model_numbers), paste0("model ", hier.model_numbers)),
+             model =model.full.names,
+             model.type = c(rep("Species", length(spp.loo.files)), rep("Hierarchical", length( Hierarchical.loo.files))),
+             SPCD = SPCD.id)
+  
+   # mod.data.7 <- fromJSON(paste0("SPCD_standata_json/SPCD_", SPCD.id,"remper_correction_0.5model_7.json"))
+   
+    
+    mod.data <- fromJSON(paste0("SPCD_standata_json/hierarchical_data_model_7.json"))
+    
+    
+    cat(paste("generating posterior predictions for SPCD", SPCD.id, "species number", s, "\n"))
+    
+    spec.idx     <- mod.data$SPP    %in% s
+    spec_rep.idx <- mod.data$SPPrep %in% s
+    
+    spp.mod.data <- mod.data
+    
+    # set up species-specific data for gen quants
+    spp.mod.data$SPP    <- mod.data$SPP[spec.idx]
+    spp.mod.data$xM     <- as.matrix(mod.data$xM[spec.idx, ])
+    spp.mod.data$Remper <- mod.data$Remper[spec.idx]
+    spp.mod.data$N      <- length(spp.mod.data$SPP)
+    spp.mod.data$y      <- mod.data$y[spec.idx]
+    
+    spp.mod.data$SPPrep    <- mod.data$SPPrep[spec_rep.idx]
+    spp.mod.data$xMrep     <- as.matrix(mod.data$xMrep[spec_rep.idx, ])
+    spp.mod.data$Remperoos <- mod.data$Remperoos[spec_rep.idx]
+    spp.mod.data$Nrep      <- length(spp.mod.data$SPPrep)
+    spp.mod.data$ytest     <- mod.data$ytest[spec_rep.idx]
+    
+    #spp.mod.data$N
+    
+    loo_compare.out <- loo::loo_compare(loo_results_all) # best fit based on loo elpd differences
+    loo_comparisons <- loo_compare.out %>% data.frame()%>%
+      left_join(., pareto.k.checks) %>%
+      mutate(elpd_se_ratio = abs(elpd_diff)/se_diff)%>%
+      mutate(model.number = substr(model.name, start = 7, stop = 7))
+  
+  
+    # Get model weights---
+    # get pointwise log predictive densities
+    lpd_point <- do.call(cbind,lapply(loo_results_all, function(x){x$pointwise[,"elpd_loo"]}))
+    pbma_wts <- loo::pseudobma_weights(lpd_point, BB=FALSE)
+    pbma_BB_wts <- loo::pseudobma_weights(lpd_point) # default is BB=TRUE
+    stacking_wts <- loo::stacking_weights(lpd_point)
+    mod.weights <- round(cbind(pbma_wts, pbma_BB_wts, stacking_wts),3)%>% data.frame() %>%
+      mutate(model = model.full.names,
+             SPCD = SPCD.id)
+    loo_comparisons_weighted <- loo_comparisons %>% left_join(., mod.weights, by = c("model", "SPCD"))
+    return(loo_comparisons_weighted)
 }
 
 LOO_ELPD_list <- list()
@@ -257,7 +325,6 @@ for(s in 1:length(nspp$SPCD)){
 
 LOO_ELPD.df <- do.call(rbind, LOO_ELPD_list)
 
-LOO_ELPD.df <- readRDS( paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/All_LOO_comparisons.rds"))
 
 
 # make sure none of the models have >5-10 percent bad pareto k values
@@ -268,6 +335,11 @@ max(LOO_ELPD.df$percent.bad)
 LOO_ELPD.df$COMMON_NAME <- FIESTA::ref_species[match(LOO_ELPD.df$SPCD, FIESTA::ref_species$SPCD),]$COMMON_NAME
 LOO_ELPD.df$COMMON_NAME <- factor(LOO_ELPD.df$COMMON_NAME, levels = unique(nspp$COMMON_NAME))
 LOO_ELPD.df$model.full <- paste(LOO_ELPD.df$model.name, LOO_ELPD.df$model.type)
+
+# save LOO_ELPD.df 
+saveRDS(LOO_ELPD.df, paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/All_LOO_comparisons.rds"))
+LOO_ELPD.df <- readRDS( paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/All_LOO_comparisons.rds"))
+
 
 # plot of all species ELPD diff +/- SE, with significance
 LOO_ELPD.df %>%
@@ -370,8 +442,6 @@ LOO_ELPD.df %>% mutate(elpd_diff_sig = ifelse(elpd_se_ratio >= 2, "ELPD_diff >= 
 ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Stacking_weights_elpd_all_models.png"), 
        height = 7, width = 10)
 
-# save LOO_ELPD.df 
-saveRDS(LOO_ELPD.df, paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/All_LOO_comparisons.rds"))
 # get auc results ---
 
 AUC_summarise_SPCD <- function(SPCD.id){
