@@ -189,22 +189,40 @@ summarize_marginal_draws <- function(bma_curve) {
              annual_pSurv.median = apply(annual_pSurv, 2, quantile, probs = 0.5),
              annual_pSurv.05.ci.lo = apply(annual_pSurv, 2, quantile, probs = 0.05), 
              annual_pSurv.95.ci.hi = apply(annual_pSurv, 2, quantile, probs = 0.95), 
+             annual_pSurv.10.ci.lo = apply(annual_pSurv, 2, quantile, probs = 0.10), 
+             annual_pSurv.90.ci.hi = apply(annual_pSurv, 2, quantile, probs = 0.90), 
+             annual_pSurv.25.ci.lo = apply(annual_pSurv, 2, quantile, probs = 0.25), 
+             annual_pSurv.75.ci.hi = apply(annual_pSurv, 2, quantile, probs = 0.75),
+             
              
              # get summaries of annual survival probability
              annual_pMort.median = apply(annual_pMort, 2, quantile, probs = 0.5),
              annual_pMort.05.ci.lo = apply(annual_pMort, 2, quantile, probs = 0.05), 
-             annual_pMort.95.ci.hi = apply(annual_pMort, 2, quantile, probs = 0.95), 
+             annual_pMort.95.ci.hi = apply(annual_pMort, 2, quantile, probs = 0.95),
              
+             annual_pMort.10.ci.lo = apply(annual_pMort, 2, quantile, probs = 0.10), 
+             annual_pMort.90.ci.hi = apply(annual_pMort, 2, quantile, probs = 0.90), 
+             annual_pMort.25.ci.lo = apply(annual_pMort, 2, quantile, probs = 0.25), 
+             annual_pMort.75.ci.hi = apply(annual_pMort, 2, quantile, probs = 0.75),             
              
              # get summaries of decadal survival probability
              decadal_pSurv.median = apply(decadal_pSurv, 2, quantile, probs = 0.5),
              decadal_pSurv.05.ci.lo = apply(decadal_pSurv, 2, quantile, probs = 0.05), 
-             decadal_pSurv.95.ci.hi = apply(decadal_pSurv, 2, quantile, probs = 0.95), 
+             decadal_pSurv.95.ci.hi = apply(decadal_pSurv, 2, quantile, probs = 0.95),
+             
+             decadal_pSurv.10.ci.lo = apply(decadal_pSurv, 2, quantile, probs = 0.10), 
+             decadal_pSurv.90.ci.hi = apply(decadal_pSurv, 2, quantile, probs = 0.90), 
+             decadal_pSurv.25.ci.lo = apply(decadal_pSurv, 2, quantile, probs = 0.25), 
+             decadal_pSurv.75.ci.hi = apply(decadal_pSurv, 2, quantile, probs = 0.75),
              
              # get summaries of decadal survival probability
              decadal_pMort.median = apply(decadal_pMort, 2, quantile, probs = 0.5),
              decadal_pMort.05.ci.lo = apply(decadal_pMort, 2, quantile, probs = 0.05), 
-             decadal_pMort.95.ci.hi = apply(decadal_pMort, 2, quantile, probs = 0.95)
+             decadal_pMort.95.ci.hi = apply(decadal_pMort, 2, quantile, probs = 0.95),
+             decadal_pMort.10.ci.lo = apply(decadal_pMort, 2, quantile, probs = 0.10), 
+             decadal_pMort.90.ci.hi = apply(decadal_pMort, 2, quantile, probs = 0.90), 
+             decadal_pMort.25.ci.lo = apply(decadal_pMort, 2, quantile, probs = 0.25), 
+             decadal_pMort.75.ci.hi = apply(decadal_pMort, 2, quantile, probs = 0.75)         
             )
 }
 
@@ -247,7 +265,8 @@ summary_df <- summarize_marginal_draws(bma_curve = curve_SPCD12$DIA_DIFF_scaled)
 
 
 ggplot(summary_df)+geom_line(aes(x = grid_val, y = annual_pMort.median))+
-  geom_ribbon(aes(x = grid_val, ymin =annual_pMort.05.ci.lo, ymax = annual_pMort.95.ci.hi), alpha = 0.5)
+  geom_ribbon(aes(x = grid_val, ymin =annual_pMort.05.ci.lo, ymax = annual_pMort.95.ci.hi), alpha = 0.25, fill = "red")+
+  geom_ribbon(aes(x = grid_val, ymin =annual_pMort.25.ci.lo, ymax = annual_pMort.75.ci.hi), alpha = 0.65, fill = "red")
 
 
 
@@ -327,14 +346,17 @@ marg_summary_all_list <- lapply(spcd_ids, FUN = function(species_code){
 })
 
 marg_summary_all_df <- do.call(rbind, marg_summary_all_list)
+
+# plot up model average marginal effects of 10-year mortality probabilities
 ggplot(data = marg_summary_all_df)+
-  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.5)+
+  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.5)+
   geom_line(aes(x = grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
   facet_grid(vars(predictor), vars(COMMON_NAME))
 
 
 
-# do the same thing but get a list of draws (this will be large!)
+# do the same thing but get a list of draws (this will be large! ~ 2GB)
 marg_draws_all_list <- lapply(spcd_ids, FUN = function(species_code){
   output_BMA_marginal_effects(spcd_idx = species_code, 
                               weighting = "stacking_wts", 
@@ -343,12 +365,19 @@ marg_draws_all_list <- lapply(spcd_ids, FUN = function(species_code){
                               return_format = "draws")
 })
 
+# expanding into a very big dataframe
 marg_draws_all_df <- do.call(rbind, marg_draws_all_list)
 
-ggplot(data = marg_summary_all_df)+
-  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.5)+
-  geom_line(aes(x = grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
-  facet_grid(vars(predictor), vars(COMMON_NAME))
+
+# make draws summary plots for different effects!
+marg_draws_all_df %>% filter(predictor %in% main_effects[1])|>
+ggplot()+
+  geom_line(aes(x = grid_val, y = decadal_pMort, group = draw, color = draw_source), alpha = 0.05)+
+  theme_bw(base_size = 12)+
+  xlab(paste0(unique(marg_draws_df$predictor)))+
+facet_wrap(~COMMON_NAME)
+ 
+
 
 
 
