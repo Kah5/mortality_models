@@ -346,14 +346,162 @@ marg_summary_all_list <- lapply(spcd_ids, FUN = function(species_code){
 })
 
 marg_summary_all_df <- do.call(rbind, marg_summary_all_list)
+marg_summary_all_df$predictor <- factor(marg_summary_all_df$predictor, levels = main_effects)
 
 # plot up model average marginal effects of 10-year mortality probabilities
+
+# set the species order using the factors:
+SP.TRAITS <- read.csv("data/NinemetsSpeciesTraits.csv") %>% filter(COMMON_NAME %in% unique(spp.table$COMMON))
+# order the trait db by softwood-hardwood, then shade tolerance, then name (this puts all the oaks together b/c hickory and red oak have the same tolerance values)
+SP.TRAITS <- SP.TRAITS %>% group_by(SFTWD_HRDWD) %>% arrange(desc(SFTWD_HRDWD), desc(ShadeTol), desc(COMMON_NAME))
+
+SP.TRAITS$Color <- c(# softwoods
+  "#b2df8a",
+  "#003c30", 
+  "#b2182b", 
+  "#fee090", 
+  "#33a02c",
+  
+  
+  # sugar  maples
+  "#a6cee3",
+  "#1f78b4",
+  
+  # red maple
+  "#e31a1c",
+  # yellow birch
+  "#fdbf6f",
+  # oaks
+  "#cab2d6",
+  "#8073ac",
+  "#6a3d9a",
+  
+  # hickory
+  "#7f3b08",
+  # white ash
+  "#bababa",
+  # black cherry
+  "#4d4d4d",
+  # yellow poplar
+  "#ff7f00",
+  "#fccde5" # paper birch
+  
+  
+)
+
+SP.TRAITS$`Shade Tolerance`  <- ifelse(SP.TRAITS$ShadeTol >=4, "High", 
+                                       ifelse(SP.TRAITS$ShadeTol <=2.5, "Low", "Moderate"))
+
+# set up custom colors for species
+sppColors <- SP.TRAITS$Color 
+names(sppColors) <- unique(SP.TRAITS$COMMON_NAME) 
+
+species_fill <- scale_fill_manual(values = sppColors)
+species_color <- scale_color_manual(values = sppColors)
+
+
+# plot up the 50% CI only across the values:
 ggplot(data = marg_summary_all_df)+
-  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+  #geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
   geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.5)+
   geom_line(aes(x = grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
-  facet_grid(vars(predictor), vars(COMMON_NAME))
+  facet_wrap(~predictor, scales = "free_y")+
+  species_fill + species_color
 
+# omit balsam fir
+ggplot(data = marg_summary_all_df %>% filter(! COMMON_NAME %in% "balsam fir"))+
+  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.75)+
+  geom_line(aes(x = grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+  facet_wrap(~predictor, scales = "free_y")+
+  species_fill + species_color
+
+# just plot medians 
+ggplot(data = marg_summary_all_df)+
+ # geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+  #geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.75)+
+  geom_line(aes(x = grid_val, y = decadal_pMort.median, color = COMMON_NAME), size = 1.5)+
+  facet_wrap( vars(predictor), scales = "free_y")+
+  theme_bw()+
+  theme(panel.grid = element_blank(), strip.text.y = element_text(angle = 0))+
+  #species_fill + 
+  species_color+
+  ylab("Predicted 10-year mortality probabilities (model stacking)")
+
+# flip rows and columns
+ggplot(data = marg_summary_all_df)+
+  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.75)+
+  geom_line(aes(x = grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+  facet_grid(vars(predictor), vars(COMMON_NAME),  scales = "free_y")+
+  theme_bw()+
+  theme(panel.grid = element_blank(), strip.text.y = element_text(angle = 0))+
+  species_fill + species_color+
+  ylab("Predicted 10-year mortality probabilities (model stacking)")
+
+
+# the three northern conifers have large uncertainties--
+ggplot(data = marg_summary_all_df %>% filter(! COMMON_NAME %in% c("balsam fir", "red spruce", "northern white-cedar")))+
+geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.75)+
+  geom_line(aes(x = grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+  facet_grid(vars(predictor), vars(COMMON_NAME), scales = "free_y")+
+  theme_bw()+
+  theme(panel.grid = element_blank(), strip.text.y = element_text(angle = 0), 
+        strip.text.x = element_text(angle = 90))+
+  species_fill + species_color+
+  ylab("Predicted 10-year mortality probabilities (model stacking)")+
+  xlab("Scaled Covariate")
+
+ggplot(data = marg_summary_all_df %>% filter(COMMON_NAME %in% c("balsam fir", "red spruce", "northern white-cedar")))+
+  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.75)+
+  geom_line(aes(x = grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+  facet_grid(vars(predictor), vars(COMMON_NAME))+
+  theme_bw()+
+  theme(panel.grid = element_blank(), strip.text.y = element_text(angle = 0),strip.text.x = element_text(angle = 90))+
+  species_fill + species_color+
+  ylab("Predicted 10-year mortality probabilities (model stacking)")
+
+ggplot(data = marg_summary_all_df %>% filter(COMMON_NAME %in% c("northern red oak", "chestnut oak", "white oak")))+
+  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.75)+
+  geom_line(aes(x = grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+  facet_grid(vars(predictor), vars(COMMON_NAME), scales = "free_y")+
+  theme_bw()+
+  theme(panel.grid = element_blank(), strip.text.y = element_text(angle = 0),strip.text.x = element_text(angle = 90))+
+  species_fill + species_color+
+  ylab("Predicted 10-year mortality probabilities (model stacking)")
+
+ggplot(data = marg_summary_all_df %>% filter(COMMON_NAME %in% c("red maple","sugar maple", "American beech")))+
+  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.75)+
+  geom_line(aes(x = grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+  facet_grid(vars(predictor), vars(COMMON_NAME), scales = "free_y")+
+  theme_bw()+
+  theme(panel.grid = element_blank(), strip.text.y = element_text(angle = 0),strip.text.x = element_text(angle = 90))+
+  species_fill + species_color+
+  ylab("Predicted 10-year mortality probabilities (model stacking)")
+
+ggplot(data = marg_summary_all_df %>% filter(COMMON_NAME %in% c("hickory spp.","white ash", "black cherry")))+
+  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.75)+
+  geom_line(aes(x = grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+  facet_grid(vars(predictor), vars(COMMON_NAME))+
+  theme_bw()+
+  theme(panel.grid = element_blank(), strip.text.y = element_text(angle = 0),strip.text.x = element_text(angle = 90))+
+  species_fill + species_color+
+  ylab("Predicted 10-year mortality probabilities (model stacking)")
+
+ggplot(data = marg_summary_all_df %>% filter(COMMON_NAME %in% c("eastern hemlock","American beech", "yellow-poplar")))+
+  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.75)+
+  geom_line(aes(x = grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+  facet_grid(vars(predictor), vars(COMMON_NAME))+
+  theme_bw()+
+  theme(panel.grid = element_blank(), strip.text.y = element_text(angle = 0),strip.text.x = element_text(angle = 90))+
+  species_fill + species_color+
+  ylab("Predicted 10-year mortality probabilities (model stacking)")
 
 
 # do the same thing but get a list of draws (this will be large! ~ 2GB)
@@ -368,16 +516,109 @@ marg_draws_all_list <- lapply(spcd_ids, FUN = function(species_code){
 # expanding into a very big dataframe
 marg_draws_all_df <- do.call(rbind, marg_draws_all_list)
 
+# arrange the species--
+marg_draws_all_df$COMMON_NAME <- factor(marg_draws_all_df$COMMON_NAME, levels = c(SP.TRAITS$COMMON_NAME))
 
-# make draws summary plots for different effects!
-marg_draws_all_df %>% filter(predictor %in% main_effects[1])|>
+# make draws summary plots for different effects to identify which model s
+marg_draws_all_df %>% filter(predictor %in% c("DIA_DIFF_scaled", "DIA_scaled"))|>
 ggplot()+
   geom_line(aes(x = grid_val, y = decadal_pMort, group = draw, color = draw_source), alpha = 0.05)+
   theme_bw(base_size = 12)+
-  xlab(paste0(unique(marg_draws_df$predictor)))+
-facet_wrap(~COMMON_NAME)
- 
+  xlab("Scaled Predictor")+
+  ylab("10-year predicted mortality probability")+
+  facet_grid(vars(predictor), vars(COMMON_NAME), scales = "free_y")+
+  theme(panel.grid = element_blank(),
+        strip.text.y = element_text(angle = 0), 
+        strip.text.x = element_text(angle = 90), 
+        legend.position = "bottom", 
+        legend.direction = "horizontal")+
+  guides( color = guide_legend(override.aes = list(linewidth = 2, alpha = 1)))+
+    labs(color = "Weighted Draw Source")
+
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Size_effects_pMort10_draws.png"), 
+       height = 6, width = 16)
+
+# do this for the plot neighborhood effects:
+c("DIA_DIFF_scaled", "DIA_scaled", "ba.scaled", "BAL.scaled",
+  "damage.scaled", "MATmax.scaled", "MAP.scaled", "ppt.anom",
+  "tmax.anom", "slope.scaled", "aspect.scaled", "Ndep.scaled")
+
+marg_draws_all_df %>% filter(predictor %in% c("ba.scaled", "BAL.scaled", "damage.scaled"))|>
+  ggplot()+
+  geom_line(aes(x = grid_val, y = decadal_pMort, group = draw, color = draw_source), alpha = 0.05)+
+  theme_bw(base_size = 12)+
+  xlab("Scaled Predictor")+
+  ylab("10-year predicted mortality probability")+
+  facet_grid(vars(predictor), vars(COMMON_NAME), scales = "free_y")+
+  theme(panel.grid = element_blank(),
+        strip.text.y = element_text(angle = 0), 
+        strip.text.x = element_text(angle = 90), 
+        legend.position = "bottom", 
+        legend.direction = "horizontal")+
+  guides( color = guide_legend(override.aes = list(linewidth = 2, alpha = 1)))+
+  labs(color = "Weighted Draw Source")
+
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Neighborhood_effects_pMort10_draws.png"), 
+       height = 8, width = 16)
+
+# for the climate effects
+marg_draws_all_df %>% filter(predictor %in% c("MATmax.scaled", "MAP.scaled", 
+                                              "ppt.anom",
+                                              "tmax.anom"))|>
+  ggplot()+
+  geom_line(aes(x = grid_val, y = decadal_pMort, group = draw, color = draw_source), alpha = 0.05)+
+  theme_bw(base_size = 12)+
+  xlab("Scaled Predictor")+
+  ylab("10-year predicted mortality probability")+
+  facet_grid(vars(predictor), vars(COMMON_NAME), scales = "free_y")+
+  theme(panel.grid = element_blank(),
+        strip.text.y = element_text(angle = 0), 
+        strip.text.x = element_text(angle = 90), 
+        legend.position = "bottom", 
+        legend.direction = "horizontal")+
+  guides( color = guide_legend(override.aes = list(linewidth = 2, alpha = 1)))+
+  labs(color = "Weighted Draw Source")
+
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Climate_effects_pMort10_draws.png"), 
+       height = 9, width = 16)
 
 
+
+# for the site condition effects
+marg_draws_all_df %>% filter(predictor %in% c("Ndep.scaled","slope.scaled", "aspect.scaled"))|>
+  ggplot()+
+  geom_line(aes(x = grid_val, y = decadal_pMort, group = draw, color = draw_source), alpha = 0.05)+
+  theme_bw(base_size = 12)+
+  xlab("Scaled Predictor")+
+  ylab("10-year predicted mortality probability")+
+  facet_grid(vars(predictor), vars(COMMON_NAME), scales = "free_y")+
+  theme(panel.grid = element_blank(),
+        strip.text.y = element_text(angle = 0), 
+        strip.text.x = element_text(angle = 90), 
+        legend.position = "bottom", 
+        legend.direction = "horizontal")+
+  guides( color = guide_legend(override.aes = list(linewidth = 2, alpha = 1)))+
+  labs(color = "Weighted Draw Source")
+
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Site_condition_effects_pMort10_draws.png"), 
+       height = 8, width = 16)
+
+rm(marg_draws_all_df, decadal_pMort, decadal_pSurv)
+
+#################################################################################
+# TODO: Placeholder for the interaction effects-------
+#################################################################################
+
+
+
+
+#################################################################################
+# Effects of bayesian model averaging methods on predictions of yhat, yrep, mhat, mrep-------
+#################################################################################
+
+# we can use similar appraoch to marginal effect averaging above
+# use build_species_draw_plan, and mix_predictions
+# build_species_draw_plan(spcd, weights_i, N = 4000)
+# mix_predictions (pred_list, plan) 
 
 
