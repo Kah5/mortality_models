@@ -604,6 +604,11 @@ ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Site_condition_effect
        height = 8, width = 16)
 
 rm(marg_draws_all_df, decadal_pMort, decadal_pSurv)
+rm(draws, curves_316, curves, hier_results, bma_curve, curve_Ndep_SPCD316, curve_SPCD, curve_SPCD12)
+rm(psurv.long)
+rm(pred_list, res, res_sp)
+rm(main_marg_summary, main_marg_draws, marg_draws_list_all, marg_draws_df, marge_summary_all_list)
+gc()
 
 #################################################################################
 # TODO: Placeholder for the interaction effects-------
@@ -613,12 +618,226 @@ rm(marg_draws_all_df, decadal_pMort, decadal_pSurv)
 
 
 #################################################################################
-# Effects of bayesian model averaging methods on predictions of yhat, yrep, mhat, mrep-------
+# Bayesian model averaging (stacking) for yhat, yrep, mhat, mrep-------
 #################################################################################
 
 # we can use similar appraoch to marginal effect averaging above
-# use build_species_draw_plan, and mix_predictions
-# build_species_draw_plan(spcd, weights_i, N = 4000)
-# mix_predictions (pred_list, plan) 
+post_draws_dir <- paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/")
+
+# set up functions to get the species paths
+# NOTE: species and hierarchical models had inconsistent naming of the generated quantities, 
+# created a lookup table to translate these names, so when we request "y_rep" in the following functions, 
+# we always get the out of sample survival assignment
+
+# y_rep and y_hat naming are flipped for the species_only
+# species: "y_rep" = in sample and "y_hat" = out of sample
+# hierarchical: "y_hat" = in sample and "y_rep" = out of sample
+
+y_type_lookup <- data.frame(
+  actual_y_type = c("y_rep", "y_hat", "pSurv_rep", "pSurv_hat"),
+  heir_y_type = c("y_rep", "y_hat", "pSurv_rep", "pSurv_hat"),
+  
+  SPP_y_type = c("y_hat", "y_rep", "pSurv_hat", "pSurv_rep"),# the mixed up labels for species model
+  data_type = c("out-of-sample", "in-sample", "out-of-sample", "in-sample"),
+  parameter = c("Survival Assignment", "Survival Assignment", "annual survival probability", "annual survival probability")
+)
+
+
+# function to read the species paths
+species_path <- function(y_type, spcd, k) {
+  # change the naming of the species files to read in the correct file:
+  y_type_real <- y_type_lookup[match(y_type, y_type_lookup$actual_y_type),]$SPP_y_type
+  
+  # get the filename
+  paste0(post_draws_dir, y_type_real, "_samps_mort_model_", k, "_SPCD_", spcd, "_remper_correction_0.5_niter_1000_nchain_4.qs")
+}
+
+# function to read the hierarchical paths
+hier_path     <- function(y_type, spcd, k) {
+  # just to be consistent with species paths
+  y_type_real <- y_type_lookup[match(y_type, y_type_lookup$actual_y_type),]$heir_y_type
+  paste0(post_draws_dir, y_type_real, "_samps_SPCD_", spcd, "_hierarchical_mort_model_",k,"_niter_1000_nchain_4.qs")
+}
+
+
+# get posterior matrix actually reads and outputs these paths
+get_posterior_matrix <- function(structure,  spcd, y_type, k, spp_index = NULL) {
+ 
+   if (structure == "species_only") {
+    qs2::qs_read(species_path( y_type, spcd, k))          # draws x N_species, already per-species
+  } else {
+    full <- qs2::qs_read(hier_path(y_type, spcd, k))            # draws x N_total (all species stacked)
+    full
+  }
+}
+
+
+get_posterior_matrix(structure = "species_only",  
+                     spcd = "261", 
+                     y_type = "y_hat",
+                     k = 1, 
+                     spp_index = NULL) %>% ncol()
+
+get_posterior_matrix(structure = "hierarchical",  
+                     spcd = "261", 
+                     y_type = "y_hat",
+                     k = 1, 
+                     spp_index = NULL) %>% ncol()
+
+post_draw_plan <- function(spcd, weights_i, N = 4000) {
+  
+  weights_i[, weighting]
+  
+  # keep the models that have weight > 0
+  weights <- weights_i[weights_i[,3] > 0,]
+  model_names <- weights$model
+  w <- weights[,3] / sum(weights[,3]) # resum
+  
+  
+
+  # get an index for which model to sample for each of the 4000 posteriors: 
+  sampled_model <- sample(model_names, N, replace = TRUE, prob = w)
+  # get the index within each original model draws to keep consistent across variables
+  # assuming that N = the number of draws across all the models
+  sampled_draw  <- vapply(sampled_model, function(m) sample(N, 1), integer(1))
+  
+  list(model = sampled_model, draw = sampled_draw, N = N)
+}
+
+
+
+
+# this is giving an error at stopifnot(length(unique(n_obs)) == 1)  # same set of trees across all model structures
+# I think this is because y_rep and y_hat naming are flipped for hierarchical vs species models
+stack_y_species <- function(spcd, 
+                        y_type = c("y_rep"),
+                        N = 4000, 
+                        weighting = "stacking_wts",
+                        y_plan = NULL) {
+ 
+  # get the weighting and indices to sample from for each species
+  weights_i <- load_species_weights(spcd, weighting)
+  plan <- if (is.null(y_plan)) post_draw_plan(spcd, weights_i, N) else y_plan
+  
+  # get the full predicted list from all the models that have non-zero weights for this species
+  pred_list <- list()
+  for (structure in c("species_only", "hierarchical")) {
+    for (k in 1:9) {
+      # wname = naming structure of the model in the weight dataframe
+      wname <- paste0(if (structure == "hierarchical") "Hierarchical_model_" else "Species_model_", k)
+      if (!(wname %in% plan$model)) next  # zero-weight models were never sampled; skip loading
+      
+      # get the matrix of y values
+      mat <- tryCatch(get_posterior_matrix(structure, spcd, y_type, k), error = function(e) NULL)
+      if (is.null(mat)) next
+      
+      # get the max number of iterations needed from this model and check that we have that
+      needed <- max(plan$draw[plan$model == wname])
+      if (nrow(mat) < needed) {
+        stop(wname, "'s saved ", type, " has only ", nrow(mat), " draws, but the plan ",
+             "needs draw index ", needed, ".")
+      }
+      pred_list[[wname]] <- mat # 
+    }
+  }
+  
+  # check the number of observations for this focal prediction parameter
+  n_obs <- vapply(pred_list, ncol, integer(1))
+  stopifnot(length(unique(n_obs)) == 1)  # throw error if we dont have the same number trees across all model structures
+  
+  
+  # use indices in the plan to output the predicted y or psurv values
+  mixed <- mix_predictions(pred_list, plan)  # draws x n_obs matrix of BMA-mixed simulated y (0/1)
+  
+  # get the number of tree observations for the species
+  tree_N <- unique(n_obs)
+  var_names <- paste0(y_type, "_",1:tree_N)
+  draws_df <- as.data.frame(mixed$draws)
+  colnames(draws_df) <- var_names  
+  draws_matrix <- as_draws_matrix(draws_df)
+  
+  list(draws = draws_matrix, 
+       model_source = mixed$model, 
+       nObs = tree_N, 
+       spcd = spcd, 
+       y_type = y_type, 
+       weighting = weighting)
+}
+
+# example usage for pSurv_hat for one species
+psurv_261 <- stack_y_species(spcd = 261, 
+                y_type = "pSurv_hat", 
+                N = 4000, 
+                y_plan = NULL)
+
+#psurv_261$draws %>% as_draws_df() %>% summarise_draws()
+
+
+# create a function to process/summarise the stacked posteriors
+# 1. Save the weighted samples pSurv_hat, pSurv_rep, y_hat, y_rep for each species as draws_df for later use
+# 2. Calculate is and oos AUC scores, confusion matrices for each species
+# 3. Summarise the pSurv_hat, pSurv_rep, y_hat, y_rep for each species
+
+
+spcd = 261
+#y_type = "pSurv_hat" 
+weighting = "stacking_wts"
+N = 4000
+
+# get species in and out of sample y data to compare to:
+load(paste0("SPCD_standata_general_full_standardized_v3/", "SPCD_", spcd, "remper_correction_0.5model_9.Rdata"))
+length(mod.data$y)
+
+
+# set up plan for each species once, then feed it inot the stack_y_species
+weights_i <- load_species_weights(spcd, weighting)
+plan <- post_draw_plan(spcd, weights_i, N)
+
+psurv_hat <- stack_y_species(spcd = spcd, 
+                             y_type = "pSurv_hat", 
+                             N = 4000, 
+                             y_plan = plan)
+psurv_rep <- stack_y_species(spcd = spcd, 
+                             y_type = "pSurv_rep", 
+                             N = 4000, 
+                             y_plan = plan)
+
+y_hat <- stack_y_species(spcd = spcd, 
+                         y_type = "y_hat", 
+                         N = 4000, 
+                         y_plan = plan)
+
+y_rep <- stack_y_species(spcd = spcd, 
+                             y_type = "y_rep", 
+                             N = 4000, 
+                             y_plan = plan)
+y_rep_samps <- as_draws_df(y_rep$draws)#%>% rename_variables(new_name = old_name)
+y_rep_samps <- as_draws_df(y_rep$draws)
+
+qs2::qs_save(y_rep_samps,     paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/y_rep_samps_SPCD_", SPCD.id, "_", weighting, ".qs"))
+qs2::qs_save(y_hat_samps,     paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/y_hat_samps_SPCD_", SPCD.id, "_", weighting, ".qs"))
+qs2::qs_save(pSurv_rep_samps, paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/pSurv_rep_samps_SPCD_", SPCD.id, "_", weighting, ".qs"))
+qs2::qs_save(pSurv_hat_samps, paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/pSurv_hat_samps_SPCD_", SPCD.id, "_", weighting, ".qs"))
+
+
+
+####################################################################################
+# 
+stack_species_preds <- function(spcd, 
+                                weighting = "stacking_wts",
+                                focal_vars = c("pSurv_hat", "pSurv_rep"), 
+                                N = 4000) {
+  
+  
+  weights_i <- load_species_weights(spcd, weighting)
+  plan <- post_draw_plan(spcd, weights_i, N = N) # gives the indices for which draw rows we should extract from each model 
+  
+  # apply the curve over all of the species
+  tree_post_preds <- lapply(focal_vars, function(fv) weight_posteriors(spcd, fv, plan, weighting))
+  names(tree_post_preds) <- focal_vars
+  tree_post_preds
+}
+
+
 
 
