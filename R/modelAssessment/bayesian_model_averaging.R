@@ -853,7 +853,14 @@ process_bma_posterior_pSurv_y <- function(spcd, weighting, N){
       rm(is.ppc.bar, oos.ppc.bar, combined.bar)
       
       
+      # --- AUC + confusion matrix over posterior draws ------------------------
+      actuals     <- mod.data$y
+      actuals.oos <- mod.data$ytest
       cat(paste0("estimating AUC and confusion matrix on weighted posterior draws for ", spcd, "\n"))
+      
+     # library(pROC)
+      
+
       # calculate AUC for each draw:------
       AUC.is.samples.df  <- apply(pSurv_hat_samps, 1, function(p) as.numeric(pROC::auc(actuals, p, quiet = TRUE)))
       AUC.oos.samples.df <- apply(pSurv_rep_samps, 1, function(p) as.numeric(pROC::auc(actuals.oos, p, quiet = TRUE)))
