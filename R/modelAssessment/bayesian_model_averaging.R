@@ -780,64 +780,175 @@ psurv_261 <- stack_y_species(spcd = 261,
 
 
 spcd = 261
-#y_type = "pSurv_hat" 
 weighting = "stacking_wts"
 N = 4000
+process_bma_posterior_pSurv_y <- function(spcd, weighting, N){
+      # start function
+      
+    cat(paste0("getting weighted posteriors for spcd ", spcd, "\n"))
+  # get species in and out of sample y data to compare to:
+      load(paste0("SPCD_standata_general_full_standardized_v3/", "SPCD_", spcd, "remper_correction_0.5model_9.Rdata"))
+      #length(mod.data$y)
+      
+      
+      # set up plan for each species once, then feed it inot the stack_y_species
+      weights_i <- load_species_weights(spcd, weighting)
+      plan <- post_draw_plan(spcd, weights_i, N)
+      
+      # get the weighted probabilities and predicted classifications
+      psurv_hat <- stack_y_species(spcd = spcd, 
+                                   y_type = "pSurv_hat", 
+                                   N = 4000, 
+                                   y_plan = plan)
+      psurv_rep <- stack_y_species(spcd = spcd, 
+                                   y_type = "pSurv_rep", 
+                                   N = 4000, 
+                                   y_plan = plan)
+      
+      y_hat <- stack_y_species(spcd = spcd, 
+                               y_type = "y_hat", 
+                               N = 4000, 
+                               y_plan = plan)
+      
+      y_rep <- stack_y_species(spcd = spcd, 
+                                   y_type = "y_rep", 
+                                   N = 4000, 
+                                   y_plan = plan)
+      
+      
+      cat(paste0("saving weighted posterior draws for ", spcd, "\n"))
+      # get just the draws
+      y_rep_samps <- y_rep$draws
+      y_hat_samps <- y_hat$draws
+      
+      pSurv_rep_samps <- psurv_rep$draws
+      pSurv_hat_samps <- psurv_hat$draws
+      
+      qs2::qs_save(y_rep_samps,     paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/y_rep_samps_SPCD_", spcd, "_", weighting, ".qs"))
+      qs2::qs_save(y_hat_samps,     paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/y_hat_samps_SPCD_", spcd, "_", weighting, ".qs"))
+      qs2::qs_save(pSurv_rep_samps, paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/pSurv_rep_samps_SPCD_", spcd, "_", weighting, ".qs"))
+      qs2::qs_save(pSurv_hat_samps, paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/pSurv_hat_samps_SPCD_", spcd, "_", weighting, ".qs"))
+      
+      # convert remper probabilities to annualized probabilities of survival:
+      Remper_matrix <- matrix(mod.data$Remper, nrow = nrow(pSurv_hat_samps), ncol = ncol(pSurv_hat_samps), byrow = TRUE)
+      #length(unique(Remper_matrix[,1])) ==1 # check that the byrow is right
+      
+      pSannual_hat <- pSurv_hat_samps^(1/Remper_matrix) 
+      
+      Remperoos_matrix <- matrix(mod.data$Remperoos, nrow = nrow(pSurv_rep_samps), ncol = ncol(pSurv_rep_samps), byrow = TRUE)
+      #length(unique(Remper_matrix[,1])) ==1 # check that the byrow is right
+      
+      pSannual_rep <- pSurv_rep_samps^(1/Remperoos_matrix) 
+      
+      qs2::qs_save(pSannual_rep, paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/pSurv_annual_rep_samps_SPCD_", spcd, "_", weighting, ".qs"))
+      qs2::qs_save(pSannual_hat, paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/pSurv_annual_hat_samps_SPCD_", spcd, "_", weighting, ".qs"))
+      
+  # does the predicted count of y_hat match that in the data?
+      is.ppc.bar <- ppc_bars(y = mod.data$y, as_draws_matrix(y_hat_samps))+xlab("Survival Classifcation (In-sample)")
+      oos.ppc.bar <- ppc_bars(y = mod.data$ytest, as_draws_matrix(y_rep_samps))+xlab("Survival Classifcation (out-of-sample)")
+      combined.bar <- cowplot::plot_grid( is.ppc.bar, oos.ppc.bar, align = "hv")
+      cowplot::save_plot(paste0(output.dir, "SPCD_stanoutput_cmdstan/images/post_pred_y_SPCD_", spcd, "_", weighting, ".png"), 
+                         plot = combined.bar, 
+                         bg = "white")
+      rm(is.ppc.bar, oos.ppc.bar, combined.bar)
+      
+      
+      cat(paste0("estimating AUC and confusion matrix on weighted posterior draws for ", spcd, "\n"))
+      # calculate AUC for each draw:------
+      AUC.is.samples.df  <- apply(pSurv_hat_samps, 1, function(p) as.numeric(pROC::auc(actuals, p, quiet = TRUE)))
+      AUC.oos.samples.df <- apply(pSurv_rep_samps, 1, function(p) as.numeric(pROC::auc(actuals.oos, p, quiet = TRUE)))
+      #rm(pSurv_hat_samps, pSurv_rep_samps, y_hat.quant, y_rep.quant, pSurv_hat.quant, pSurv_rep.quant); gc()
+      
+      preds.is.class <- y_hat_samps == 1
+      confusion.is_draws <- data.frame(
+        TP_draws = rowSums(preds.is.class[, actuals == 1, drop = FALSE]),
+        FP_draws = rowSums(preds.is.class[, actuals == 0, drop = FALSE]),
+        TN_draws = rowSums(!preds.is.class[, actuals == 0, drop = FALSE]),
+        FN_draws = rowSums(!preds.is.class[, actuals == 1, drop = FALSE])
+      ) %>%
+        mutate(`True survival rate` = TP_draws / (TP_draws + FN_draws),
+               `True mortality rate` = TN_draws / (TN_draws + FP_draws),
+               model.number = "BMA", 
+               type = "in-sample",
+               model.type = weighting, 
+               SPCD = spcd)
+      
+      preds.oos.class <- y_rep_samps == 1
+      confusion.oos_draws <- data.frame(
+        TP_draws = rowSums(preds.oos.class[, actuals.oos == 1, drop = FALSE]),
+        FP_draws = rowSums(preds.oos.class[, actuals.oos == 0, drop = FALSE]),
+        TN_draws = rowSums(!preds.oos.class[, actuals.oos == 0, drop = FALSE]),
+        FN_draws = rowSums(!preds.oos.class[, actuals.oos == 1, drop = FALSE])
+      ) %>%
+        mutate(`True survival rate` = TP_draws / (TP_draws + FN_draws),
+               `True mortality rate` = TN_draws / (TN_draws + FP_draws),
+               model.number = "BMA", 
+               type = "out-of-sample",
+               model.type = "weighting", 
+               SPCD = spcd)
+      
+      confusion.is_draws$AUC  <- AUC.is.samples.df
+      confusion.oos_draws$AUC <- AUC.oos.samples.df
+      AUC.confusion_draws <- rbind(confusion.is_draws, confusion.oos_draws)
+      
+      qs2::qs_save(AUC.confusion_draws,
+                   paste0(output.dir, "SPCD_stanoutput_cmdstan/AUC/AUC_draws_SPCD_", spcd, "_", weighting, ".qs"))
+}
 
-# get species in and out of sample y data to compare to:
-load(paste0("SPCD_standata_general_full_standardized_v3/", "SPCD_", spcd, "remper_correction_0.5model_9.Rdata"))
-length(mod.data$y)
+# run for all of the species
+process_bma_posterior_pSurv_y(spcd = 261,
+                              weighting = "stacking_wts",
+                              N = 4000)
 
-
-# set up plan for each species once, then feed it inot the stack_y_species
-weights_i <- load_species_weights(spcd, weighting)
-plan <- post_draw_plan(spcd, weights_i, N)
-
-psurv_hat <- stack_y_species(spcd = spcd, 
-                             y_type = "pSurv_hat", 
-                             N = 4000, 
-                             y_plan = plan)
-psurv_rep <- stack_y_species(spcd = spcd, 
-                             y_type = "pSurv_rep", 
-                             N = 4000, 
-                             y_plan = plan)
-
-y_hat <- stack_y_species(spcd = spcd, 
-                         y_type = "y_hat", 
-                         N = 4000, 
-                         y_plan = plan)
-
-y_rep <- stack_y_species(spcd = spcd, 
-                             y_type = "y_rep", 
-                             N = 4000, 
-                             y_plan = plan)
-y_rep_samps <- as_draws_df(y_rep$draws)#%>% rename_variables(new_name = old_name)
-y_rep_samps <- as_draws_df(y_rep$draws)
-
-qs2::qs_save(y_rep_samps,     paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/y_rep_samps_SPCD_", SPCD.id, "_", weighting, ".qs"))
-qs2::qs_save(y_hat_samps,     paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/y_hat_samps_SPCD_", SPCD.id, "_", weighting, ".qs"))
-qs2::qs_save(pSurv_rep_samps, paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/pSurv_rep_samps_SPCD_", SPCD.id, "_", weighting, ".qs"))
-qs2::qs_save(pSurv_hat_samps, paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/pSurv_hat_samps_SPCD_", SPCD.id, "_", weighting, ".qs"))
-
-
-
-####################################################################################
-# 
-stack_species_preds <- function(spcd, 
+for(s in 17:1){
+  
+  process_bma_posterior_pSurv_y(spcd = spp.table$SPCD[s],
                                 weighting = "stacking_wts",
-                                focal_vars = c("pSurv_hat", "pSurv_rep"), 
-                                N = 4000) {
-  
-  
-  weights_i <- load_species_weights(spcd, weighting)
-  plan <- post_draw_plan(spcd, weights_i, N = N) # gives the indices for which draw rows we should extract from each model 
-  
-  # apply the curve over all of the species
-  tree_post_preds <- lapply(focal_vars, function(fv) weight_posteriors(spcd, fv, plan, weighting))
-  names(tree_post_preds) <- focal_vars
-  tree_post_preds
+                                N = 4000)
 }
 
 
-
-
+# # some additional statistics we could do---
+# proportion_surv_interval <- colSums(y_hat_samps)/4000
+# # plot proportion that survive over the remper histograms by dead or alive
+# hat.summary <- data.frame(y_obs = mod.data$y, 
+#                           pred_proportion_surv = proportion_surv_interval, 
+#                           pSurv_annual.med = apply(pSannual_hat, 2, median), 
+#                           pSurv_annual.05.ci.lo = apply(pSannual_hat, 2, function(x) quantile(x,0.05)), 
+#                           pSurv_annual.95.ci.hi = apply(pSannual_hat, 2, function(x) quantile(x,0.95)), 
+#                           pSurv_annual.25.ci.lo = apply(pSannual_hat, 2, function(x) quantile(x, 0.25)), 
+#                           pSurv_annual.75.ci.hi = apply(pSannual_hat, 2, function(x) quantile(x,0.75)))#
+# hat.summary|>
+#   ggplot()+geom_density(aes(pSurv_annual.med^10, fill = y_obs, group = y_obs))
+# 
+# hat.summary|>
+#   ggplot()+geom_density(aes(pred_proportion_surv, fill = y_obs, group = y_obs))
+# 
+# confusion_mat_pSurv <- function(pSurv, yObs, cutoff = 0.5){
+#   
+#   pSurv_thresh <- pSurv >= cutoff
+#   
+#   data.frame(
+#     TP_draws = rowSums(pSurv_thresh[, yObs == 1, drop = FALSE]),
+#     FP_draws = rowSums(pSurv_thresh[, yObs == 0, drop = FALSE]),
+#     TN_draws = rowSums(!pSurv_thresh[, yObs == 0, drop = FALSE]),
+#     FN_draws = rowSums(!pSurv_thresh[, yObs == 1, drop = FALSE])
+#   )%>%
+#     summarise(TP_draws_tot = sum(TP_draws), 
+#               FP_draws_tot = sum(FP_draws), 
+#               TN_draws_tot = sum(TN_draws), 
+#               FN_draws_tot = sum(FN_draws))%>%
+#     mutate(`True survival rate` = TP_draws_tot / (TP_draws_tot + FN_draws_tot),
+#            `True mortality rate` = TN_draws_tot / (TN_draws_tot + FP_draws_tot),
+#            `Total Accuracy` = (TP_draws_tot + TN_draws_tot)/(TP_draws_tot + TN_draws_tot + FN_draws_tot + FP_draws_tot), 
+#            prob_cutoff = cutoff
+#     )
+#   
+# }
+# confusion_mat_pSurv(pSurv = pSurv_rep_samps, 
+#                     yObs = mod.data$ytest, 
+#                     cutoff = 0.5)
+# 
+# 
+# 
+# 
