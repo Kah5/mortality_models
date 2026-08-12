@@ -1138,7 +1138,7 @@ calculate_state_county_rates <- function(k, SPCD.id, model.type){
                     pred_M_expn_5.ci.lo = quantile(Pred_mort_rate_expn, 0.05, na.rm =TRUE), 
                     pred_M_expn_95.ci.hi = quantile(Pred_mort_rate_expn, 0.95, na.rm =TRUE),
                     pred_M_expn_25.ci.lo = quantile(Pred_mort_rate_expn, 0.25, na.rm =TRUE), 
-                    pred_M_expn_75.ci.hi = quantile(Pred_mort_rate_expn, 0.75, na.rm =TRUE))
+                    pred_M_expn_75.ci.hi = quantile(Pred_mort_rate_expn, 0.75, na.rm =TRUE), .groups = "drop")
         
      
         # save the county-level outputs for each species:
