@@ -5,6 +5,7 @@ library(bayesplot)
 library(qs2)
 library(jsonlite)
 library(pROC)
+library(FIESTA)
 color_scheme_set("brightblue")
 # script to read in cmdstan model outputs, generate model assessement and comparisons
 
@@ -199,6 +200,9 @@ all_diagnostics |>
   theme_bw(base_size = 12)+ylab("Core Hours for Sampling (4000 draws)")+xlab("Model")+
   theme(panel.background = element_blank())
 
+ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Core_hours_all_models.png"), 
+       height = 7, width = 10)
+
 # standardized to 500 warmup samples 
 all_diagnostics |>
   ggplot()+geom_bar(aes(x = model.number, y = (warmup_core_hours/total_warmup)*2000, fill = model.type), stat = "identity", position = "dodge")+
@@ -333,7 +337,7 @@ max(LOO_ELPD.df$percent.bad)
 
 # Order Species common names by from most to least abundant
 LOO_ELPD.df$COMMON_NAME <- FIESTA::ref_species[match(LOO_ELPD.df$SPCD, FIESTA::ref_species$SPCD),]$COMMON_NAME
-LOO_ELPD.df$COMMON_NAME <- factor(LOO_ELPD.df$COMMON_NAME, levels = unique(nspp$COMMON_NAME))
+LOO_ELPD.df$COMMON_NAME <- factor(LOO_ELPD.df$COMMON_NAME, levels = unique(nspp$COMMON))
 LOO_ELPD.df$model.full <- paste(LOO_ELPD.df$model.name, LOO_ELPD.df$model.type)
 
 # save LOO_ELPD.df 
@@ -346,8 +350,9 @@ LOO_ELPD.df %>%
   mutate(elpd_diff_sig = ifelse(elpd_se_ratio >= 2, "ELPD_diff >= 2 SE", 
                                 ifelse(elpd_se_ratio <2, "ELPD_diff < 2 SE", "Best-fit")))%>%
   mutate(elpd_diff_sig = ifelse(is.na(elpd_diff_sig), "Best-fit ELPD", elpd_diff_sig))|>
-  ggplot()+geom_pointrange(aes(x = model.full, y = elpd_diff, ymin = elpd_diff+se_diff, ymax = elpd_diff-se_diff, color = elpd_diff_sig))+
-  facet_wrap(~COMMON_NAME, scales = "free_y")+theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust =0.5))
+    ggplot()+geom_pointrange(aes(x = model.full, y = elpd_diff, ymin = elpd_diff+se_diff, ymax = elpd_diff-se_diff, color = elpd_diff_sig))+
+      facet_wrap(~COMMON_NAME, scales = "free_y")+
+      theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust =0.5))
 
 # Plot of ELPD differences vs model weights (BMA + bootstrapping)
 LOO_ELPD.df %>%
@@ -395,17 +400,19 @@ LOO_ELPD.df |>  ggplot()+
 
 ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Species_model_BMA_weights.png"))
 
-
+# plot up ELP by model with uncertainty
+LOO_ELPD.df$model.type <- factor(LOO_ELPD.df$model.type, levels = c( "Species", "Hierarchical"))
 LOO_ELPD.df |>  ggplot()+
   geom_tile(aes(x = model.full, y = COMMON_NAME, fill = stacking_wts))+
   theme_minimal()+
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust =0.5))+
   scale_fill_distiller(palette = "YlGnBu", direction = 1, name = "Stacking Weight")+
-  ylab("Species")+xlab("Model")+facet_wrap(~model.type, scales = "free")
+  ylab("Species")+xlab("Model")+facet_wrap(~model.type, scales = "free_x")
 
 ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Species_model_stacking_weights.png"))
 
-# plot up ELP by model with uncertainty
+
+
 LOO_ELPD.df |>  ggplot()+
   geom_pointrange(aes(x = model.name, y = elpd_loo, ymin = elpd_loo - se_elpd_loo, ymax = elpd_loo+ se_elpd_loo, color = model.type), position = position_dodge(width = 1))+
   theme_minimal()+
@@ -428,6 +435,20 @@ ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/ELPD_diffe
        height = 7, width = 10)
 
 
+LOO_ELPD.df %>% mutate(elpd_diff_sig = ifelse(elpd_se_ratio >= 4, "ELPD_diff >= 4 SE", 
+                                              ifelse(elpd_se_ratio <4, "ELPD_diff < 4 SE", "Best-fit")))%>%
+  mutate(elpd_diff_sig = ifelse(is.na(elpd_diff_sig), "Best-fit ELPD", elpd_diff_sig)) |>  ggplot()+
+  geom_pointrange(aes(x = model.name, y = elpd_diff, ymin = elpd_diff - se_diff, ymax = elpd_diff + se_diff, shape = model.type, color = elpd_diff_sig), position = position_dodge(width = 1))+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust =0.5))+xlab("Model")+
+  facet_wrap(~COMMON_NAME, scales = "free_y") +
+  ylab("ELPD Difference (+/- SE difference)")+
+  scale_color_manual(values = c("ELPD_diff >= 4 SE" = "lightgrey", 
+                                "ELPD_diff < 4 SE" = "black", 
+                                "Best-fit ELPD" = "red"))
+ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/ELPD_differences_all_models_4SE.png"), 
+       height = 7, width = 10)
+
 LOO_ELPD.df %>% mutate(elpd_diff_sig = ifelse(elpd_se_ratio >= 2, "ELPD_diff >= 2 SE", 
                                               ifelse(elpd_se_ratio <2, "ELPD_diff < 2 SE", "Best-fit")))%>%
   mutate(elpd_diff_sig = ifelse(is.na(elpd_diff_sig), "Best-fit ELPD", elpd_diff_sig)) |>  ggplot()+
@@ -445,9 +466,24 @@ ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Stacking_w
 # get auc results ---
 
 AUC_summarise_SPCD <- function(SPCD.id){
-  spp.AUC.files <- paste0(output.dir,"SPCD_stanoutput_cmdstan/AUC/AUC_draws_mort_model_", 1:9, 
-                          "_SPCD_", SPCD.id, "_remper_correction_0.5_niter_1000_nchain_4.qs")
-  hierarchical.AUC.files <- paste0(output.dir,"SPCD_stanoutput_cmdstan/AUC/AUC_draws_SPCD_",SPCD.id,"_hierarchical_mort_model_",1:6,"_niter_1000_nchain_4",".qs")
+  
+  # all file names for species models and hierarchical models
+  all.species.files <- list.files(path = paste0(output.dir,"SPCD_stanoutput_cmdstan/AUC/"), 
+                                  pattern ="AUC_draws_mort_model_", full.names = T)
+  
+  all.Hierarchical.files <- list.files(path = paste0(output.dir,"SPCD_stanoutput_cmdstan/AUC/"), 
+                                       pattern ="_hierarchical_mort_model_", full.names = T)
+  
+  # get only the species we are looking for...the paste0("_", SPCD.id, "(_|\\.)") ensures we dont read in 129 for spcd == 12
+  spp.AUC.files <- grep( paste0("_", SPCD.id, "(_|\\.)"),  
+                         all.species.files, 
+                         value = TRUE, 
+                         perl = TRUE)
+  hierarchical.AUC.files <-   grep( paste0("_", SPCD.id, "(_|\\.)"),  
+                                    all.Hierarchical.files, 
+                                    value = TRUE, 
+                                    perl = TRUE)
+ 
   all.AUC.files <- c(spp.AUC.files, hierarchical.AUC.files)
   
   AUC_results_all <- lapply(all.AUC.files, qs_read)
@@ -472,7 +508,7 @@ AUC_summarise_SPCD <- function(SPCD.id){
 
 AUC.df <- do.call(rbind, lapply(nspp$SPCD, AUC_summarise_SPCD))
 AUC.df$COMMON_NAME <- FIESTA::ref_species[match(AUC.df$SPCD, FIESTA::ref_species$SPCD),]$COMMON_NAME
-AUC.df$COMMON_NAME <- factor(AUC.df$COMMON_NAME, levels = unique(nspp$COMMON_NAME))
+AUC.df$COMMON_NAME <- factor(AUC.df$COMMON_NAME, levels = unique(nspp$COMMON))
 
 
 AUC.df %>% filter(type == "in-sample")|> 
@@ -485,7 +521,7 @@ AUC.df %>% filter(type == "out-of-sample")|>
 
 AUC.df %>% filter(type == "in-sample")|> 
   ggplot()+geom_pointrange(aes(x = as.character(model.number), y = AUC_median, ymin = AUC_ci.lo, ymax = AUC_ci.hi, shape = model.type, color = model.type), position = position_dodge(width = 1))+
-  facet_wrap(~COMMON_NAME, scales = "free_y")+theme_bw()+
+  facet_wrap(~COMMON_NAME)+theme_bw()+
   ylab("In-sample AUC score")+
   xlab("Model Number")
 
@@ -494,7 +530,7 @@ ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/AUC_is_all
 
 AUC.df %>% filter(type == "out-of-sample")|> 
   ggplot()+geom_pointrange(aes(x = as.character(model.number), y = AUC_median, ymin = AUC_ci.lo, ymax = AUC_ci.hi, shape = model.type, color = model.type), position = position_dodge(width = 1))+
-  facet_wrap(~COMMON_NAME, scales = "free_y")+theme_bw()+
+  facet_wrap(~COMMON_NAME)+theme_bw()+
   ylab("Held-out AUC score")+
   xlab("Model Number")
 
@@ -502,11 +538,11 @@ ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/AUC_oos_al
        height = 7, width = 10)
 
 AUC.df %>% filter(type == "out-of-sample") |> 
-  ggplot()+geom_pointrange(aes(x = as.character(model.number), y = True_surv_rate, ymin = True_surv_rate_ci.lo, ymax = True_surv_rate_ci.hi))+
+  ggplot()+geom_pointrange(aes(x = as.character(model.number), y = True_surv_rate, ymin = True_surv_rate_ci.lo, ymax = True_surv_rate_ci.hi,shape = model.type, color = model.type), position = position_dodge(width = 1))+
   facet_wrap(~COMMON_NAME, scales = "free_y")
 
 AUC.df %>% filter(type == "out-of-sample") |> 
-  ggplot()+geom_pointrange(aes(x = as.character(model.number), y = True_mort_rate, ymin = True_mort_rate_ci.lo, ymax = True_mort_rate_ci.hi))+
+  ggplot()+geom_pointrange(aes(x = as.character(model.number), y = True_mort_rate, ymin = True_mort_rate_ci.lo, ymax = True_mort_rate_ci.hi,shape = model.type, color = model.type), position = position_dodge(width = 1))+
   facet_wrap(~COMMON_NAME, scales = "free_y")
 
 
@@ -521,7 +557,10 @@ AUC.df %>% filter(type == "in-sample") |>
 # link up AUC scores with the ELPD and weights for comparisons
 
 AUC.oos.df <- AUC.df %>% filter(type == "out-of-sample")
-AUC.is.df <- AUC.df %>% filter(type == "out-of-sample")
+AUC.is.df <- AUC.df %>% filter(type == "in-sample")
+
+AUC.oos.df |>
+  ggplot()+geom_bar(aes( x= model.number, fill = SPCD))
 
 OOS.AUC.ELPD.df <- left_join(LOO_ELPD.df %>% mutate(model.number = as.numeric(model.number)),AUC.oos.df)
 IS.AUC.ELPD.df <- left_join(LOO_ELPD.df %>% mutate(model.number = as.numeric(model.number)),AUC.is.df)
@@ -538,11 +577,7 @@ IS.AUC.ELPD.df <- IS.AUC.ELPD.df %>%
 
 
 
-ggplot(data = OOS.AUC.ELPD.df)+
-  geom_pointrange(aes(x = model.full, y = AUC_median, ymin = AUC_ci.lo, ymax = AUC_ci.hi))+
-  facet_wrap(~COMMON_NAME, scales = "free")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))+
-  ylab("AUC")+xlab("")
+
 
 
 ggplot(data = OOS.AUC.ELPD.df)+
@@ -561,19 +596,22 @@ ggplot(data = OOS.AUC.ELPD.df)+
 OOS.AUC.ELPD.df <- OOS.AUC.ELPD.df%>%left_join(.,
                                                OOS.AUC.ELPD.df %>% group_by(SPCD, COMMON_NAME)%>%
                                                  mutate(max.AUC = max(AUC_median,na.rm = TRUE))%>%
-                                                 filter(AUC_median == max.AUC)%>% select(SPCD, COMMON_NAME, type, AUC_median, AUC_ci.lo, AUC_ci.hi)%>%
+                                                 filter(AUC_median == max.AUC)%>% 
+                                                 select(SPCD, COMMON_NAME, type, AUC_median, AUC_ci.lo, AUC_ci.hi)%>%
                                                  rename("bf_AUC"= "AUC_median", 
-                                                        "bf_AUC.ci.lo"= "AUC_ci.lo", 
-                                                        "bf_AUC_ci.hi"= "AUC_ci.hi")
-)%>%
+                                                        "bf_AUC_ci.lo"= "AUC_ci.lo", 
+                                                        "bf_AUC_ci.hi"= "AUC_ci.hi"))%>%
+
   mutate(AUC_sig = ifelse(AUC_median == bf_AUC, "Best-fit AUC",
-                          ifelse(AUC_ci.hi > bf_AUC.ci.lo, "overlapping CI", "non-overlapping CI")))
+                          ifelse(AUC_ci.lo <= bf_AUC_ci.hi & AUC_ci.hi >= bf_AUC_ci.lo,
+                                 "overlapping CI", "non-overlapping CI")))
 
 
 IS.AUC.ELPD.df <- IS.AUC.ELPD.df%>%left_join(.,
                                              IS.AUC.ELPD.df %>% group_by(SPCD, COMMON_NAME)%>%
                                                mutate(max.AUC = max(AUC_median,na.rm = TRUE))%>%
-                                               filter(AUC_median == max.AUC)%>% select(SPCD, COMMON_NAME, type, AUC_median, AUC_ci.lo, AUC_ci.hi)%>%
+                                               filter(AUC_median == max.AUC)%>% 
+                                               select(SPCD, COMMON_NAME, type, AUC_median, AUC_ci.lo, AUC_ci.hi)%>%
                                                rename("bf_AUC"= "AUC_median", 
                                                       "bf_AUC.ci.lo"= "AUC_ci.lo", 
                                                       "bf_AUC_ci.hi"= "AUC_ci.hi")
@@ -595,6 +633,15 @@ ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Species_mo
        height = 7, width = 10)
 
 
+OOS.AUC.ELPD.df |>
+  ggplot()+
+  geom_bar(aes(x = model.name, fill =elpd_diff_sig, group = model.type), stat = "identity")+
+  #facet_wrap(~COMMON_NAME, scales = "free")+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))+
+  ylab("Out-of-Sample AUC")+
+  facet_wrap(~COMMON_NAME, scales = "free_y")
+
 # in-sample AUC, colored by best fit elpd
 IS.AUC.ELPD.df|>
   ggplot()+
@@ -604,8 +651,10 @@ IS.AUC.ELPD.df|>
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))+
   ylab("Out-of-Sample AUC")+
   facet_wrap(~COMMON_NAME, scales = "free_y")
-ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Species_model_AUC_IS.png"), 
+ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Species_model_AUC_IS_elpd.png"), 
        height = 7, width = 10)
+
+
 
 
 OOS.AUC.ELPD.df|>
@@ -614,18 +663,19 @@ OOS.AUC.ELPD.df|>
   
   theme_bw()+
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))+
-  ylab("Out-of-Sample AUC")+
   facet_wrap(~COMMON_NAME, scales = "free_y")
 
-IS.AUC.ELPD.df %>% select(model, COMMON_NAME, AUC_sig)%>%
-  rename("IS_AUC_sig"= "AUC_sig")%>%left_join(.,OOS.AUC.ELPD.df) %>% select(model, COMMON_NAME, IS_AUC_sig, AUC_sig, elpd_diff_sig)%>%
+IS.AUC.ELPD.df %>% select(model, model.name, model.type, COMMON_NAME, AUC_sig)%>%
+  rename("IS_AUC_sig"= "AUC_sig")%>%
+  left_join(.,OOS.AUC.ELPD.df) %>% 
+  select(model, model.name, model.type, COMMON_NAME, IS_AUC_sig, AUC_sig, elpd_diff_sig)%>%
   pivot_longer( cols = c("AUC_sig","IS_AUC_sig", "elpd_diff_sig"))%>%
   mutate(Comparison.stat = ifelse(name %in% "AUC_sig", "out-of-sample AUC", 
                                   ifelse(name %in% "IS_AUC_sig","in-sample AUC","ELPD-diff")), 
          Cat.signficance = ifelse(value %in% c("Best-fit ELPD", "Best-fit AUC"), "Best-fit", 
                                   ifelse(value %in% c("overlapping CI", "ELPD_diff < 2 SE"), "Overlapping with Best-fit", "Non-overlapping")))|>
   ggplot()+
-  geom_tile(aes(y = Comparison.stat, x = model.full, fill = Cat.signficance ))+
+  geom_tile(aes(y = Comparison.stat, x = model.name, fill = Cat.signficance ), color = "white")+
   
   theme_bw()+
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))+
@@ -633,80 +683,341 @@ IS.AUC.ELPD.df %>% select(model, COMMON_NAME, AUC_sig)%>%
                                "Overlapping with Best-fit" = "red", 
                                "Non-overlapping"= "lightgrey"
   ), name = "Significance")+
-  facet_wrap(~COMMON_NAME)+
-  ylab("Model Comparison Statistic")
+  facet_grid(vars(COMMON_NAME),vars(model.type), space = "free_y")+
+  ylab("Model Comparison Statistic")+
+  theme(strip.text.y = element_text(angle = 0))
 
-ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Species_model_AUC_ELPD_comparison_tile.png"))
+ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Species_model_AUC_ELPD_comparison_tile.png"), 
+       width = 7, height = 15)
+
+OOS.AUC.ELPD.df |>
+  group_by(model.name, model.type) %>% filter(type %in% "out-of-sample")%>% 
+  summarise(n_ELPD_bf = sum(elpd_diff_sig %in% "Best-fit ELPD"), 
+            n_AUC_bf = sum(AUC_sig %in% "Best-fit AUC"))
+
 ##########################################################################
 # Compare beta estimates -----------
+# for each species, load in the betas and alphas. Highlight best fit model based on ELPD_difference and AUC scores
 
+betas.heir <- list.files(paste0(output.dir, "SPCD_stanoutput_cmdstan/betas/"), pattern = "hierarchical_mort_model_", full.names = T)
+
+beta_sumary_df <- do.call(rbind, lapply(1:9, function(i){
+  
+
+  ubetas <- qs2::qs_read(betas.heir[i]) %>% subset_draws(., "u_beta")%>%  summarise_draws() %>% mutate(model.number = i) %>% 
+    mutate(param = "u_beta")
+  
+  mu_beta <- qs2::qs_read(betas.heir[i]) %>% subset_draws(., "mu_beta")%>%  summarise_draws() %>% mutate(model.number = i) %>% 
+    mutate(param = "mu_beta")
+  
+  alpha_spp <- qs2::qs_read(betas.heir[i]) %>% subset_draws(., "alpha_SPP")%>%  summarise_draws() %>% mutate(model.number = i) %>% 
+    mutate(param = "alpha_SPP")
+  
+  mu_alpha = qs2::qs_read(betas.heir[i]) %>% subset_draws(., "alpha_SPP")%>%  summarise_draws() %>% mutate(model.number = i) %>% 
+    mutate(param = "mu_alpha" )
+  rbind(ubetas, mu_beta, alpha_spp, mu_alpha)
+})
+)
+
+u_betas <- beta_sumary_df %>% filter(param %in% "u_beta")
+
+u_beta_names <- data.frame(variable = unique(u_betas$variable), 
+                           SPP = rep(1:17, 78),
+                           cov.number = rep(1:78, each = 17))
+
+
+u_betas_alpha.quant <- u_betas %>% rename("ci.lo"="q5", "ci.hi" = "q95")%>% left_join(., u_beta_names)%>% left_join(., spp.table)
+
+u_betas_alpha.quant$Covariate <-  u_betas_alpha.quant$variable
+# get overlapping zero to color the error bars
+u_betas_alpha.quant$`significance` <- ifelse(u_betas_alpha.quant$ci.lo < 0 & u_betas_alpha.quant$ci.hi < 0, "significant", 
+                                             ifelse(u_betas_alpha.quant$ci.lo > 0 & u_betas_alpha.quant$ci.hi > 0, "significant", "overlapping zero"))
+
+
+# 
+# u_betas_alpha.quant%>% group_by(COMMON, SPCD, cov.number) %>% 
+#   summarise(n_pos = sum(median > 0 & significance %in% "significant"), 
+#             n_neg = sum(median < 0 & significance %in% "significant")) %>% View()
+
+
+u_betas_alpha.quant %>% filter(COMMON %in% "sugar maple") |>
+  ggplot()+geom_point(aes(x = model.number, y = median, color = model.number, group = COMMON))+
+  facet_wrap(~cov.number)
+
+ggplot(data = u_betas_alpha.quant, aes(x = Covariate, y = median, color = model.number))+geom_point()+
+  geom_errorbar(data = u_betas_alpha.quant, aes(x = Covariate , ymin = ci.lo, ymax = ci.hi, color = model.number), width = 0.1)+
+  geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+theme_bw(base_size = 10)+
+  theme( axis.text.x = element_text(angle = 65, hjust = 1), panel.grid  = element_blank(), legend.position = "none")+
+  ylab("Effect on survival")+xlab("Parameter")+
+ # scale_color_manual(values = c("overlapping zero"="darkgrey", "significant"="black"))+
+  ggtitle(paste0("Species Model Posterior Estimates"))+
+  facet_wrap(~COMMON)
+
+ggsave(height = 5, width = 10, units = "in",
+       paste0(output.dir, "/images/Estimated_effects_on_survival_",model.name,".png"))
+
+
+ggplot(beta_sumary_df %>% filter(param %in% u_beta))+geom_pointrange(aes(x = model.number, y = median, ymin = q5, ymax = q95))+
+  facet_wrap(~variable)
+
+# get the original, unscaled datasets
+
+SPCD.id <- 97
+load(file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_0.5model_9.Rdata"))
+train.data
+
+colnames(train.data)
 
 
 ##########################################################################
-# TODO: Using model weights (stacking or BMA) to average posterior predictive distributions:
-# do this for parameter inference on alphas and betas (?)
+# Scaling tree-level suvival predictions to plot-level survival/mortality estimates ----
 
-# outline of the code:
-# for each species, pull up the model stacking weights
+post_draws_dir <- paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/")
 
-spcd_loo_weights <- LOO_ELPD.df %>% filter(SPCD == 316)
+# step 1: lookup to deal with misnaming of species pSurv-hat vs rep
+y_type_lookup <- data.frame(
+  actual_y_type = c("y_rep", "y_hat", "pSurv_rep", "pSurv_hat"),
+  heir_y_type = c("y_rep", "y_hat", "pSurv_rep", "pSurv_hat"),
+  
+  SPP_y_type = c("y_hat", "y_rep", "pSurv_hat", "pSurv_rep"),# the mixed up labels for species model
+  data_type = c("out-of-sample", "in-sample", "out-of-sample", "in-sample"),
+  parameter = c("Survival Assignment", "Survival Assignment", "annual survival probability", "annual survival probability")
+)
 
-get_weighted_species_mod_betas <- function(SPCD.id){
-    # loo weights
-    spcd_loo_weights <- LOO_ELPD.df %>% filter(SPCD == SPCD.id)
-    
-    # beta coefficients
-    # 1. weight posterior betas by their model stacking weight
-    # read in all u_betas_for each species:
-    spp_beta.files <- paste0(output.dir,"SPCD_stanoutput_cmdstan/betas/u_beta_alpha_samps_mort_model_", 1:9, 
-                                                     "_SPCD_", SPCD.id, "_remper_correction_0.5_niter_1000_nchain_4.qs")
-    
-    
-    spp_betas <- lapply(spp_beta.files, FUN = qs2::qs_read)
-    
-    
-    spp.stacking.weights <- spcd_loo_weights %>% arrange(model.number) %>% select(model.number, stacking_wts)
-    
-    spp_betas_weighted <- lapply(1:9, FUN = function(x) {
-      (spp_betas[[x]]*spp.stacking.weights[x,]$stacking_wts) %>% as_draws_df() %>% reshape2::melt(id.vars = c(".chain", ".iteration", ".draw"))})
-    
-    spp_betas_weighted_all <- do.call(rbind, spp_betas_weighted) %>% group_by(variable, .chain, .iteration, .draw)%>%
-      summarise(weighted_draw = sum(value, na.rm =TRUE))
-    
-    spp_betas_weighted_summary <- spp_betas_weighted_all %>% ungroup()%>%
-      group_by(variable)%>%
-      summarise(weighted_median = median(weighted_draw, na.rm =TRUE), 
-                weighted_ci_lo.2.5 = quantile(weighted_draw, 0.025, na.rm =TRUE), 
-                weighted_ci_hi.97.5 = quantile(weighted_draw, 0.975, na.rm = TRUE), 
-                weighted_ci_lo.5 = quantile(weighted_draw, 0.05, na.rm =TRUE), 
-                weighted_ci_hi.95 = quantile(weighted_draw, 0.95, na.rm =TRUE))%>%
-      mutate(SPCD = SPCD.id)
-    
-    return(spp_betas_weighted_summary)
+
+# function to read the species paths
+species_path <- function(y_type, spcd, k) {
+  # change the naming of the species files to read in the correct file:
+  y_type_real <- y_type_lookup[match(y_type, y_type_lookup$actual_y_type),]$SPP_y_type
+  
+  # get the filename
+  paste0(post_draws_dir, y_type_real, "_samps_mort_model_", k, "_SPCD_", spcd, "_remper_correction_0.5_niter_1000_nchain_4.qs")
 }
 
-# get for all of the species
-species_mod_weighted_betas <- lapply(unique(nspp$SPCD), get_weighted_species_mod_betas)
-spcd_mod_wt_betas <- do.call(rbind, species_mod_weighted_betas)
+# function to read the hierarchical paths
+hier_path     <- function(y_type, spcd, k) {
+  # just to be consistent with species paths
+  y_type_real <- y_type_lookup[match(y_type, y_type_lookup$actual_y_type),]$heir_y_type
+  paste0(post_draws_dir, y_type_real, "_samps_SPCD_", spcd, "_hierarchical_mort_model_",k,"_niter_1000_nchain_4.qs")
+}
 
 
-# 2. compare across species
-spcd_mod_wt_betas %>%  ungroup()%>% mutate(significant = ifelse(weighted_ci_lo.2.5 < 0 & weighted_ci_hi.97.5 < 0 , "significant", 
-                                                                   ifelse(weighted_ci_lo.2.5 > 0 & weighted_ci_hi.97.5 > 0, "significant", "n.s.")))%>%
-  filter(!variable %in% "alpha_SPP")|>
-  ggplot()+geom_pointrange(aes(x = variable, y = weighted_median, ymin = weighted_ci_lo.2.5, ymax = weighted_ci_hi.97.5, color = significant))+
-  theme(axis.text.x = element_text(angle = 60, hjust = 1, vjust = 1))+facet_wrap(~SPCD, scales = "free_y")
+
+# get posterior matrix reads and outputs these paths
+get_posterior_matrix_renamed <- function(structure,  spcd, y_type, k, spp_index = NULL) {
+  
+  if (structure == "species_only") {
+    full <- qs2::qs_read(species_path( y_type, spcd, k))
+    colnames(full) <- paste0(y_type, "_",1:length(colnames(full))) # rename species column names
+    full
+    
+  } else {
+    full <- qs2::qs_read(hier_path(y_type, spcd, k))        
+    colnames(full) <- paste0(y_type, "_",1:length(colnames(full))) # rename species column names
+    full
+  }
+}
 
 
-# model averaged marginal effects---
-# 1. for each model & species, run generated quantities over a prediction grid 
-#       - annual mortality predictions (p_annual) in response to covariate
-#       - 10 year mortality probability predictions in response to covariate
 
-# 2. multiply draws by stacking weights 
-# p_annual_1 * w_1 + p_annual_2 * w_2 + .....p_annual_9 + w_9
+SPCD.id <- 531
+k <- 7
 
-# 3. Plot up weighted marginal effects by species....
+test.data |> ggplot()+geom_violin(aes(x = M, y = volfac, group = M))
+test.data %>% group_by(S) %>% summarise(nzero = sum(volfac == 0))
+
+# for each species, read in the in-sample and out-of-sample annual probabilities:
+# read in tree_remeas to get the volfac for each represented tree:
+TREE.remeas <- readRDS( "data/unfiltered_TREE.remeas.rds")
+
+all.remeas <- TREE.remeas %>%
+  # do the filtering section
+  filter( exprem > 0 & # if exprem == 0, these could be modeled plots?
+            dbhold >= 5 & # need an initial dbh greater than 5
+            ! remper == 0 & # if remper is listed as zero, filter out
+            DIA_DIFF > 0 & # filter diameter differences >= 0
+            # !status == 3 & # keep the cut trees for this
+            SPCD %in% nspp[1:17,]$SPCD & # filter species in the top 17 of all species
+            !is.na(status) & # filter out trees with no status
+            !is.na(elev)) 
+
+PLOT <- read_delim(paste0(output.dir,"data/formatted_older_matching_plts_PLOT.txt"))
+
+plot_expansions <- PLOT %>% select(PLOT.ID, state, county, pltnum, cndtn, cycle,expacr) %>% distinct()
+
+
+calculate_state_county_rates <- function(k, SPCD.id, model.type){
+        
+        cat("\n",paste0("estimating county and state mortality for: ", SPCD.id,",",model.type, " model ", k))
+          
+        # read in the in-sample and out of sample probability of survival pSurv over remper for each model k
+        load(file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_0.5model_9.Rdata"))
+        
+        pSurv_hat_samps <- get_posterior_matrix_renamed(structure = ifelse(model.type %in% "Species","species_only","Hierarchical"),  
+                             spcd = SPCD.id, 
+                             y_type = "pSurv_hat",
+                             k = k)
+        
+        pSurv_rep_samps <- get_posterior_matrix_renamed(structure = ifelse(model.type %in% "Species","species_only","Hierarchical"),   
+                                                spcd = SPCD.id, 
+                                                y_type = "pSurv_rep",
+                                                k = k)
+        
+        actuals     <- mod.data$y
+        actuals.oos <- mod.data$ytest
+      
+        # convert remper probabilities to annualized probabilities of survival:
+        Remper_matrix <- matrix(mod.data$Remper, nrow = nrow(pSurv_hat_samps), ncol = ncol(pSurv_hat_samps), byrow = TRUE)
+        
+        pSannual_hat <- pSurv_hat_samps^(1/Remper_matrix) 
+        
+        Remperoos_matrix <- matrix(mod.data$Remperoos, nrow = nrow(pSurv_rep_samps), ncol = ncol(pSurv_rep_samps), byrow = TRUE)
+        pSannual_rep <- pSurv_rep_samps^(1/Remperoos_matrix) 
+        
+        qs2::qs_save(pSannual_rep, paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/pSurv_annual_rep_samps_mort_model_",k,"_SPCD_", SPCD.id, "_remper_correction_0.5_niter_1000_nchain_4.qs"))
+        qs2::qs_save(pSannual_hat, paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/pSurv_annual_hat_samp_mort_model_",k,"_SPCD_", SPCD.id, "_remper_correction_0.5_niter_1000_nchain_4.qs"))
+        
+        # convert pSannuals to posterior expected deaths over the remper scale
+        volfac_hat_matrix <- matrix(train.data$volfac, nrow = nrow(pSurv_hat_samps), ncol = ncol(pSurv_hat_samps), byrow = TRUE)
+        volfac_rep_matrix <- matrix(test.data$volfac, nrow = nrow(pSurv_rep_samps), ncol = ncol(pSurv_rep_samps), byrow = TRUE)
+        
+        # calculate the posterior expected # of trees dead based on tree-level volfac
+        Post_Emort_remp_volfac_rep <- (1-pSurv_rep_samps)*volfac_rep_matrix
+        Post_Emort_remp_volfac_hat <- (1-pSurv_hat_samps)*volfac_hat_matrix
+        
+        # calculate matrices of observed exposure for these predictions (#trees/acre * n years) tree-years
+        Exposure_mat_rep <-  volfac_rep_matrix*Remperoos_matrix
+        Exposure_mat_hat <-  volfac_hat_matrix*Remper_matrix
+        
+        
+        
+        # aggregate by states and counties:----------
+        
+        state_county_lookup_train <- train.data %>% mutate(tree.id = 1:length(train.data$state))%>% 
+          select(tree.id, remper, volfac, S, state, county) %>% 
+          mutate(data.type = "in-sample", 
+                 ST_CTY = paste0(state, "_", county))
+        
+        state_county_lookup_test <- test.data %>% mutate(tree.id = 1:length(test.data$state))%>% 
+          select(tree.id, remper, volfac, S, state, county) %>% 
+          mutate(data.type = "out-of-sample", 
+                 ST_CTY = paste0(state, "_", county))
+        
+        # unique states
+        state_ids <- unique(c(state_county_lookup_train$state, state_county_lookup_test$state))
+        
+
+        
+        
+        state_mort_rate_list <- lapply(state_ids, FUN = function(state_cd){
+          
+          # get index for the focal state
+          st_index_train <- state_county_lookup_train$state == state_cd
+          st_index_test <- state_county_lookup_test$state == state_cd
+          
+          st_Pmort_rep <- Post_Emort_remp_volfac_rep[,st_index_test]
+          st_Expos_rep <- Exposure_mat_rep[,st_index_test]
+          st_obs_train <- state_county_lookup_test[st_index_test,]%>% 
+            mutate(Exposure_i = volfac*remper)%>%
+            mutate(Deaths_i = volfac*(1-S))
+          
+          st_Pmort_hat <- Post_Emort_remp_volfac_hat[,st_index_train]
+          st_Expos_hat <- Exposure_mat_hat[,st_index_train]
+          st_obs_test <- state_county_lookup_train[st_index_train,] %>% 
+            mutate(Exposure_i = volfac*remper)%>%
+            mutate(Deaths_i = volfac*(1-S))
+          
+          # combine together:
+          st_mort_rate <- data.frame(E_mort = rowSums(cbind(st_Pmort_hat, st_Pmort_rep)), 
+                                     Exposure = rowSums(cbind(st_Expos_hat, st_Expos_rep)), 
+                                     state = state_cd,
+                                     Exposure_obs = sum(st_obs_test$Exposure_i, st_obs_train$Exposure_i),# calculating the "exposure for each tree" remper* volfac, in tree/acre-years
+                                     Deaths_obs = sum(st_obs_test$Deaths_i, st_obs_train$Deaths_i),#, # calculate the number of deaths per tree observed over remper
+                                     total_obs = length(c(st_obs_test$Deaths_i, st_obs_train$Deaths_i)),
+                                     SPCD = SPCD.id, 
+                                     model.number = k, 
+                                     model.type = model.type) %>%
+            mutate(Obs_mort_rate =  Deaths_obs/Exposure_obs,
+                   Pred_mort_rate = E_mort/Exposure)
+          return(st_mort_rate)
+        })
+        
+        state_mort_df <- do.call(rbind,state_mort_rate_list) 
+
+        # get county level predicted mortality summaries:
+        STCTY_ids <- unique(c(state_county_lookup_train$ST_CTY, state_county_lookup_test$ST_CTY))
+        
+        
+        county_mort_rate_list <- lapply(STCTY_ids, FUN = function(ST_CT_id){
+          
+          # get index for the focal state
+          st_index_train <- state_county_lookup_train$ST_CTY == ST_CT_id
+          st_index_test <- state_county_lookup_test$ST_CTY == ST_CT_id
+          
+          st_Pmort_rep <- Post_Emort_remp_volfac_rep[,st_index_test]
+          st_Expos_rep <- Exposure_mat_rep[,st_index_test]
+          st_obs_train <- state_county_lookup_test[st_index_test,]%>% 
+            mutate(Exposure_i = volfac*remper)%>%
+            mutate(Deaths_i = volfac*(1-S))
+          
+          st_Pmort_hat <- Post_Emort_remp_volfac_hat[,st_index_train]
+          st_Expos_hat <- Exposure_mat_hat[,st_index_train]
+          st_obs_test <- state_county_lookup_train[st_index_train,] %>% 
+            mutate(Exposure_i = volfac*remper)%>%
+            mutate(Deaths_i = volfac*(1-S))
+          
+          # combine together:
+          st_mort_rate <- data.frame(E_mort = rowSums(cbind(st_Pmort_hat, st_Pmort_rep)), 
+                                     Exposure = rowSums(cbind(st_Expos_hat, st_Expos_rep)), 
+                                     ST_CTY = ST_CT_id,
+                                     Exposure_obs = sum(st_obs_test$Exposure_i, st_obs_train$Exposure_i),# calculating the "exposure for each tree" remper* volfac, in tree/acre-years
+                                     Deaths_obs = sum(st_obs_test$Deaths_i, st_obs_train$Deaths_i),#, # calculate the number of deaths per tree observed over remper
+                                     total_obs = length(c(st_obs_test$Deaths_i, st_obs_train$Deaths_i)),
+                                     SPCD = SPCD.id, 
+                                     model.number = k, 
+                                     model.type = model.type) %>%
+            mutate(Obs_mort_rate =  Deaths_obs/Exposure_obs,
+                   Pred_mort_rate = E_mort/Exposure)
+          return(st_mort_rate)
+        })
+        
+        county_mort_df <- do.call(rbind, county_mort_rate_list) 
+        
+        county_mort_summary <- county_mort_df %>%  
+          group_by(SPCD, ST_CTY, model.number, model.type)%>%
+          summarise(obs_M_median = median(Obs_mort_rate), 
+                    n_obs = median(total_obs),
+                    pred_M_median = median(Pred_mort_rate), 
+                    pred_M_5.ci.lo = quantile(Pred_mort_rate, 0.05), 
+                    pred_M_95.ci.hi = quantile(Pred_mort_rate, 0.95),
+                    pred_M_25.ci.lo = quantile(Pred_mort_rate, 0.25), 
+                    pred_M_75.ci.hi = quantile(Pred_mort_rate, 0.75))
+        
+     
+        # save the county-level outputs for each species:
+        # save the samples weighted by volface of each species in the county
+        
+         qs_save(county_mort_df, paste0(
+            output.folder,
+            "SPCD_stanoutput_cmdstan/predicted_mort/ST_CTY_mort_rate_samps_",SPCD.id,"_",model.type, "_", k,".qs"
+          ))
+         qs_save(state_mort_df, paste0(
+           output.folder,
+           "SPCD_stanoutput_cmdstan/predicted_mort/State_mort_rate_samps_",SPCD.id,"_",model.type, "_", k,".qs"
+         ))
+         
+         return(county_mort_summary)
+}
+
+
+# get all county-level estimates for each species:
+species.ests <- hierarchical.ests <- list()
+for(s in 1:length(spp.table$SPCD.id)){
+  
+  species.ests[[s]] <- do.call(rbind, lapply(1:9, FUN  = function(i){calculate_state_county_rates(i, spp.table$SPCD.id[s], "Species")}))
+  hierarchical.ests[[s]] <- do.call(rbind, lapply(1:9, FUN  = function(i){calculate_state_county_rates(i, spp.table$SPCD.id[s], "Hierarchical")}))
+
+}
 
 
 
