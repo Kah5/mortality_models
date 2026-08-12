@@ -374,7 +374,6 @@ read.csv("SPCD_glm_output/GLM_reduced_table.csv") %>%
 # re-make AUC score figure with weighted model summary ----------------------
 
 # get auc results ---
-SPCD.id <- 97
 
 AUC_summarise_SPCD <- function(SPCD.id){
   
@@ -455,35 +454,204 @@ AUC.df %>% filter(type == "out-of-sample")|>
 ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/AUC_oos_all_models_stacking.png"), 
        height = 7, width = 10)
 
+# #####################################################################################
+# # Brier scores-- tree level predictions
+# 
+# # calculate Brier score for each draw:------
+# brier_calc <- function(prob, y_obs){
+#   mean((prob - y_obs)^2)
+# }
+#   
+# # get posterior predictive probabilities:
+# 
+# # 2. Get the actual observed response vector
+# y_obs <- as.numeric(fit$data$your_outcome_variable) - 1 # ensure 0 and 1
+# 
+# # 3. Calculate Brier score for each posterior draw
+# # This yields a distribution of Brier scores capturing parameter uncertainty
+# brier_dist <- apply(p_draws, 2, function(p) mean((p - y_obs)^2))
+# 
+# # 4. Summarize the posterior Brier score (mean and 95% credible interval)
+# mean(brier_dist)
+# quantile(brier_dist, probs = c(0.025, 0.975))
+# 
+# AUC.is.samples.df  <- apply(pSurv_hat_samps, 1, function(p) as.numeric(pROC::auc(actuals, p, quiet = TRUE)))
+# AUC.oos.samples.df <- apply(pSurv_rep_samps, 1, function(p) as.numeric(pROC::auc(actuals.oos, p, quiet = TRUE)))
+# #
+
+
 #####################################################################################
-# Brier scores-- tree level predictions
+# Evaluated predicted vs observed mortality rates estimated for species at the county, state, and overall scale -----
+#scale = c("Regional", "State", "ST_CTY") # naming convention for the files
 
-# calculate Brier score for each draw:------
-brier_calc <- function(prob, y_obs){
-  mean((prob - y_obs)^2)
-}
-  
-# get posterior predictive probabilities:
+scale <- "State"
+SPCD.id <- nspp$SPCD[17]
 
-# 2. Get the actual observed response vector
-y_obs <- as.numeric(fit$data$your_outcome_variable) - 1 # ensure 0 and 1
-
-# 3. Calculate Brier score for each posterior draw
-# This yields a distribution of Brier scores capturing parameter uncertainty
-brier_dist <- apply(p_draws, 2, function(p) mean((p - y_obs)^2))
-
-# 4. Summarize the posterior Brier score (mean and 95% credible interval)
-mean(brier_dist)
-quantile(brier_dist, probs = c(0.025, 0.975))
-
-AUC.is.samples.df  <- apply(pSurv_hat_samps, 1, function(p) as.numeric(pROC::auc(actuals, p, quiet = TRUE)))
-AUC.oos.samples.df <- apply(pSurv_rep_samps, 1, function(p) as.numeric(pROC::auc(actuals.oos, p, quiet = TRUE)))
-#
-
-
-#####################################################################################
-# re-estimate mortality at county-level ----------------------
 # get the predicted mortality rates across the region, weighted by the number of trees each tree represented:
+# list all files for the scale
+summarise_mort_scale <- function(SPCD.id, scale){
+  
+  cat(paste0("reading and summarising ", scale," estimates for SPCD ", SPCD.id, "\n"))
+        all.scale.files <- list.files(paste0(output.folder,"SPCD_stanoutput_cmdstan/predicted_mort/"), 
+                                      pattern = scale, full.names = T)
+        # get the speices files
+        species.scale.files <- grep( paste0("_", SPCD.id, "(_|\\.)"),  
+                                                  all.scale.files, 
+                                                      value = TRUE, 
+                                                      perl = TRUE)
+        
+        
+        scale_summary_df <- do.call(rbind, lapply(species.scale.files, FUN = function(file_scale){
+          # add special summary grouping by scale:
+          
+          # state-level scaling 
+          if(scale %in% "State"){
+            
+          mortality_rate_summary <- qs2::qs_read(file_scale) %>% 
+            group_by(SPCD, model.number, model.type, state)%>%
+            
+            summarise(obs_M_median = median(Obs_mort_rate, na.rm =TRUE), 
+                      n_obs = median(total_obs, na.rm =TRUE),
+                      pred_M_median = median(Pred_mort_rate, na.rm =TRUE), 
+                      pred_M_2.5.ci.lo = quantile(Pred_mort_rate, 0.025, na.rm =TRUE), 
+                      pred_M_97.5.ci.hi = quantile(Pred_mort_rate, 0.975, na.rm =TRUE),
+                      pred_M_5.ci.lo = quantile(Pred_mort_rate, 0.05, na.rm =TRUE), 
+                      pred_M_95.ci.hi = quantile(Pred_mort_rate, 0.95, na.rm =TRUE),
+                      pred_M_25.ci.lo = quantile(Pred_mort_rate, 0.25, na.rm =TRUE), 
+                      pred_M_75.ci.hi = quantile(Pred_mort_rate, 0.75, na.rm =TRUE), 
+                      
+                      obs_M_expn_median = median(Obs_mort_rate_expn, na.rm =TRUE), 
+                      
+                      pred_M_expn_median = median(Pred_mort_rate_expn, na.rm =TRUE), 
+                      pred_M_expn_2.5.ci.lo = quantile(Pred_mort_rate_expn, 0.025, na.rm =TRUE), 
+                      pred_M_expn_97.5.ci.hi = quantile(Pred_mort_rate_expn, 0.975, na.rm =TRUE),
+                      pred_M_expn_5.ci.lo = quantile(Pred_mort_rate_expn, 0.05, na.rm =TRUE), 
+                      pred_M_expn_95.ci.hi = quantile(Pred_mort_rate_expn, 0.95, na.rm =TRUE),
+                      pred_M_expn_25.ci.lo = quantile(Pred_mort_rate_expn, 0.25, na.rm =TRUE), 
+                      pred_M_expn_75.ci.hi = quantile(Pred_mort_rate_expn, 0.75, na.rm =TRUE), 
+                      .groups = "drop")%>% 
+            mutate(scale = "State")
+          return(mortality_rate_summary)
+          }
+          
+          # county-level scaling 
+          if(scale %in% "ST_CTY"){
+            mortality_rate_summary <- qs2::qs_read(file_scale) %>% 
+              group_by(SPCD, model.number, model.type, ST_CTY)%>%
+              
+              summarise(obs_M_median = median(Obs_mort_rate, na.rm =TRUE), 
+                        n_obs = median(total_obs, na.rm =TRUE),
+                        pred_M_median = median(Pred_mort_rate, na.rm =TRUE), 
+                        pred_M_2.5.ci.lo = quantile(Pred_mort_rate, 0.025, na.rm =TRUE), 
+                        pred_M_97.5.ci.hi = quantile(Pred_mort_rate, 0.975, na.rm =TRUE),
+                        pred_M_5.ci.lo = quantile(Pred_mort_rate, 0.05, na.rm =TRUE), 
+                        pred_M_95.ci.hi = quantile(Pred_mort_rate, 0.95, na.rm =TRUE),
+                        pred_M_25.ci.lo = quantile(Pred_mort_rate, 0.25, na.rm =TRUE), 
+                        pred_M_75.ci.hi = quantile(Pred_mort_rate, 0.75, na.rm =TRUE), 
+                        
+                        obs_M_expn_median = median(Obs_mort_rate_expn, na.rm =TRUE), 
+                        
+                        pred_M_expn_median = median(Pred_mort_rate_expn, na.rm =TRUE), 
+                        pred_M_expn_2.5.ci.lo = quantile(Pred_mort_rate_expn, 0.025, na.rm =TRUE), 
+                        pred_M_expn_97.5.ci.hi = quantile(Pred_mort_rate_expn, 0.975, na.rm =TRUE),
+                        pred_M_expn_5.ci.lo = quantile(Pred_mort_rate_expn, 0.05, na.rm =TRUE), 
+                        pred_M_expn_95.ci.hi = quantile(Pred_mort_rate_expn, 0.95, na.rm =TRUE),
+                        pred_M_expn_25.ci.lo = quantile(Pred_mort_rate_expn, 0.25, na.rm =TRUE), 
+                        pred_M_expn_75.ci.hi = quantile(Pred_mort_rate_expn, 0.75, na.rm =TRUE), 
+                        .groups = "drop") %>% 
+              mutate(scale = "County")
+            return(mortality_rate_summary)
+          }
+          
+          # regional overall scaling
+          if(scale %in% "Regional"){
+            mortality_rate_summary <- qs2::qs_read(file_scale) %>% 
+              group_by(SPCD, model.number, model.type)%>%
+              
+              summarise(obs_M_median = median(Obs_mort_rate, na.rm =TRUE), 
+                        n_obs = median(total_obs, na.rm =TRUE),
+                        pred_M_median = median(Pred_mort_rate, na.rm =TRUE), 
+                        pred_M_2.5.ci.lo = quantile(Pred_mort_rate, 0.025, na.rm =TRUE), 
+                        pred_M_97.5.ci.hi = quantile(Pred_mort_rate, 0.975, na.rm =TRUE),
+                        pred_M_5.ci.lo = quantile(Pred_mort_rate, 0.05, na.rm =TRUE), 
+                        pred_M_95.ci.hi = quantile(Pred_mort_rate, 0.95, na.rm =TRUE),
+                        pred_M_25.ci.lo = quantile(Pred_mort_rate, 0.25, na.rm =TRUE), 
+                        pred_M_75.ci.hi = quantile(Pred_mort_rate, 0.75, na.rm =TRUE), 
+                        
+                        obs_M_expn_median = median(Obs_mort_rate_expn, na.rm =TRUE), 
+                        
+                        pred_M_expn_median = median(Pred_mort_rate_expn, na.rm =TRUE), 
+                        pred_M_expn_2.5.ci.lo = quantile(Pred_mort_rate_expn, 0.025, na.rm =TRUE), 
+                        pred_M_expn_97.5.ci.hi = quantile(Pred_mort_rate_expn, 0.975, na.rm =TRUE),
+                        pred_M_expn_5.ci.lo = quantile(Pred_mort_rate_expn, 0.05, na.rm =TRUE), 
+                        pred_M_expn_95.ci.hi = quantile(Pred_mort_rate_expn, 0.95, na.rm =TRUE),
+                        pred_M_expn_25.ci.lo = quantile(Pred_mort_rate_expn, 0.25, na.rm =TRUE), 
+                        pred_M_expn_75.ci.hi = quantile(Pred_mort_rate_expn, 0.75, na.rm =TRUE), 
+                        .groups = "drop") %>% 
+              mutate(scale = "Regional")
+            return(mortality_rate_summary)
+          }
+          
+        })
+        )
+        
+        
+        
+        scale_summary_df$COMMON_NAME <- ref_species[match(scale_summary_df$SPCD, ref_species$SPCD),]$COMMON_NAME
+        return(scale_summary_df)
+
+}
+
+# example usage:
+#summarise_mort_scale(SPCD.id = 97, scale = "ST_CTY")
+
+
+# get rmse for all species models at regional scale
+#rmse <- sqrt(mean((actual - predicted)^2))
+regional_summary_df <- do.call(rbind, lapply(spp.table$SPCD.id, FUN = function(sppcode){summarise_mort_scale(SPCD.id = sppcode, scale = "Regional")}))
+regional_summary_df$COMMON_NAME <- ref_species[match(regional_summary_df$SPCD, ref_species$SPCD),]$COMMON_NAME
+
+regional_summary_df %>% 
+  group_by(COMMON_NAME, model.type, model.number)%>%
+  summarise(RMSE_pct_mort = sqrt(mean((obs_M_expn_median*100 - pred_M_expn_median*100)^2)))|>
+  ggplot()+geom_bar(aes(x = model.number, y = RMSE_pct_mort, group = model.type, fill = model.type), position = "dodge", stat = "identity")+
+  facet_wrap(~COMMON_NAME)
+
+# save summaries:
+qs2::qs_save(regional_summary_df, paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Regional_summary_p_o_mort.qs"))
+
+
+# get state-level summaries
+State_summary_df <- do.call(rbind, lapply(spp.table$SPCD.id, FUN = function(sppcode){summarise_mort_scale(SPCD.id = sppcode, scale = "State")}))
+State_summary_df$COMMON_NAME <- ref_species[match(State_summary_df$SPCD, ref_species$SPCD),]$COMMON_NAME
+# save summaries:
+qs2::qs_save(State_summary_df, paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/State_summary_p_o_mort.qs"))
+
+
+
+# get ST_CTY-level summaries
+ST_CTY_summary_df <- do.call(rbind, lapply(spp.table$SPCD.id, FUN = function(sppcode){summarise_mort_scale(SPCD.id = sppcode, scale = "ST_CTY")}))
+ST_CTY_summary_df$COMMON_NAME <- ref_species[match(ST_CTY_summary_df$SPCD, ref_species$SPCD),]$COMMON_NAME
+# save summaries:
+qs2::qs_save(ST_CTY_summary_df, paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/ST_CTY_summary_p_o_mort.qs"))
+
+# State_summary_df %>% 
+#   group_by(COMMON_NAME, model.type, model.number)%>%
+#   summarise(RMSE_pct_mort = sqrt(mean((obs_M_expn_median*100 - pred_M_expn_median*100)^2)))|>
+#   ggplot()+geom_bar(aes(x = model.number, y = RMSE_pct_mort, group = model.type, fill = model.type), position = "dodge", stat = "identity")+
+#   facet_wrap(~COMMON_NAME)
+
+
+
+# regional_summary_df|>
+#   ggplot()+geom_point(aes(x = obs_M_expn_median, y = pred_M_expn_median, color = model.type))+
+#   geom_errorbar(aes(x = obs_M_expn_median, ymin = pred_M_expn_5.ci.lo, ymax = pred_M_expn_95.ci.hi, color = model.type))+
+#   geom_errorbar(aes(x = obs_M_expn_median, ymin = pred_M_expn_25.ci.lo, ymax = pred_M_expn_75.ci.hi, color = model.type))+
+#   theme_bw()+
+#   facet_grid(~model.number)+
+#   geom_abline(aes(intercept = 0, slope = 1))
+
+
 pMort_region_weighted_samples_list <- list() 
 
 for(i in 17:1){
