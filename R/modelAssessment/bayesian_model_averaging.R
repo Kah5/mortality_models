@@ -13,6 +13,7 @@ library(dplyr)
 library(FIESTA)
 library(qs2)
 library(ggplot2)
+library(tidyverse)
 
 # load some helper functions, including main_effects, int_labels, build_X_grid()
 source("R/modelAssessment/bma_prediction_helpers.R")  
@@ -914,48 +915,373 @@ for(s in 17:1){
                                 N = 4000)
 }
 
+#---------------------------------------------------------------------------------------------------------
+# State, County, Overall scaling of weighted posterior probability of mortality to get mortality rates---
+SPCD.id <- 97
+weighting =  "stacking_wts"
+output.dir = "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
+model.type = "Model Average"
 
-# # some additional statistics we could do---
-# proportion_surv_interval <- colSums(y_hat_samps)/4000
-# # plot proportion that survive over the remper histograms by dead or alive
-# hat.summary <- data.frame(y_obs = mod.data$y, 
-#                           pred_proportion_surv = proportion_surv_interval, 
-#                           pSurv_annual.med = apply(pSannual_hat, 2, median), 
-#                           pSurv_annual.05.ci.lo = apply(pSannual_hat, 2, function(x) quantile(x,0.05)), 
-#                           pSurv_annual.95.ci.hi = apply(pSannual_hat, 2, function(x) quantile(x,0.95)), 
-#                           pSurv_annual.25.ci.lo = apply(pSannual_hat, 2, function(x) quantile(x, 0.25)), 
-#                           pSurv_annual.75.ci.hi = apply(pSannual_hat, 2, function(x) quantile(x,0.75)))#
-# hat.summary|>
-#   ggplot()+geom_density(aes(pSurv_annual.med^10, fill = y_obs, group = y_obs))
-# 
-# hat.summary|>
-#   ggplot()+geom_density(aes(pred_proportion_surv, fill = y_obs, group = y_obs))
-# 
-# confusion_mat_pSurv <- function(pSurv, yObs, cutoff = 0.5){
-#   
-#   pSurv_thresh <- pSurv >= cutoff
-#   
-#   data.frame(
-#     TP_draws = rowSums(pSurv_thresh[, yObs == 1, drop = FALSE]),
-#     FP_draws = rowSums(pSurv_thresh[, yObs == 0, drop = FALSE]),
-#     TN_draws = rowSums(!pSurv_thresh[, yObs == 0, drop = FALSE]),
-#     FN_draws = rowSums(!pSurv_thresh[, yObs == 1, drop = FALSE])
-#   )%>%
-#     summarise(TP_draws_tot = sum(TP_draws), 
-#               FP_draws_tot = sum(FP_draws), 
-#               TN_draws_tot = sum(TN_draws), 
-#               FN_draws_tot = sum(FN_draws))%>%
-#     mutate(`True survival rate` = TP_draws_tot / (TP_draws_tot + FN_draws_tot),
-#            `True mortality rate` = TN_draws_tot / (TN_draws_tot + FP_draws_tot),
-#            `Total Accuracy` = (TP_draws_tot + TN_draws_tot)/(TP_draws_tot + TN_draws_tot + FN_draws_tot + FP_draws_tot), 
-#            prob_cutoff = cutoff
-#     )
-#   
-# }
-# confusion_mat_pSurv(pSurv = pSurv_rep_samps, 
-#                     yObs = mod.data$ytest, 
-#                     cutoff = 0.5)
-# 
-# 
-# 
-# 
+# get plot-level expansion factors
+PLOT <- read_delim(paste0(output.dir,"data/formatted_older_matching_plts_PLOT.txt"))
+
+plot_expansions <- PLOT %>% select(PLOT.ID, state, county, pltnum, cndtn, cycle, expacr, expvol) %>% distinct()
+plot(plot_expansions$expacr, plot_expansions$expvol)
+
+
+# Function: calculate_state_county_rates_BMA----
+# very similar to `calculate_state_county_rates()` in R/modelAssessment/cmdstan_model_assessment.R, but renames weighted files
+calculate_state_county_rates_BMA <- function(SPCD.id, weighting, model.type){
+  
+  cat("\n",paste0("Scaling county and state mortality rates from posteriors: ", SPCD.id,", ",model.type,": ",weighting))
+  
+        # read in pSurv weighted posteriors
+        pSurv_rep_samps <- qs2::qs_read(paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/pSurv_rep_samps_SPCD_", SPCD.id, "_", weighting, ".qs"))
+        pSurv_hat_samps<- qs2::qs_read(paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/pSurv_hat_samps_SPCD_", SPCD.id, "_", weighting, ".qs"))
+        
+        # read in teh model data for this species
+        load(file = paste0("SPCD_standata_general_full_standardized_v3/SPCD_",SPCD.id,"remper_correction_0.5model_9.Rdata"))
+        
+        # set up lookup tables to link training and testing pSurv indices to tree.id, state, county, Survival observations, volfac expansion factors
+        state_county_lookup_train <- train.data %>% mutate(tree.id = 1:length(train.data$state))%>% 
+          left_join(.,plot_expansions, by = join_by(state, county, pltnum, cndtn, PLOT.ID, cycle))%>%
+          select(tree.id, remper, volfac, S, pltnum, state, county, expacr) %>% 
+          mutate(data.type = "in-sample", 
+                 ST_CTY = paste0(state, "_", county))
+        
+        state_county_lookup_test <- test.data %>% mutate(tree.id = 1:length(test.data$state))%>% 
+          left_join(.,plot_expansions, by = join_by(state, county, pltnum, cndtn, PLOT.ID, cycle))%>%
+          select(tree.id, remper, volfac, S, pltnum, state, county, expacr) %>% 
+          mutate(data.type = "out-of-sample", 
+                 ST_CTY = paste0(state, "_", county))
+        
+        
+        # set up matrices for matrix multiplication:
+        # remper-number of years between remeasurements
+        # volfac - trees per acre conversion factor for the tree
+        # expacre - acres represented by the plot in state-level reporting
+        
+        Remper_matrix <- matrix(mod.data$Remper, nrow = nrow(pSurv_hat_samps), ncol = ncol(pSurv_hat_samps), byrow = TRUE)
+        Remperoos_matrix <- matrix(mod.data$Remperoos, nrow = nrow(pSurv_rep_samps), ncol = ncol(pSurv_rep_samps), byrow = TRUE)
+        
+        volfac_hat_matrix <- matrix(train.data$volfac, nrow = nrow(pSurv_hat_samps), ncol = ncol(pSurv_hat_samps), byrow = TRUE)
+        volfac_rep_matrix <- matrix(test.data$volfac, nrow = nrow(pSurv_rep_samps), ncol = ncol(pSurv_rep_samps), byrow = TRUE)
+        
+        # get expacr matrices:
+        Expacr_rep_matrix <- matrix(state_county_lookup_test$expacr, 
+                                    nrow = nrow(pSurv_rep_samps), ncol = ncol(pSurv_rep_samps), byrow = TRUE)
+        
+        Expacr_hat_matrix  <- matrix(state_county_lookup_train$expacr, 
+                                     nrow = nrow(pSurv_hat_samps), ncol = ncol(pSurv_hat_samps), byrow = TRUE)
+        
+        # general mortality rate calculations:
+        
+        # Pred_Mort_rate = Predicted deaths/Exposure
+        # Obs_Mort_rate =  Observed deaths/Exposure
+        # Predicted deaths over the remper at the tree-scale: 
+              # E_mort = (1-pSurv_remper)*volfac or (1-(pSurv_annual^remper))*volfac, if pSurv is annual
+              # units = trees/acre
+        
+        # Observed deaths over the remper at the tree-scale: 
+        # Deaths_i = (1-S)*volfac 
+        # units = trees/acre
+        
+        # Exposure at the tree-scale (assume same for predicted and observed): 
+              # Exposure = remper*volfac 
+              # units = tree-years/acre
+        
+        # calculate the posterior expected # of trees dead based on tree-level volfac
+        Post_Emort_remp_volfac_rep <- (1-pSurv_rep_samps)*volfac_rep_matrix
+        Post_Emort_remp_volfac_hat <- (1-pSurv_hat_samps)*volfac_hat_matrix
+        
+        # calculate matrices of observed exposure for these predictions (#trees/acre * n years) tree-years
+        Exposure_mat_rep <-  volfac_rep_matrix*Remperoos_matrix
+        Exposure_mat_hat <-  volfac_hat_matrix*Remper_matrix
+        
+        
+        # aggregate by states and counties:----------
+        # for aggregation to higher domains (state, county, etc), we need to account for differences in plot designs
+        # using expacre to put everything on a total basis
+        
+        # Pred_Mort_rate = Predicted deaths/Exposure
+        # Obs_Mort_rate =  Observed deaths/Exposure
+        
+        # Predicted deaths over the remper at the tree-scale: 
+        # E_mort = (1-pSurv_remper)*volfac*expacre or (1-(pSurv_annual^remper))*volfac*expacre, if pSurv is annual
+        # units = trees
+        
+        # Observed deaths over the remper at the tree-scale: 
+        # Deaths_i = (1-S)*volfac*expacre 
+        # units = trees
+        
+        # Exposure at the tree-scale (assume same for predicted and observed): 
+        # Exposure = remper*volfac 
+        # units = tree-years
+        
+        # weight posterior mortality rates by expacr for county and state scales
+        # calculate the posterior expected # of trees dead based on tree-level volfac
+        Post_Emort_remp_volfac_expacre_rep <- Expacr_rep_matrix*((1-pSurv_rep_samps)*volfac_rep_matrix)
+        Post_Emort_remp_volfac_expacre_hat <- Expacr_hat_matrix*(1-pSurv_hat_samps)*volfac_hat_matrix
+        
+        # calculate matrices of observed exposure for these predictions (#trees/acre * n years) tree-years
+        Exposure_expacre_mat_rep <-   Expacr_rep_matrix*(volfac_rep_matrix*Remperoos_matrix)
+        Exposure_expacre_mat_hat <-   Expacr_hat_matrix*(volfac_hat_matrix*Remper_matrix)
+        
+        
+        # overall estimates of observed and predicted mortality rates ---  
+        # note this is a bit redundant here because we are not indexing by any group, but we do in functions below, so this is just consistent
+        # calculate tree-level mortality rates
+        # for out of sample data:
+        st_Pmort_rep <- Post_Emort_remp_volfac_rep
+        st_Expos_rep <- Exposure_mat_rep
+        st_obs_train <- state_county_lookup_test%>% 
+          mutate(Exposure_i = volfac*remper)%>% # tree obseved exposure
+          mutate(Deaths_i = volfac*(1-S))%>% # tree observed deaths
+          mutate(Exposure_EXPN_i = Exposure_i*expacr, # tree expanded exposure
+                 Deaths_EXPN_i = Deaths_i*expacr) # tree expanded deaths
+        
+        # for in sample data:
+        st_Pmort_hat <- Post_Emort_remp_volfac_hat
+        st_Expos_hat <- Exposure_mat_hat
+        st_obs_test <- state_county_lookup_train %>% 
+          mutate(Exposure_i = volfac*remper)%>%
+          mutate(Deaths_i = volfac*(1-S)) %>% 
+          mutate(Exposure_EXPN_i = Exposure_i*expacr, 
+                 Deaths_EXPN_i = Deaths_i*expacr)
+        
+        
+        # do the same with expacre weighted values:
+        st_Pmort_rep_EXPN <- Post_Emort_remp_volfac_expacre_rep # expanded predicted mortality
+        st_Expos_rep_EXPN <- Exposure_expacre_mat_rep # expanded exposure matrix
+        
+        
+        st_Pmort_hat_EXPN <- Post_Emort_remp_volfac_expacre_hat
+        st_Expos_hat_EXPN <- Exposure_expacre_mat_hat
+        
+        # # tree-level mortality rates--
+        # we could output this, but we omitting for now
+        # tree_E_M_expn_i <- cbind(st_Pmort_hat_EXPN, st_Pmort_rep_EXPN)
+        # tree_Expos_expn_i <- cbind(st_Expos_hat_EXPN, st_Expos_rep_EXPN)
+        # tree_Pred_mort_expn <- tree_E_M_expn_i/tree_Expos_expn_i
+        # 
+        # 
+        # tree_obs_Expos_expn_i = c(st_obs_train$Exposure_EXPN_i, st_obs_test$Exposure_EXPN_i)# calculating the "exposure for each tree" remper* volfac, in tree/acre-years
+        # tree_obs_Deaths_expn_i= c(st_obs_train$Deaths_EXPN_i, st_obs_test$Deaths_EXPN_i) # calculate the number of deaths per tree observed over remper
+        # 
+        # tree_obs_mort_expn <- tree_obs_Deaths_expn_i/tree_obs_Expos_expn_i
+        # 
+        # tree_mort_rate_summary <- data.frame(Obs_mort_expn = tree_obs_mort_expn, 
+        #                                      Pred_mort_expn.mean = colMeans(tree_Pred_mort_expn))
+        # 
+        # 
+        
+        # Regional mortality rates:
+        OVERALL_mort_rate <- data.frame(E_mort = rowSums(cbind(st_Pmort_hat, st_Pmort_rep)), 
+                                        Exposure = rowSums(cbind(st_Expos_hat, st_Expos_rep)),
+                                        E_mort_expn = rowSums(cbind(st_Pmort_hat_EXPN, st_Pmort_rep_EXPN)), 
+                                        Exposure_expn = rowSums(cbind(st_Expos_hat_EXPN, st_Expos_rep_EXPN)), 
+                                        
+                                        
+                                        Exposure_obs = sum(st_obs_test$Exposure_i, st_obs_train$Exposure_i),# calculating the "exposure for each tree" remper* volfac, in tree/acre-years
+                                        Deaths_obs = sum(st_obs_test$Deaths_i, st_obs_train$Deaths_i),
+                                        
+                                        Exposure_expn_obs = sum(st_obs_test$Exposure_EXPN_i, st_obs_train$Exposure_EXPN_i),# calculating the "exposure for each tree" remper* volfac, in tree/acre-years
+                                        Deaths_expn_obs = sum(st_obs_test$Deaths_EXPN_i, st_obs_train$Deaths_EXPN_i),#, # calculate the number of deaths per tree observed over remper
+                                        total_obs = length(c(st_obs_test$Deaths_i, st_obs_train$Deaths_i)),
+                                        
+                                        SPCD = SPCD.id, 
+                                        model.number = ifelse(weighting %in% "stacking_wts", "Stacked", weighting), 
+                                        model.type = model.type) %>%
+          mutate(Obs_mort_rate =  Deaths_obs/Exposure_obs,
+                 Pred_mort_rate = E_mort/Exposure, 
+                 Obs_mort_rate_expn = Deaths_expn_obs/Exposure_expn_obs, 
+                 Pred_mort_rate_expn = E_mort_expn/Exposure_expn)
+        
+        #ggplot(OVERALL_mort_rate)+geom_histogram(aes(Pred_mort_rate_expn))+geom_vline(aes(xintercept = Obs_mort_rate_expn))
+        
+        
+        # calculate state-level estimates of observed and predicted mortality rates
+        
+        # unique states
+        state_ids <- unique(c(state_county_lookup_train$state, state_county_lookup_test$state))
+        
+        state_mort_rate_list <- lapply(state_ids, FUN = function(state_cd){
+          
+          # get index for the focal state
+          st_index_train <- state_county_lookup_train$state == state_cd
+          st_index_test <- state_county_lookup_test$state == state_cd
+          
+          # use index to get only E_mort, exposure, and observation data from the state of interest
+          st_Pmort_rep <- Post_Emort_remp_volfac_rep[,st_index_test]
+          st_Expos_rep <- Exposure_mat_rep[,st_index_test]
+          st_obs_train <- state_county_lookup_test[st_index_test,]%>% 
+            mutate(Exposure_i = volfac*remper)%>%
+            mutate(Deaths_i = volfac*(1-S))%>% 
+            mutate(Exposure_EXPN_i = Exposure_i*expacr, 
+                   Deaths_EXPN_i = Deaths_i*expacr)
+          
+          st_Pmort_hat <- Post_Emort_remp_volfac_hat[,st_index_train]
+          st_Expos_hat <- Exposure_mat_hat[,st_index_train]
+          st_obs_test <- state_county_lookup_train[st_index_train,] %>% 
+            mutate(Exposure_i = volfac*remper)%>%
+            mutate(Deaths_i = volfac*(1-S)) %>% 
+            mutate(Exposure_EXPN_i = Exposure_i*expacr, 
+                   Deaths_EXPN_i = Deaths_i*expacr)
+          
+          
+          # do the same with expacre weighted values:
+          st_Pmort_rep_EXPN <- Post_Emort_remp_volfac_expacre_rep[,st_index_test]
+          st_Expos_rep_EXPN <- Exposure_expacre_mat_rep[,st_index_test]
+          
+          
+          st_Pmort_hat_EXPN <- Post_Emort_remp_volfac_expacre_hat[,st_index_train]
+          st_Expos_hat_EXPN <- Exposure_expacre_mat_hat[,st_index_train]
+          
+          
+          # combine together:
+          st_mort_rate <- data.frame(E_mort = rowSums(cbind(st_Pmort_hat, st_Pmort_rep)), 
+                                     Exposure = rowSums(cbind(st_Expos_hat, st_Expos_rep)),
+                                     E_mort_expn = rowSums(cbind(st_Pmort_hat_EXPN, st_Pmort_rep_EXPN)), 
+                                     Exposure_expn = rowSums(cbind(st_Expos_hat_EXPN, st_Expos_rep_EXPN)), 
+                                     
+                                     state = state_cd,
+                                     Exposure_obs = sum(st_obs_test$Exposure_i, st_obs_train$Exposure_i),# calculating the "exposure for each tree" remper* volfac, in tree/acre-years
+                                     Deaths_obs = sum(st_obs_test$Deaths_i, st_obs_train$Deaths_i),
+                                     
+                                     Exposure_expn_obs = sum(st_obs_test$Exposure_EXPN_i, st_obs_train$Exposure_EXPN_i),# calculating the "exposure for each tree" remper* volfac, in tree/acre-years
+                                     Deaths_expn_obs = sum(st_obs_test$Deaths_EXPN_i, st_obs_train$Deaths_EXPN_i),#, # calculate the number of deaths per tree observed over remper
+                                     total_obs = length(c(st_obs_test$Deaths_i, st_obs_train$Deaths_i)),
+                                     
+                                     SPCD = SPCD.id, 
+                                     model.number = ifelse(weighting %in% "stacking_wts", "Stacked", weighting),  
+                                     model.type = model.type) %>%
+            mutate(Obs_mort_rate =  Deaths_obs/Exposure_obs,
+                   Pred_mort_rate = E_mort/Exposure, 
+                   Obs_mort_rate_expn = Deaths_expn_obs/Exposure_expn_obs, 
+                   Pred_mort_rate_expn = E_mort_expn/Exposure_expn)
+          return(st_mort_rate)
+        })
+        
+        state_mort_df <- do.call(rbind,state_mort_rate_list) 
+        
+        # get county level predicted mortality summaries:
+        STCTY_ids <- unique(c(state_county_lookup_train$ST_CTY, state_county_lookup_test$ST_CTY))
+        # ST_CT_id <- STCTY_ids[1]
+        
+        county_mort_rate_list <- lapply(STCTY_ids, FUN = function(ST_CT_id){
+          
+          # get index for the focal state
+          st_index_train <- state_county_lookup_train$ST_CTY == ST_CT_id
+          st_index_test <- state_county_lookup_test$ST_CTY == ST_CT_id
+          
+          # calculate tree level expected mortality and exposure 
+          st_Pmort_rep <- Post_Emort_remp_volfac_rep[,st_index_test]
+          st_Expos_rep <- Exposure_mat_rep[,st_index_test]
+          st_obs_train <- state_county_lookup_test[st_index_test,]%>% 
+            mutate(Exposure_i = volfac*remper)%>%
+            mutate(Deaths_i = volfac*(1-S))%>% 
+            mutate(Exposure_EXPN_i = Exposure_i*expacr, 
+                   Deaths_EXPN_i = Deaths_i*expacr)
+          
+          st_Pmort_hat <- Post_Emort_remp_volfac_hat[,st_index_train]
+          st_Expos_hat <- Exposure_mat_hat[,st_index_train]
+          st_obs_test <- state_county_lookup_train[st_index_train,] %>% 
+            mutate(Exposure_i = volfac*remper)%>%
+            mutate(Deaths_i = volfac*(1-S)) %>% 
+            mutate(Exposure_EXPN_i = Exposure_i*expacr, 
+                   Deaths_EXPN_i = Deaths_i*expacr)
+          
+          
+          # do the same with expacre weighted values:
+          st_Pmort_rep_EXPN <- Post_Emort_remp_volfac_expacre_rep[,st_index_test]
+          st_Expos_rep_EXPN <- Exposure_expacre_mat_rep[,st_index_test]
+          
+          
+          st_Pmort_hat_EXPN <- Post_Emort_remp_volfac_expacre_hat[,st_index_train]
+          st_Expos_hat_EXPN <- Exposure_expacre_mat_hat[,st_index_train]
+          
+          
+          
+          # combine together:
+          st_mort_rate <- data.frame(E_mort = rowSums(cbind(st_Pmort_hat, st_Pmort_rep)), 
+                                     Exposure = rowSums(cbind(st_Expos_hat, st_Expos_rep)), 
+                                     E_mort_expn = rowSums(cbind(st_Pmort_hat_EXPN, st_Pmort_rep_EXPN)), 
+                                     Exposure_expn = rowSums(cbind(st_Expos_hat_EXPN, st_Expos_rep_EXPN)), 
+                                     
+                                     
+                                     ST_CTY = ST_CT_id,
+                                     
+                                     Exposure_obs = sum(st_obs_test$Exposure_i, st_obs_train$Exposure_i),# calculating the "exposure for each tree" remper* volfac, in tree/acre-years
+                                     Deaths_obs = sum(st_obs_test$Deaths_i, st_obs_train$Deaths_i),#, # calculate the number of deaths per tree observed over remper
+                                     Exposure_expn_obs = sum(st_obs_test$Exposure_EXPN_i, st_obs_train$Exposure_EXPN_i),# calculating the "exposure for each tree" remper* volfac, in tree/acre-years
+                                     Deaths_expn_obs = sum(st_obs_test$Deaths_EXPN_i, st_obs_train$Deaths_EXPN_i),#, # calculate the number of deaths per tree observed over remper
+                                     
+                                     total_obs = length(c(st_obs_test$Deaths_i, st_obs_train$Deaths_i)),
+                                     SPCD = SPCD.id, 
+                                     model.number = ifelse(weighting %in% "stacking_wts", "Stacked", weighting), 
+                                     model.type = model.type) %>%
+            
+            mutate(Obs_mort_rate =  Deaths_obs/Exposure_obs,
+                   Pred_mort_rate = E_mort/Exposure,
+                   Obs_mort_rate_expn = Deaths_expn_obs/Exposure_expn_obs, 
+                   Pred_mort_rate_expn = E_mort_expn/Exposure_expn)
+          return(st_mort_rate)
+        })
+        
+        county_mort_df <- do.call(rbind, county_mort_rate_list) 
+        
+        county_mort_summary <- county_mort_df %>%  
+          group_by(SPCD, model.number, model.type, ST_CTY)%>%
+          
+          summarise(obs_M_median = median(Obs_mort_rate, na.rm =TRUE), 
+                    n_obs = median(total_obs, na.rm =TRUE),
+                    pred_M_median = median(Pred_mort_rate, na.rm =TRUE), 
+                    pred_M_5.ci.lo = quantile(Pred_mort_rate, 0.05, na.rm =TRUE), 
+                    pred_M_95.ci.hi = quantile(Pred_mort_rate, 0.95, na.rm =TRUE),
+                    pred_M_25.ci.lo = quantile(Pred_mort_rate, 0.25, na.rm =TRUE), 
+                    pred_M_75.ci.hi = quantile(Pred_mort_rate, 0.75, na.rm =TRUE), 
+                    
+                    obs_M_expn_median = median(Obs_mort_rate_expn, na.rm =TRUE), 
+                    
+                    pred_M_expn_median = median(Pred_mort_rate_expn, na.rm =TRUE), 
+                    pred_M_expn_5.ci.lo = quantile(Pred_mort_rate_expn, 0.05, na.rm =TRUE), 
+                    pred_M_expn_95.ci.hi = quantile(Pred_mort_rate_expn, 0.95, na.rm =TRUE),
+                    pred_M_expn_25.ci.lo = quantile(Pred_mort_rate_expn, 0.25, na.rm =TRUE), 
+                    pred_M_expn_75.ci.hi = quantile(Pred_mort_rate_expn, 0.75, na.rm =TRUE), 
+                    .groups = "drop")
+        
+        
+        # save the county-level outputs for each species:
+        # save the samples weighted by volface of each species in the county
+        
+        qs_save(county_mort_df, paste0(
+          output.dir,
+          "SPCD_stanoutput_cmdstan/predicted_mort/ST_CTY_mort_rate_samps_",SPCD.id,"_",weighting,".qs"
+        ))
+        qs_save(state_mort_df, paste0(
+          output.dir,
+          "SPCD_stanoutput_cmdstan/predicted_mort/State_mort_rate_samps_",SPCD.id,"_",model.type, "_",weighting,".qs"
+        ))
+        
+        qs_save(OVERALL_mort_rate, paste0(
+          output.dir,
+          "SPCD_stanoutput_cmdstan/predicted_mort/Regional_mort_rate_samps_",SPCD.id,"_",model.type, "_",weighting,".qs"
+        ))
+        
+    return(county_mort_summary)
+}
+
+stacked.ests <- do.call(rbind, lapply(length(spp.table$SPCD):1, FUN = function(x){
+  calculate_state_county_rates_BMA(SPCD.id = spp.table$SPCD[x], 
+                                   weighting =  "stacking_wts",
+                                   model.type = "Model Average")
+}))
+stacked.ests$COMMON_NAME <- ref_species[match(stacked.ests$SPCD, ref_species$SPCD),]$COMMON_NAME
+# plot predicted vs observed
+stacked.ests %>% filter(n_obs > 25)|>
+  ggplot()+geom_point(aes(x = obs_M_expn_median, y = pred_M_expn_median, color = COMMON_NAME))+
+  geom_errorbar(aes(x = obs_M_expn_median, ymin = pred_M_expn_5.ci.lo, ymax = pred_M_expn_95.ci.hi, color = COMMON_NAME))+
+  geom_errorbar(aes(x = obs_M_expn_median, ymin = pred_M_expn_25.ci.lo, ymax = pred_M_expn_75.ci.hi, color = COMMON_NAME))+
+  theme_bw()
+
+# outputs are saved for later use in manuscript figures document
