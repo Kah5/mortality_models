@@ -11,17 +11,17 @@ library(gt)
 # Setting up species, colorschemes, etc: ----
 output.dir <- output.folder <- "C:/Users/KellyHeilman/Box/01. kelly.heilman Workspace/mortality/Eastern-Mortality/mortality_models/"
 
+csv.subdir <- "SPCD_stanoutput_cmdstan/fittedmodels"   # <- parent folder holding one subfolder per model
+json.dir   <- file.path("SPCD_standata_json") # <- persistent location of the model input jsons
+
 # # get the complete species list
-nspp <- data.frame(SPCD = c(316, 318, 833, 832, 261, 531, 802, 129, 762,  12, 541,  97, 621, 400, 371, 241, 375))
-nspp$Species <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$GENUS, FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$SPECIES)
-# link up to the species table:
-nspp$COMMON <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD),]$COMMON
+nspp <- data.frame(SPCD = c(316, 318, 833, 832, 261, 531, 802, 129, 762, 12, 541, 97, 621, 400, 371, 241, 375))
+nspp$Species <- paste(FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD), ]$GENUS,
+                      FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD), ]$SPECIES)
+nspp$COMMON <- FIESTA::ref_species[match(nspp$SPCD, FIESTA::ref_species$SPCD), ]$COMMON_NAME
 
+spp.table <- data.frame(SPCD.id = nspp[1:17, ]$SPCD, spp = 1:17, COMMON = nspp[1:17, ]$COMMON)
 
-# read in the test data for all the species
-spp.table <- data.frame(SPCD.id = nspp[1:17,]$SPCD, 
-                        spp = 1:17, 
-                        COMMON = nspp[1:17,]$COMMON)
 # set the species order using the factors:
 SP.TRAITS <- read.csv("data/NinemetsSpeciesTraits.csv") %>% filter(COMMON_NAME %in% unique(nspp[1:17,]$COMMON))
 # order the trait db by softwood-hardwood, then shade tolerance, then name (this puts all the oaks together b/c hickory and red oak have the same tolerance values)
@@ -194,8 +194,10 @@ table1 <- df |> gt()|>
 gtsave(data = table1, filename = paste0(output.dir, "images/Table_1_model_summary.png"), vwidth = 1500)
 # tables have to be inserted into MS word format: (ugh!)
 gtsave(data = table1, filename = paste0(output.dir, "images/Table_1_model_summary.docx"))
-
-# summaries of the mortality rates (observed) by species:-----
+#--------------------------------------------------------------------------------------
+# Observed Mortality (number of trees, rates, etc)--------
+  
+# Counts of trees included and not included:-----
 
 # unfiltered tree remeasurement data
 TREE.remeas <- readRDS( "data/unfiltered_TREE.remeas.rds")
@@ -368,9 +370,379 @@ read.csv("SPCD_glm_output/GLM_reduced_table.csv") %>%
     table_body.border.bottom.color = "black"
   )|>gtsave(filename = paste0(output.dir, "images/tables/GLM_model_building.png"),vheight = 1500)
 
+#####################################################################################
+# re-make AUC score figure with weighted model summary ----------------------
+
+# get auc results ---
+SPCD.id <- 97
+
+AUC_summarise_SPCD <- function(SPCD.id){
+  
+  # all file names for species models and hierarchical models
+  all.species.files <- list.files(path = paste0(output.dir,"SPCD_stanoutput_cmdstan/AUC/"), 
+                                  pattern ="AUC_draws_mort_model_", full.names = T)
+  
+  all.Hierarchical.files <- list.files(path = paste0(output.dir,"SPCD_stanoutput_cmdstan/AUC/"), 
+                                       pattern ="_hierarchical_mort_model_", full.names = T)
+  
+  
+  # get only the species we are looking for...the paste0("_", SPCD.id, "(_|\\.)") ensures we dont read in 129 for spcd == 12
+  spp.AUC.files <- grep( paste0("_", SPCD.id, "(_|\\.)"),  
+                         all.species.files, 
+                         value = TRUE, 
+                         perl = TRUE)
+  hierarchical.AUC.files <-   grep( paste0("_", SPCD.id, "(_|\\.)"),  
+                                    all.Hierarchical.files, 
+                                    value = TRUE, 
+                                    perl = TRUE)
+  
+  weighted.file <- list.files(path = paste0(output.dir,"SPCD_stanoutput_cmdstan/AUC/"), 
+                                   pattern =paste0(SPCD.id,"_stacking_wts.qs"), full.names = T)
+  
+  
+  all.AUC.files <- c(spp.AUC.files, hierarchical.AUC.files, weighted.file)
+  
+  AUC_results_all <- lapply(all.AUC.files, qs_read)
+  
+  lapply(AUC_results_all, colnames)
+  
+  AUC_confusion_summary <- do.call(rbind, lapply(AUC_results_all, function(x){
+    x|> group_by(model.number, type, model.type, SPCD)%>%
+      summarise(AUC_median = median(AUC),
+                AUC_ci.lo = quantile(AUC, 0.025),
+                AUC_ci.hi = quantile(AUC, 0.975),
+                
+                True_surv_rate = median(`True survival rate`),
+                True_surv_rate_ci.lo = quantile(`True survival rate`, 0.025),
+                True_surv_rate_ci.hi = quantile(`True survival rate`, 0.975),
+                
+                True_mort_rate = median(`True mortality rate`),
+                True_mort_rate_ci.lo = quantile(`True mortality rate`, 0.025),
+                True_mort_rate_ci.hi = quantile(`True mortality rate`, 0.975), .groups = "drop_last")%>%
+      mutate(model.number = as.character(model.number))
+  }))
+  return(AUC_confusion_summary)
+}
+
+
+AUC.df <- do.call(rbind, lapply(nspp$SPCD, AUC_summarise_SPCD))
+AUC.df$COMMON_NAME <- FIESTA::ref_species[match(AUC.df$SPCD, FIESTA::ref_species$SPCD),]$COMMON_NAME
+AUC.df$COMMON_NAME <- factor(AUC.df$COMMON_NAME, levels = unique(nspp$COMMON))
+AUC.df <- AUC.df %>% 
+  mutate(`Model Type` = ifelse(model.type %in% c("stacking_wts", "weighting"), "Stacked Posteriors", model.type))%>%
+  mutate(model.number = ifelse(model.number %in% "BMA", "MA", model.number))
+
+# make new figures with AUC statistics for BMA AUC scores---
+AUC.df %>% filter(type == "in-sample")|> 
+  ggplot()+
+  geom_pointrange(aes(x = as.character(model.number), y = AUC_median, ymin = AUC_ci.lo, ymax = AUC_ci.hi, shape = `Model Type`, color =`Model Type`), position = position_dodge(width = 1))+
+  facet_wrap(~COMMON_NAME)+theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  ylab("In-sample AUC score")+
+  xlab("Model Number")
+  
+
+ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/AUC_is_all_models_stacking.png"), 
+       height = 7, width = 10)
+
+AUC.df %>% filter(type == "out-of-sample")|> 
+  ggplot()+geom_pointrange(aes(x = as.character(model.number), y = AUC_median, ymin = AUC_ci.lo, ymax = AUC_ci.hi, shape = `Model Type`, color = `Model Type`), position = position_dodge(width = 1))+
+  facet_wrap(~COMMON_NAME)+theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  ylab("Held-out AUC score")+
+  xlab("Model Number")
+
+ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/AUC_oos_all_models_stacking.png"), 
+       height = 7, width = 10)
+
+#####################################################################################
+# Brier scores-- tree level predictions
+
+# calculate Brier score for each draw:------
+brier_calc <- function(prob, y_obs){
+  mean((prob - y_obs)^2)
+}
+  
+# get posterior predictive probabilities:
+
+# 2. Get the actual observed response vector
+y_obs <- as.numeric(fit$data$your_outcome_variable) - 1 # ensure 0 and 1
+
+# 3. Calculate Brier score for each posterior draw
+# This yields a distribution of Brier scores capturing parameter uncertainty
+brier_dist <- apply(p_draws, 2, function(p) mean((p - y_obs)^2))
+
+# 4. Summarize the posterior Brier score (mean and 95% credible interval)
+mean(brier_dist)
+quantile(brier_dist, probs = c(0.025, 0.975))
+
+AUC.is.samples.df  <- apply(pSurv_hat_samps, 1, function(p) as.numeric(pROC::auc(actuals, p, quiet = TRUE)))
+AUC.oos.samples.df <- apply(pSurv_rep_samps, 1, function(p) as.numeric(pROC::auc(actuals.oos, p, quiet = TRUE)))
+#
+
+
+#####################################################################################
+# re-estimate mortality at county-level ----------------------
 # get the predicted mortality rates across the region, weighted by the number of trees each tree represented:
+pMort_region_weighted_samples_list <- list() 
+
+for(i in 17:1){
+  pMort_region_weighted_samples_list[[i]] <- readRDS(
+
+  paste0(
+    output.folder,
+    "SPCD_stanoutput_joint_v3/predicted_mort/Mort_weighted_region_mortality_samps_",nspp[i,]$SPCD,".rds"
+  )
+
+)
+}
+
+pMort_region_df <- do.call(rbind, pMort_region_weighted_samples_list) %>%
+  group_by(SPCD) %>% 
+  summarise(pmort_1year.med = median(pmort_co_1year, na.rm =TRUE), 
+            pmort_1year.ci.lo = quantile(pmort_co_1year, 0.1, na.rm =TRUE),
+            pmort_1year.hi.lo = quantile(pmort_co_1year, 0.9, na.rm =TRUE), 
+            
+            pmort_10year.med = median(pmort_co_10year, na.rm =TRUE), 
+            pmort_10year.ci.lo = quantile(pmort_co_10year, 0.1, na.rm =TRUE),
+            pmort_10year.hi.lo = quantile(pmort_co_10year, 0.9, na.rm =TRUE))
+pMort_region_df$COMMON <- ref_species[match(pMort_region_df$SPCD, ref_species$SPCD),]$COMMON_NAME
+
+pMort_region_df|>
+  ggplot()+geom_point(aes(x = COMMON, y = pmort_1year.med*100))+
+  geom_errorbar(aes(x = COMMON, ymin = pmort_1year.ci.lo*100, ymax = pmort_1year.hi.lo*100))
 
 
+# get the county-level estimates with uncertainty
+pMort_county_weighted_averages_list <- list() 
+
+for(i in 17:1){
+  pMort_county_weighted_averages_list[[i]] <- readRDS(
+    
+    paste0(
+      output.folder,
+      "SPCD_stanoutput_joint_v3/predicted_mort/Mort_weighted_county_mortality_averages_",nspp[i,]$SPCD,".rds"
+    )
+    
+  )
+}
+
+pMort_county_df <- do.call(rbind, pMort_county_weighted_averages_list) %>%
+  group_by(SPCD) 
+pMort_county_df$COMMON <- ref_species[match(pMort_county_df$SPCD, ref_species$SPCD),]$COMMON_NAME
+
+pMort_county_df %>% filter(COMMON %in% "American beech")|>
+  ggplot()+geom_point(aes(x = county, y = pmort_weighted_1*100, color = COMMON))+
+  geom_errorbar(aes(x = county, ymin = pmort_weighted_1.ci.lo*100, ymax = pmort_weighted_1.ci.hi*100,color = COMMON))+
+  facet_wrap(~state)+species_color
+
+pMort_county_df %>% filter(COMMON %in% "American beech")%>% group_by(state) %>% summarise(median(pmort_weighted_1)*100)
+
+
+
+
+
+TREE.remeas %>% filter(Species %in% "northern white-cedar") %>% 
+  group_by(status >= 2, stname, date, damage) %>%
+  summarise(n()) %>% filter(stname %in% "ME" & date == 1995)
+
+TREE.remeas %>% filter(Species %in% "northern white-cedar") %>% 
+  filter(date == 1995 & damage == 70) %>%
+  group_by(county, stname, date, damage) %>%
+  summarise(n())
+
+TREE.remeas %>% 
+  filter(SPCD %in% nspp$SPCD & 
+           dbhold >=5 & 
+           dbhcur >= 5 &
+           DIA_DIFF > 0 &
+           remper > 0 & 
+           !is.na(remper) &
+           !status == 3 ) %>%
+  mutate(Mstatus = ifelse(status == 1, "live", "dead"))%>%
+  mutate(Average.growth = DIA_DIFF/remper)%>% 
+  group_by(SPCD, Species, Mstatus) |>
+  ggplot()+geom_histogram(aes(x = DIA_DIFF, fill= Mstatus), alpha = 0.5, position = "identity")+
+  facet_wrap(~Species, scales = "free")
+  
+TREE.remeas %>% 
+  filter(SPCD %in% nspp$SPCD & 
+           dbhold >=5 & 
+           dbhcur >= 5 &
+           DIA_DIFF > 0 &
+           remper > 0 & 
+           !is.na(remper) &
+           !status == 3 ) %>%
+  mutate(Mstatus = ifelse(status == 1, "live", "dead"))%>%
+  mutate(Average.growth = ifelse(Mstatus %in% "live",DIA_DIFF/remper, DIA_DIFF/(remper/2)))%>% 
+  group_by(SPCD, Species, Mstatus) %>%
+  
+  summarise(mean.DIA_DIFF = mean(DIA_DIFF, na.rm = TRUE), 
+            sd.DIA_DIFF = sd(DIA_DIFF, na.rm =TRUE),
+            mean.growth = mean(Average.growth, na.rm =TRUE), 
+            sd.growth = sd(Average.growth, na.rm = TRUE))|>
+  ggplot()+
+  geom_bar(aes(x = Species, y = mean.growth, group = Mstatus, fill = Mstatus), stat = "identity", position = "dodge")+
+  geom_errorbar(aes(x = Species, ymin = mean.growth - sd.growth, ymax = mean.growth + sd.growth, group = Mstatus, color = Mstatus), stat = "identity", position = "dodge")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+ylab("Average growth rate (assuming midpoint dead for dead trees)")
+  
+
+
+TREE.remeas %>% 
+  filter(SPCD %in% nspp$SPCD & 
+           dbhold >=5 & 
+           dbhcur >= 5 &
+           DIA_DIFF > 0 &
+           remper > 0 & 
+           !is.na(remper) &
+           !status == 3 ) %>%
+  mutate(Mstatus = ifelse(status == 1, "live", "dead"))%>%
+  mutate(Average.growth = ifelse(Mstatus %in% "live",DIA_DIFF/remper, DIA_DIFF/(remper/2)))%>% 
+  group_by(SPCD, Species, Mstatus) %>%
+  
+  summarise(mean.DIA_DIFF = mean(DIA_DIFF, na.rm = TRUE), 
+            sd.DIA_DIFF = sd(DIA_DIFF, na.rm =TRUE),
+            mean.growth = mean(Average.growth, na.rm =TRUE), 
+            sd.growth = sd(Average.growth, na.rm = TRUE))|>
+  ggplot()+
+  geom_bar(aes(x = Species, y = mean.DIA_DIFF, group = Mstatus, fill = Mstatus), stat = "identity", position = "dodge")+
+  geom_errorbar(aes(x = Species, ymin = mean.DIA_DIFF - sd.DIA_DIFF, ymax = mean.DIA_DIFF + sd.DIA_DIFF, group = Mstatus, color = Mstatus), stat = "identity", position = "dodge")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+ylab("Diameter difference")
+
+
+TREE.df <- TREE.remeas %>% 
+  filter(SPCD %in% nspp$SPCD & 
+           dbhold >=5 & 
+           dbhcur >= 5 &
+           DIA_DIFF > 0 &
+           remper > 0 & 
+           !is.na(remper) &
+           !status == 3 ) %>%
+  mutate(Mstatus = ifelse(status == 1, "live", "dead"))%>%
+  mutate(Average.growth = ifelse(Mstatus %in% "live",DIA_DIFF/remper, DIA_DIFF/(remper/2)))%>% 
+  group_by(SPCD, Species, Mstatus)
+
+
+# plot diameter differences across space and time:
+TREE.remeas.df <- TREE.remeas %>% 
+  filter(SPCD %in% nspp$SPCD & 
+           dbhold >=5 & 
+           dbhcur >= 5 &
+           DIA_DIFF > 0 &
+           remper > 0 & 
+           !is.na(remper) &
+           !status == 3 ) %>%
+  mutate(Mstatus = ifelse(status == 1, "live", "dead"))%>%
+  mutate(Average.growth = ifelse(Mstatus %in% "live",DIA_DIFF/remper, DIA_DIFF/(remper/2)), 
+         Midpoint.year = date - (remper/2), 
+         T1.year = date - remper, 
+         T2.year = date)
+
+# plot up live tree diameter differences
+ggplot(data = TREE.remeas.df %>% filter(Mstatus %in% "live"))+
+  geom_point(aes(LONG_FIADB, LAT_FIADB, color = DIA_DIFF))+
+  scale_color_distiller(palette = "Spectral")+facet_wrap(~Species)
+  
+ggplot(data = TREE.remeas.df %>% filter(Species %in% "balsam fir"))+
+  geom_point(aes(LONG_FIADB, DIA_DIFF, color = Mstatus))
+
+ggplot(data = TREE.remeas.df)+
+  geom_point(aes(LAT_FIADB, DIA_DIFF, color = Mstatus))+
+  facet_wrap(~Species)
+
+
+ggplot(data = TREE.remeas.df)+
+  geom_point(aes(LAT_FIADB, DIA_DIFF, color = Mstatus))+
+  facet_wrap(~Species)
+
+ggplot(data = TREE.remeas.df %>% filter(Species %in% "balsam fir"))+
+  geom_jitter(aes(T1.year, DIA_DIFF, color = Mstatus))+
+  facet_wrap(~Species)
+
+ggplot(data = TREE.remeas.df %>% filter(Species %in% "balsam fir"))+
+  geom_boxplot(aes(as.factor(as.character(T1.year)), DIA_DIFF, color = Mstatus, group = Mstatus), position = position_dodge())+
+  facet_wrap(~T1.year)
+
+
+
+# read in AUC_computational_efficiency data
+AUC.comp.time <- readRDS(paste0(output.dir, "SPCD_stanoutput_joint_v3/Hierarchical_Species_AUC_COMP_TIME_v3.RDS"))
+
+AUC.comp.time$Nparams
+
+model.complexity <- data.frame(model = rep(1:9, 2), 
+                               nbetas = c(1, 2, 5, 9, 12, 33, 57, 75, 78, 1*17, 2*17, 5*17, 9*17, 12*17, 33*17, 57*17, 75*17, 78*17),
+                               nalphas = c(rep(1, 9), rep(17, 9)),
+                               npopalphas = c(rep(0, 9), rep(1, 9)),
+                               npopbetas = c(rep(0, 9), c(1, 2, 5, 9, 12, 33, 57, 75, 78)),
+                               `Model Type` = c(rep("Species", 9), rep("Hierarchical", 9))) %>%
+  mutate(`Fixed & Random Parameters` = nbetas+nalphas+ npopalphas+npopbetas)%>%
+rename("Model Type"= "Model.Type")
+combined.comptime <- AUC.comp.time %>% filter(`Model Type` %in% "Hierarchical" & Size_effect %in% "Linear") %>% left_join(.,model.complexity)%>%
+  group_by(`Model Type`,model,Model.name,`Fixed & Random Parameters`)%>%
+  summarise(total.core.hours = sum(core.hours), 
+            MCMCsamples = mean(num_samps))%>%
+mutate(`Core hours per 100 samples` = (total.core.hours/MCMCsamples)*100)%>%
+  mutate(Group = "Hierarchical Model")%>%
+
+rbind(., 
+
+AUC.comp.time %>% filter(`Model Type` %in% "Species" & Size_effect %in% "Linear") %>% 
+  left_join(.,model.complexity) %>%
+  group_by(`Model Type`,model,Model.name,Species,`Fixed & Random Parameters`)%>%
+  summarise(total.core.hours = sum(core.hours), 
+            MCMCsamples = mean(num_samps))%>%
+  mutate(`Core hours per 100 samples` = (total.core.hours/MCMCsamples)*100)%>%
+  mutate(Group = Species) %>% 
+  select(-Species)
+)
+combined.comptime$Group <- factor(combined.comptime$Group, levels = c(levels(AUC.comp.time$Species), "Hierarchical Model"))
+
+FigureS3.comptime.complexity.species <- ggplot(data = combined.comptime)+
+  geom_text(aes(x = `Core hours per 100 samples`, y = `Fixed & Random Parameters`, label = model, color = `Model Type`))+
+  scale_color_manual( values = c("Species" ="black" , 
+                               "Hierarchical" = "red" ))+
+  facet_wrap(~Group, scales = "free")+theme_bw()+
+  xlab("Core Hours per 100 samples")+ylab("# Fixed & Random Parameters")
+
+ggsave(paste0(output.dir, "images/Compare_complexity_efficiency_joint_species.png"), 
+       FigureS3.comptime.complexity.species,
+       width = 10, height = 6)
+
+FigureS4.comptime.AUC.species <- ggplot()+
+  geom_text(data = AUC.comp.time, aes(x = `Core hours per 100 samples`, y = auc.oosample.median, label = model, color = `Model Type`))+
+  facet_wrap(~Species, scales =  "free")+
+  scale_color_manual( values = c("Species" ="black" , 
+                                 "Hierarchical" = "red" ))+
+  theme_bw()+
+  xlab("Core Hours per 100 samples")+ylab("Out of Sample AUC")
+ggsave(paste0(output.dir, "images/Compare_AUC_efficiency_joint_species.png"), 
+       FigureS4.comptime.AUC.species,
+       width = 10, height = 6)
+
+Figure2.AUC.species <- ggplot()+
+  geom_point(data = AUC.comp.time, aes(x = Model.name, y = auc.oosample.median, group = `Model Type`,color = `Model Type`), position = position_dodge(width = 1), size = 0.5)+
+  geom_errorbar(data = AUC.comp.time, aes(x = Model.name, ymin = auc.oosample.lo, ymax = auc.oosample.hi,group = `Model Type`, color = `Model Type`), position = position_dodge(width = 1))+
+  geom_hline(data = AUC.comp.time %>% filter(`Model Type` %in% "Hierarchical" & Model.name %in% "Model 6"), aes(yintercept =  auc.oosample.median), linetype = "dashed", color = "red")+
+  geom_rect(data = AUC.comp.time %>% filter(`Model Type` %in% "Hierarchical" & Model.name %in% "Model 6"), 
+            aes(ymin =  auc.oosample.lo, ymax = auc.oosample.hi, xmin = -Inf, xmax = Inf), fill = "red", alpha = 0.15, color = NA)+
+  
+  scale_color_manual( values = c("Species" ="black" , 
+                                 "Hierarchical" = "red" ))+
+  theme_bw(base_size = 12)+theme(axis.text.x = element_text(angle = 90,  vjust=0.5)) +
+  facet_wrap(~Species)+
+  xlab("")+ylab("Out of Sample AUC")
+
+ggsave(paste0(output.dir, "images/All_species_models_all9models_compare-auc-outofsample_joint_species.png"), 
+       Figure2.AUC.species,
+       width = 10, height = 6)
+
+
+#--------------------------------------------------------------------------------------------------
+
+#####################################################################################
+# re-estimate mortality at county-level ----------------------
+# get the predicted mortality rates across the region, weighted by the number of trees each tree represented:
 pMort_region_weighted_samples_list <- list() 
 
 for(i in 17:1){
