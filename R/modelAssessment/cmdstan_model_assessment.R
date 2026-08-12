@@ -985,13 +985,13 @@ calculate_state_county_rates <- function(k, SPCD.id, model.type){
         
         county_mort_summary <- county_mort_df %>%  
           group_by(SPCD, ST_CTY, model.number, model.type)%>%
-          summarise(obs_M_median = median(Obs_mort_rate), 
-                    n_obs = median(total_obs),
-                    pred_M_median = median(Pred_mort_rate), 
-                    pred_M_5.ci.lo = quantile(Pred_mort_rate, 0.05), 
-                    pred_M_95.ci.hi = quantile(Pred_mort_rate, 0.95),
-                    pred_M_25.ci.lo = quantile(Pred_mort_rate, 0.25), 
-                    pred_M_75.ci.hi = quantile(Pred_mort_rate, 0.75))
+          summarise(obs_M_median = median(Obs_mort_rate, na.rm =TRUE), 
+                    n_obs = median(total_obs, na.rm =TRUE),
+                    pred_M_median = median(Pred_mort_rate, na.rm =TRUE), 
+                    pred_M_5.ci.lo = quantile(Pred_mort_rate, 0.05, na.rm =TRUE), 
+                    pred_M_95.ci.hi = quantile(Pred_mort_rate, 0.95, na.rm =TRUE),
+                    pred_M_25.ci.lo = quantile(Pred_mort_rate, 0.25, na.rm =TRUE), 
+                    pred_M_75.ci.hi = quantile(Pred_mort_rate, 0.75, na.rm =TRUE))
         
      
         # save the county-level outputs for each species:
