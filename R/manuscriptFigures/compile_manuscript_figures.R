@@ -615,7 +615,14 @@ regional_summary_df %>%
   group_by(COMMON_NAME, model.type, model.number)%>%
   summarise(RMSE_pct_mort = sqrt(mean((obs_M_expn_median*100 - pred_M_expn_median*100)^2)))|>
   ggplot()+geom_bar(aes(x = model.number, y = RMSE_pct_mort, group = model.type, fill = model.type), position = "dodge", stat = "identity")+
-  facet_wrap(~COMMON_NAME)
+  facet_wrap(~COMMON_NAME, scales = "free")+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  ylab("Root Mean Squared Error in Species-scale mortality rate (% tree mortality/year)")
+
+
+regional_summary_df %>%
+  mutate(residual = obs_M_expn_median*100 - pred_M_expn_median*100) %>% View()
 
 # save summaries:
 qs2::qs_save(regional_summary_df, paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Regional_summary_p_o_mort.qs"))
@@ -627,6 +634,20 @@ State_summary_df$COMMON_NAME <- ref_species[match(State_summary_df$SPCD, ref_spe
 # save summaries:
 qs2::qs_save(State_summary_df, paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/State_summary_p_o_mort.qs"))
 
+State_summary_df %>% 
+  group_by(COMMON_NAME, model.type, model.number)%>% 
+  mutate(n_state = n_distinct(state))%>%
+  summarise(MSE = mean((obs_M_expn_median*100 - pred_M_expn_median*100)^2, na.rm = TRUE))%>%
+  group_by(COMMON_NAME, model.type, model.number)%>% 
+  summarise(RMSE_pct_mort = sqrt(MSE))|>
+  
+  ggplot()+geom_bar(aes(x = model.number, y = RMSE_pct_mort, group = model.type, fill = model.type), position = "dodge", stat = "identity")+
+  facet_wrap(~COMMON_NAME, scales = "free")+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  ylab("Root Mean Squared Error in State-scale mortality rate (% tree mortality/year)")
+
+
 
 
 # get ST_CTY-level summaries
@@ -635,80 +656,478 @@ ST_CTY_summary_df$COMMON_NAME <- ref_species[match(ST_CTY_summary_df$SPCD, ref_s
 # save summaries:
 qs2::qs_save(ST_CTY_summary_df, paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/ST_CTY_summary_p_o_mort.qs"))
 
-# State_summary_df %>% 
-#   group_by(COMMON_NAME, model.type, model.number)%>%
-#   summarise(RMSE_pct_mort = sqrt(mean((obs_M_expn_median*100 - pred_M_expn_median*100)^2)))|>
-#   ggplot()+geom_bar(aes(x = model.number, y = RMSE_pct_mort, group = model.type, fill = model.type), position = "dodge", stat = "identity")+
-#   facet_wrap(~COMMON_NAME)
+
+
+ST_CTY_summary_df %>%
+  #filter(COMMON_NAME %in% "sugar maple")%>%
+  group_by(COMMON_NAME, model.type, model.number)%>%
+  summarise(MSE_pct = mean((obs_M_expn_median*100 - pred_M_expn_median*100)^2, na.rm =TRUE))%>%
+  mutate(RMSE_pct_mort = sqrt(MSE_pct))|>
+  #summarise(RMSE_pct_mort = sqrt(mean((obs_M_expn_median*100 - pred_M_expn_median*100)^2, na.rm =TRUE), na.rm =TRUE))|>
+  ggplot()+geom_bar(aes(x = model.number, y = RMSE_pct_mort, group = model.type, fill = model.type), position = "dodge", stat = "identity")+
+  facet_wrap(~COMMON_NAME, scales = "free")
+
+ST_CTY_summary_df %>%
+  filter(n_obs >= 25)%>%
+  group_by(COMMON_NAME, model.type, model.number)%>%
+  summarise(MSE_pct = mean((obs_M_expn_median*100 - pred_M_expn_median*100)^2, na.rm =TRUE))%>%
+  mutate(RMSE_pct_mort = sqrt(MSE_pct))|>
+  #summarise(RMSE_pct_mort = sqrt(mean((obs_M_expn_median*100 - pred_M_expn_median*100)^2, na.rm =TRUE), na.rm =TRUE))|>
+  ggplot()+geom_bar(aes(x = model.number, y = RMSE_pct_mort, group = model.type, fill = model.type), position = "dodge", stat = "identity")+
+  facet_wrap(~COMMON_NAME, scales = "free")+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  ylab("Root Mean Squared Error in County-scale mortality rate (% tree mortality/year)")
 
 
 
-# regional_summary_df|>
-#   ggplot()+geom_point(aes(x = obs_M_expn_median, y = pred_M_expn_median, color = model.type))+
-#   geom_errorbar(aes(x = obs_M_expn_median, ymin = pred_M_expn_5.ci.lo, ymax = pred_M_expn_95.ci.hi, color = model.type))+
-#   geom_errorbar(aes(x = obs_M_expn_median, ymin = pred_M_expn_25.ci.lo, ymax = pred_M_expn_75.ci.hi, color = model.type))+
-#   theme_bw()+
-#   facet_grid(~model.number)+
-#   geom_abline(aes(intercept = 0, slope = 1))
+ST_CTY_summary_df %>% filter(n_obs > 25)%>%
+  #filter(model.number == "Stacked")|>
+  ggplot()+geom_point(aes(x = obs_M_expn_median, y = pred_M_expn_median, color = model.type))+
+  geom_errorbar(aes(x = obs_M_expn_median, ymin = pred_M_expn_5.ci.lo, ymax = pred_M_expn_95.ci.hi, color = model.type))+
+  geom_errorbar(aes(x = obs_M_expn_median, ymin = pred_M_expn_25.ci.lo, ymax = pred_M_expn_75.ci.hi, color = model.type))+
+  theme_bw()+
+  geom_abline(aes(intercept = 0, slope = 1))+
+  facet_wrap(~model.number)+ylab("Species predicted mortality rate (county-level)")+
+  xlab("Species observed Mortality rate (county-level)")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/ST_CTY_Species_pred_obs_25obs.png"), 
+       height = 6, width = 9)
 
 
-pMort_region_weighted_samples_list <- list() 
+ST_CTY_summary_df %>% filter(n_obs > 50)%>%
+  #filter(model.number == "Stacked")|>
+  ggplot()+geom_point(aes(x = obs_M_expn_median, y = pred_M_expn_median, color = model.type))+
+  geom_errorbar(aes(x = obs_M_expn_median, ymin = pred_M_expn_5.ci.lo, ymax = pred_M_expn_95.ci.hi, color = model.type))+
+  geom_errorbar(aes(x = obs_M_expn_median, ymin = pred_M_expn_25.ci.lo, ymax = pred_M_expn_75.ci.hi, color = model.type))+
+  theme_bw()+
+  geom_abline(aes(intercept = 0, slope = 1))+
+  facet_wrap(~model.number)+ylab("Species predicted mortality rate (county-level)")+
+  xlab("Species observed Mortality rate (county-level)")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
 
-for(i in 17:1){
-  pMort_region_weighted_samples_list[[i]] <- readRDS(
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/ST_CTY_Species_pred_obs_50obs.png"), 
+       height = 6, width = 9)
 
-  paste0(
-    output.folder,
-    "SPCD_stanoutput_joint_v3/predicted_mort/Mort_weighted_region_mortality_samps_",nspp[i,]$SPCD,".rds"
+
+ST_CTY_summary_df %>% 
+  #filter(model.number == "Stacked")|>
+  ggplot()+geom_point(aes(x = obs_M_expn_median, y = pred_M_expn_median, color = model.type))+
+  geom_errorbar(aes(x = obs_M_expn_median, ymin = pred_M_expn_5.ci.lo, ymax = pred_M_expn_95.ci.hi, color = model.type))+
+  geom_errorbar(aes(x = obs_M_expn_median, ymin = pred_M_expn_25.ci.lo, ymax = pred_M_expn_75.ci.hi, color = model.type))+
+  theme_bw()+
+  geom_abline(aes(intercept = 0, slope = 1))+
+  facet_wrap(~model.number)+ylab("Species predicted mortality rate (county-level)")+
+  xlab("Species observed Mortality rate (county-level)")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/ST_CTY_Species_pred_obs.png"), 
+       height = 6, width = 9)
+
+State_summary_df %>% filter(n_obs > 50)%>%
+  #filter(model.number == "Stacked")|>
+  ggplot()+geom_point(aes(x = obs_M_expn_median, y = pred_M_expn_median, color = model.type))+
+  geom_errorbar(aes(x = obs_M_expn_median, ymin = pred_M_expn_5.ci.lo, ymax = pred_M_expn_95.ci.hi, color = model.type))+
+  geom_errorbar(aes(x = obs_M_expn_median, ymin = pred_M_expn_25.ci.lo, ymax = pred_M_expn_75.ci.hi, color = model.type))+
+  theme_bw()+
+  geom_abline(aes(intercept = 0, slope = 1))+
+  facet_wrap(~model.number)+ylab("Species predicted mortality rate (state-level)")+
+  xlab("Species observed Mortality rate (state-level)")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/State_Species_pred_obs.png"), 
+       height = 6, width = 9)
+
+regional_summary_df %>% filter(n_obs > 50)%>%
+  #filter(model.number == "Stacked")|>
+  ggplot()+geom_point(aes(x = obs_M_expn_median, y = pred_M_expn_median, color = model.type))+
+  geom_errorbar(aes(x = obs_M_expn_median, ymin = pred_M_expn_5.ci.lo, ymax = pred_M_expn_95.ci.hi, color = model.type))+
+  geom_errorbar(aes(x = obs_M_expn_median, ymin = pred_M_expn_25.ci.lo, ymax = pred_M_expn_75.ci.hi, color = model.type))+
+  theme_bw()+
+  geom_abline(aes(intercept = 0, slope = 1))+
+  facet_wrap(~model.number)+ylab("Species overall predicted mortality rate")+
+  xlab("Species regional Mortality rate")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Regional_Species_pred_obs.png"), 
+       height = 6, width = 9)
+
+# calculate RMSE & BIAS for each model, species, scale
+State_RMSE_BIAS <- State_summary_df %>% filter(n_obs > 50)%>%
+  mutate(residual_diff = obs_M_expn_median - pred_M_expn_median)%>%
+  group_by(model.number, model.type, COMMON_NAME)%>%
+  summarise(BIAS = sum(residual_diff, na.rm = TRUE), 
+            RMSE = sqrt(mean(residual_diff^2, na.rm = TRUE)))
+
+ggplot(data = State_RMSE_BIAS)+
+  geom_point(aes(RMSE, BIAS, color = COMMON_NAME, shape = model.type))+
+  facet_wrap(~model.number, ncol = 1)
+
+ggplot(data = State_RMSE_BIAS)+
+  geom_point(aes(model.number, BIAS, color = model.type, shape = model.type))+
+  facet_wrap(~COMMON_NAME)+
+  geom_hline(aes(yintercept = 0, linetype = "dashed"))+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  ylab("Bias in State-scale mortality rate (tree mortality/year)")
+
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/State_Species_BIAS.png"), 
+       height = 6, width = 9)
+
+ggplot(data = State_RMSE_BIAS)+
+  geom_point(aes(model.number, RMSE, color = model.type, shape = model.type))+
+  facet_wrap(~COMMON_NAME)+
+  geom_hline(aes(yintercept = 0, linetype = "dashed"))+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  ylab("RMSE in State-scale mortality rate (tree mortality/year)")
+
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/State_Species_RMSE.png"), 
+       height = 6, width = 9)
+
+
+ggplot(data = State_RMSE_BIAS)+
+  #geom_point(aes( RMSE, BIAS, color = model.number, shape = model.type))+
+  geom_text(aes( RMSE, BIAS, label = model.number, color = model.type))+
+  facet_wrap(~COMMON_NAME, scales = "free")+
+  geom_hline(aes(yintercept = 0, linetype = "dashed"))+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  ylab("BIAS in State-scale mortality rate (tree mortality/year)")+
+  xlab("RMSE in State-scale mortality rate (tree mortality/year)")
+
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/State_Species_RMSE_BIAS.png"), 
+       height = 6, width = 9)
+
+
+# do summaries for the County scale:
+# calculate RMSE & BIAS for each model, species, scale
+ST_CTY_RMSE_BIAS <- ST_CTY_summary_df %>% filter(n_obs > 50)%>%
+  mutate(residual_diff = obs_M_expn_median - pred_M_expn_median)%>%
+  group_by(model.number, model.type, COMMON_NAME)%>%
+  summarise(BIAS = sum(residual_diff, na.rm = TRUE), 
+            RMSE = sqrt(mean(residual_diff^2, na.rm = TRUE)))
+
+ggplot(data = ST_CTY_RMSE_BIAS)+
+  geom_point(aes(RMSE, BIAS, color = COMMON_NAME, shape = model.type))+
+  facet_wrap(~model.number)
+
+ggplot(data = ST_CTY_RMSE_BIAS)+
+  geom_point(aes(model.number, BIAS, color = model.type, shape = model.type))+
+  facet_wrap(~COMMON_NAME)+
+  geom_hline(aes(yintercept = 0, linetype = "dashed"))+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  ylab("Bias in ST_CTY-scale mortality rate (tree mortality/year)")
+
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/ST_CTY_Species_BIAS.png"), 
+       height = 6, width = 9)
+
+ggplot(data = ST_CTY_RMSE_BIAS)+
+  geom_point(aes(model.number, RMSE, color = model.type, shape = model.type))+
+  facet_wrap(~COMMON_NAME)+
+  geom_hline(aes(yintercept = 0, linetype = "dashed"))+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  ylab("RMSE in ST_CTY-scale mortality rate (tree mortality/year)")
+
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/ST_CTY_Species_RMSE.png"), 
+       height = 6, width = 9)
+
+
+ggplot(data = ST_CTY_RMSE_BIAS)+
+  #geom_point(aes( RMSE, BIAS, color = model.number, shape = model.type))+
+  geom_text(aes( RMSE, BIAS, label = model.number, color = model.type))+
+  facet_wrap(~COMMON_NAME, scales = "free")+
+  geom_hline(aes(yintercept = 0, linetype = "dashed"))+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  ylab("BIAS in ST_CTY-scale mortality rate (tree mortality/year)")+
+  xlab("RMSE in ST_CTY-scale mortality rate (tree mortality/year)")
+
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/ST_CTY_Species_RMSE_BIAS.png"), 
+       height = 6, width = 9)
+
+
+# left off here:
+#--------------------------------------------------------------------------------
+# Map of predicted mortality rates with residual from calculated ---
+#--------------------------------------------------------------------------------
+# join up with state and county -level data
+ST_CTY_FP <- ST_CTY_summary_df %>% 
+  separate(ST_CTY, into = c("state", "county"), remove = F)%>%
+mutate(COUNTYFP = str_pad(county, side = "left",3, pad = 0), 
+       STATEFP = str_pad(state, side = "left", 2, pad = 0))
+
+
+# join up with state and county shapefiles for plotting:
+library(tigris)
+# Get the most recent county data for all the states
+counties <- counties(state = c("DE","RI","ME", "MA","MD", "NH", "NJ", "NY", "OH", "PA", "VT", "WV"), cb = TRUE) %>% 
+  data.frame()%>% 
+  rename(
+    "CONAME" = "NAME")  %>%
+  dplyr::select("STATEFP",
+                "COUNTYFP","COUNTYNS" , "GEOID" ,"CONAME",    
+                "NAMELSAD","STUSPS","STATE_NAME", "LSAD","ALAND","AWATER",    
+                "geometry" )%>% as.data.frame()
+# separate handling for CT, which changed their county names around 2017
+CT.counties <- counties(state = "CT", cb = FALSE, year = 2015) %>% 
+  rename("CONAME" = "NAME") %>%
+  mutate(STATE_NAME = "Connecticut", 
+         STUSPS = "CT") %>%
+  dplyr::select("STATEFP",
+                "COUNTYFP","COUNTYNS" , "GEOID" ,"CONAME",    
+                "NAMELSAD","STUSPS","STATE_NAME", "LSAD","ALAND","AWATER",    
+                "geometry" )%>% as.data.frame()
+
+# join CT and join up mortality data
+counties <- counties %>% rbind(., CT.counties)
+id.var.counties <- c("STATEFP",
+                     "COUNTYFP","COUNTYNS" , "GEOID" ,"CONAME",    
+                     "NAMELSAD","STUSPS","STATE_NAME", "LSAD","ALAND","AWATER",    
+                     "geometry" )
+
+
+
+county.pmort.sf <- left_join(ST_CTY_FP, counties)%>% st_as_sf()
+
+max(county.pmort.sf$pred_M_expn_median*100, na.rm =TRUE)
+
+
+# make supplemental figures of county-level mortality by species:---
+cut.mort.values <- data.frame(
+  cut.mort.rate = c("(0,0.25]", "(0.25,0.5]", "(0.5,0.75]", "(0.75,1]", "(1,1.5]", "(1.5,2]", "(2,4]", "(4,100]"), 
+  mortality.rate = c("< 0.25", "0.25 - 0.5", "0.5 - 0.75", "0.75 - 1", "1 - 1.5", "1.5 - 2", "2 - 4", "> 4"), 
+  hex.colors = c("#fff7f3",
+                 "#fde0dd",
+                 "#fcc5c0",
+                 "#fa9fb5",
+                 "#f768a1",
+                 "#dd3497",
+                 "#ae017e",
+                 "#7a0177"))
+cut.county.pmort.sf <- county.pmort.sf %>% 
+  #mutate(ncount_pmort_plot_3 = ifelse(n_obs > 3, n_county_pmort, NA))%>%
+  mutate(
+    cut.mort.rate = cut(pred_M_expn_median*100, breaks = c(0, 0.25, 0.5, 0.75, 1, 1.5, 2, 4, 100)),
+    cut.mort.rate.lo = cut(pred_M_expn_2.5.ci.lo*100, breaks = c(0, 0.25, 0.5, 0.75, 1, 1.5, 2, 4, 100)),
+    cut.mort.rate.hi = cut(pred_M_expn_97.5.ci.hi*100, breaks = c(0, 0.25, 0.5, 0.75, 1, 1.5, 2, 4, 100))
   )
+cut.county.pmort.sf$mortality.rate <- cut.mort.values[match(cut.county.pmort.sf$cut.mort.rate, cut.mort.values$cut.mort.rate),]$mortality.rate
+cut.county.pmort.sf$mortality.rate <- factor(cut.county.pmort.sf$mortality.rate, levels = c("< 0.25", "0.25 - 0.5", "0.5 - 0.75", "0.75 - 1", "1 - 1.5", "1.5 - 2", "2 - 4", "> 4"))
 
-)
+cut.county.pmort.sf$mortality.rate.ci.lo <- cut.mort.values[match(cut.county.pmort.sf$cut.mort.rate.lo, cut.mort.values$cut.mort.rate),]$mortality.rate
+cut.county.pmort.sf$mortality.rate.ci.lo <- factor(cut.county.pmort.sf$mortality.rate.ci.lo, levels = c("< 0.25", "0.25 - 0.5", "0.5 - 0.75", "0.75 - 1", "1 - 1.5", "1.5 - 2", "2 - 4", "> 4"))
+
+cut.county.pmort.sf$mortality.rate.ci.hi <- cut.mort.values[match(cut.county.pmort.sf$cut.mort.rate.hi, cut.mort.values$cut.mort.rate),]$mortality.rate
+cut.county.pmort.sf$mortality.rate.ci.hi <- factor(cut.county.pmort.sf$mortality.rate.ci.hi, levels = c("< 0.25", "0.25 - 0.5", "0.5 - 0.75", "0.75 - 1", "1 - 1.5", "1.5 - 2", "2 - 4", "> 4"))
+
+val.vec <- as.vector(cut.mort.values$hex.colors)
+names(val.vec) <- as.vector(cut.mort.values$mortality.rate)
+fill_mort_rate <- scale_fill_manual(values = val.vec, name = "Mortality\nRisk\n(%/year)", drop = FALSE)
+
+
+
+ggplot(cut.county.pmort.sf %>% filter( model.number %in% "Stacked")%>%
+         filter(n_obs >=10))+
+  geom_sf(aes(fill = pred_M_expn_median*100))+
+  facet_wrap(~COMMON_NAME)+
+  scale_fill_distiller(palette = "Reds", direction = 1)+
+  theme_minimal()
+  ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/CTY_pmort_map_stacking.png"), 
+         height = 6, width = 9)
+  
+
+
+ggplot(cut.county.pmort.sf %>% filter( model.number %in% "Stacked"))+
+  geom_sf(aes(fill = pred_M_expn_median*100 - obs_M_expn_median*100))+
+  facet_wrap(~COMMON_NAME)+
+  scale_fill_gradient2(low = "darkred", high = "darkblue", mid = "white", midpoint = 0)+
+  theme_minimal()
+
+ggplot(cut.county.pmort.sf %>% filter( model.number %in% "Stacked")%>%
+         filter(n_obs >=10))+
+  geom_sf(aes(fill = (pred_M_expn_median*100 - obs_M_expn_median*100)))+
+  facet_wrap(~COMMON_NAME)+
+  scale_fill_gradient2(low = "darkred", high = "darkblue", mid = "white", midpoint = 0)+
+  theme_minimal()
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/CTY_residual_map_stacking.png"), 
+       height = 6, width = 9)
+###################################################################################################
+# plot out predicted maps by species, with 95% CI, observed rates, and residuals ---
+#
+
+SPCD.id <- 531
+
+n_obs_threshold <- 5
+
+map_stacking_pred_obs <- function(SPCD.id, n_obs_threshold = 5){
+  
+  Common_name_spp <- spp.table[spp.table$SPCD.id %in% SPCD.id, ]$COMMON
+      # get species-level stacked estimates for all counties with more than the n_obs_threshold trees 
+      ST_CTY_FP_SPECIES <- ST_CTY_FP %>% 
+        filter(SPCD %in% SPCD.id) %>% 
+        filter(model.number %in% "Stacked")%>%
+        filter(n_obs >= n_obs_threshold)
+      
+      counties_SPP <- left_join(counties, ST_CTY_FP_SPECIES) %>% st_as_sf()
+      counties_SPP_long <- counties_SPP%>%
+        select(STATEFP:county, geometry, obs_M_expn_median, pred_M_expn_median, pred_M_expn_2.5.ci.lo, pred_M_expn_97.5.ci.hi) %>%
+        pivot_longer(
+          cols = c(obs_M_expn_median, pred_M_expn_median, pred_M_expn_2.5.ci.lo, pred_M_expn_97.5.ci.hi),
+          names_to = "Pred_obs_type",
+          values_to = "Mort_rate"
+        ) %>% 
+        mutate(`Pct_mort_year` = Mort_rate*100) %>%
+        mutate(`Pred_obs_names` = ifelse(Pred_obs_type %in% "obs_M_expn_median", "Observed", 
+                                         ifelse(Pred_obs_type %in% "pred_M_expn_median", "Predicted (median)", 
+                                                ifelse(Pred_obs_type %in% "pred_M_expn_2.5.ci.lo", "Predicted (2.5% C.I.)", 
+                                                       ifelse(Pred_obs_type %in% "pred_M_expn_97.5.ci.hi", "Predicted (97.5% C.I.)", NA)))))
+      
+      # reorder the facet labels
+      counties_SPP_long$Pred_obs_names <- factor(counties_SPP_long$Pred_obs_names, levels = unique(counties_SPP_long$Pred_obs_names))
+      
+      p_o_maps <- ggplot(data = counties_SPP_long) +
+        geom_sf(aes(fill = Pct_mort_year)) +
+        facet_wrap(~ Pred_obs_names, ncol = 4) +
+        #scale_fill_distiller(palette = "Reds", direction = 1)+
+        scale_fill_viridis_b(
+          option = "inferno", 
+          breaks = c(0, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2),
+          name = "Mortality rate\n (%/year)"
+        ) + 
+        theme_minimal(base_size = 12)+
+        theme(legend.position = "bottom", 
+              legend.direction = "horizontal", 
+              legend.text = element_text(angle = 90))+
+        ggtitle(paste(Common_name_spp))
+      
+      ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/pred_obs_maps/Stacking_p.o.maps_SPCD_", SPCD.id, ".png"), 
+             plot = p_o_maps ,
+             height = 4, width = 11)
+      
+      # get residuals:
+      
+      counties_residual <- counties_SPP %>%
+        select(STATEFP:county, n_obs, geometry, obs_M_expn_median, pred_M_expn_median, pred_M_expn_2.5.ci.lo, pred_M_expn_97.5.ci.hi) %>%
+        mutate(residual_expn = obs_M_expn_median*100 - pred_M_expn_median*100, 
+               residual_expn_2.5.ci.lo = obs_M_expn_median*100 - pred_M_expn_2.5.ci.lo*100, 
+               residual_expn_97.5.ci.hi = obs_M_expn_median*100 - pred_M_expn_97.5.ci.hi*100)%>%
+        mutate(n_obs_group = ifelse(n_obs > 25, ">= 25", " < 25"))
+      
+      
+      res_map <- ggplot(data = counties_residual) +
+        geom_sf(aes(fill = residual_expn)) +
+        scale_fill_fermenter(palette = "RdBu",
+          breaks = c( -1.5, -1, -0.5, -0.25, 0, 0.25, 0.5, 1, 1.5), 
+          name = "  Residuals (%/year)\n(Observed - Predicted)")+ 
+        theme_minimal(base_size = 12)+
+        theme(legend.position = "bottom", 
+              legend.direction = "horizontal", 
+              legend.text = element_text(angle = 90, vjust = 0.5))+
+        ggtitle(paste(Common_name_spp))
+      
+      
+      
+      
+      RMSE <- counties_residual %>% filter(!is.na(pred_M_expn_median)) %>% st_drop_geometry()%>%
+        mutate(Squared_residuals = residual_expn^2) %>% 
+        group_by(n_obs_group)%>%
+        summarise(#MAE = mean(abs(residual_expn), na.rm = TRUE), 
+                  #MSE = mean(Squared_residuals, na.rm = TRUE), 
+                  RMSE = sqrt(mean(Squared_residuals, na.rm = TRUE)), 
+                  n_counties = n())%>%
+        bind_rows(
+          counties_residual %>% filter(!is.na(pred_M_expn_median)) %>% st_drop_geometry()%>%
+            mutate(Squared_residuals = residual_expn^2, 
+                   n_obs_group = "Overall") %>% 
+            group_by(n_obs_group)%>%
+            summarise(#MAE = mean(abs(residual_expn), na.rm = TRUE), 
+              #MSE = mean(Squared_residuals, na.rm = TRUE), 
+              RMSE = sqrt(mean(Squared_residuals, na.rm = TRUE)), 
+              n_counties = n())
+        ) %>%
+        mutate(plt_label = paste0("RMSE (", n_obs_group, ") = ", round(RMSE, digits = 2)))%>%
+        arrange(desc(n_obs_group))
+      
+      
+      
+      
+      p.o.plot <- ggplot(data = counties_residual %>% filter(!is.na(pred_M_expn_median))) +
+        geom_pointrange(aes(x = obs_M_expn_median*100, 
+                            y = pred_M_expn_median*100,
+                            ymin = pred_M_expn_2.5.ci.lo*100, 
+                            ymax = pred_M_expn_97.5.ci.hi*100, 
+                            color = n_obs_group), alpha = 0.75) +
+        scale_color_manual(values = c(">= 25" = "darkred", 
+                                      " < 25" = "darkgrey"), name = "# trees included")+
+        geom_abline(aes(intercept = 0, slope = 1), linetype = "dashed")+
+        
+        annotate("text", x = -Inf, y = Inf, label = RMSE[RMSE$n_obs_group %in% "Overall",]$plt_label, color = "black", 
+                 hjust = -0.1, vjust = 1.5, size = 4)+
+        annotate("text", x = -Inf, y = Inf, label = RMSE[RMSE$n_obs_group %in% " < 25",]$plt_label, color = "darkgrey", 
+                 hjust = -0.1, vjust = 3, size = 4)+
+        annotate("text", x = -Inf, y = Inf, label = RMSE[RMSE$n_obs_group %in% ">= 25",]$plt_label, color = "darkred", 
+                 hjust = -0.1, vjust = 4.5, size = 4)+
+        
+        #theme_minimal(base_size = 12)+
+        theme_bw(base_size = 12)+
+        theme(legend.position = "bottom",  
+              legend.direction = "horizontal", 
+              axis.line.x.top = element_blank() )+
+        ylab("Predicted County Mortality (%/year)")+
+        xlab("Observed County Mortality (%/year)")+
+        ggtitle(paste(Common_name_spp))
+      
+      
+      
+      ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/pred_obs_maps/Stacking_residual.map_SPCD_", SPCD.id, ".png"), 
+             plot =  res_map , height = 4, width = 4)
+      
+      ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/pred_obs_maps/Stacking_p.o_scatter_SPCD_", SPCD.id, ".png"), 
+             plot =  p.o.plot , height = 4, width = 6)
+
 }
 
-pMort_region_df <- do.call(rbind, pMort_region_weighted_samples_list) %>%
-  group_by(SPCD) %>% 
-  summarise(pmort_1year.med = median(pmort_co_1year, na.rm =TRUE), 
-            pmort_1year.ci.lo = quantile(pmort_co_1year, 0.1, na.rm =TRUE),
-            pmort_1year.hi.lo = quantile(pmort_co_1year, 0.9, na.rm =TRUE), 
-            
-            pmort_10year.med = median(pmort_co_10year, na.rm =TRUE), 
-            pmort_10year.ci.lo = quantile(pmort_co_10year, 0.1, na.rm =TRUE),
-            pmort_10year.hi.lo = quantile(pmort_co_10year, 0.9, na.rm =TRUE))
-pMort_region_df$COMMON <- ref_species[match(pMort_region_df$SPCD, ref_species$SPCD),]$COMMON_NAME
+lapply(spp.table$SPCD.id, map_stacking_pred_obs)
 
-pMort_region_df|>
-  ggplot()+geom_point(aes(x = COMMON, y = pmort_1year.med*100))+
-  geom_errorbar(aes(x = COMMON, ymin = pmort_1year.ci.lo*100, ymax = pmort_1year.hi.lo*100))
+ggplot(data = counties_residual %>% filter(!is.na(pred_M_expn_median))) +
+  geom_point(aes(x = n_obs, 
+                      y = residual_expn,
+                      color = n_obs_group), alpha = 0.75) +
+  scale_color_manual(values = c(">= 25" = "darkred", 
+                                " < 25" = "darkgrey"), name = "# trees included")+
+  geom_hline(aes(yintercept = 0))+
+ 
+  #theme_minimal(base_size = 12)+
+  theme_bw(base_size = 12)+
+  theme(legend.position = "bottom",  
+        legend.direction = "horizontal", 
+        axis.line.x.top = element_blank() )+
+  ylab("Residuals (Observed - Predicted)")+
+  xlab("# of trees included in county estimate")
 
-
-# get the county-level estimates with uncertainty
-pMort_county_weighted_averages_list <- list() 
-
-for(i in 17:1){
-  pMort_county_weighted_averages_list[[i]] <- readRDS(
-    
-    paste0(
-      output.folder,
-      "SPCD_stanoutput_joint_v3/predicted_mort/Mort_weighted_county_mortality_averages_",nspp[i,]$SPCD,".rds"
-    )
-    
-  )
-}
-
-pMort_county_df <- do.call(rbind, pMort_county_weighted_averages_list) %>%
-  group_by(SPCD) 
-pMort_county_df$COMMON <- ref_species[match(pMort_county_df$SPCD, ref_species$SPCD),]$COMMON_NAME
-
-pMort_county_df %>% filter(COMMON %in% "American beech")|>
-  ggplot()+geom_point(aes(x = county, y = pmort_weighted_1*100, color = COMMON))+
-  geom_errorbar(aes(x = county, ymin = pmort_weighted_1.ci.lo*100, ymax = pmort_weighted_1.ci.hi*100,color = COMMON))+
-  facet_wrap(~state)+species_color
-
-pMort_county_df %>% filter(COMMON %in% "American beech")%>% group_by(state) %>% summarise(median(pmort_weighted_1)*100)
+ggplot(data = counties_residual %>% filter(!is.na(pred_M_expn_median))) +
+  geom_point(aes(x = obs_M_expn_median*100, 
+                 y = residual_expn,
+                 color = n_obs_group), alpha = 0.75) +
+  scale_color_manual(values = c(">= 25" = "darkred", 
+                                " < 25" = "darkgrey"), name = "# trees included")+
+  geom_hline(aes(yintercept = 0))+
+  
+  #theme_minimal(base_size = 12)+
+  theme_bw(base_size = 12)+
+  theme(legend.position = "bottom",  
+        legend.direction = "horizontal", 
+        axis.line.x.top = element_blank() )+
+  ylab("Residuals (Observed - Predicted)")+
+  xlab("Observed Mortality rate")+
+  stat_smooth(aes(x = obs_M_expn_median*100, 
+                  y = residual_expn,
+                  color = n_obs_group), method = "lm")
 
 
 
 
+cut.county.pmort.sf %>% #filter( model.number %in% "Stacked")%>%
+  filter(n_obs >=10)%>%
+  ggplot()+geom_histogram(aes(pred_M_expn_median*100 - obs_M_expn_median*100, fill = model.number))
 
 TREE.remeas %>% filter(Species %in% "northern white-cedar") %>% 
   group_by(status >= 2, stname, date, damage) %>%
