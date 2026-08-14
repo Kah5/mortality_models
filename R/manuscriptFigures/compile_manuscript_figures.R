@@ -978,6 +978,9 @@ ST_CTY_FP <- ST_CTY_summary_df %>%
 mutate(COUNTYFP = str_pad(county, side = "left",3, pad = 0), 
        STATEFP = str_pad(state, side = "left", 2, pad = 0))
 
+State_FP <- State_summary_df %>% 
+  mutate(STATEFP = str_pad(state, side = "left", 2, pad = 0))
+
 
 # join up with state and county shapefiles for plotting:
 library(tigris)
@@ -1007,7 +1010,12 @@ id.var.counties <- c("STATEFP",
                      "NAMELSAD","STUSPS","STATE_NAME", "LSAD","ALAND","AWATER",    
                      "geometry" )
 
+# get state-level geometry form tigris
 
+# Get the most recent county data for all the states
+states_sf <- states(cb = TRUE) 
+
+states_sf
 
 
 ###################################################################################################
@@ -1160,6 +1168,14 @@ map_stacking_pred_obs <- function(SPCD.id, n_obs_threshold = 5, use_EXPN = TRUE)
       
       
       
+      # counties_residual %>% st_drop_geometry()%>%
+      #   filter(!is.na(residual_M))|>
+      #   ggplot()+geom_dots(aes(x = residual_M, y = STATE_NAME),layout = "weave", size =2)
+      # 
+      # 
+      # counties_residual %>% st_drop_geometry()%>%
+      #   filter(!is.na(residual_M))|>
+      #   ggplot()+geom_dots(aes(x = residual_M),layout = "weave", size = 2)
       
       p.o.plot <- ggplot(data = counties_residual %>% filter(!is.na(pred_pct))) +
         geom_pointrange(aes(x = obs_pct, 
@@ -1203,6 +1219,204 @@ lapply(spp.table$SPCD.id, map_stacking_pred_obs)
 # make maps for trees/acre/yr expn factor
 lapply(spp.table$SPCD.id, FUN = function(x)map_stacking_pred_obs(x, n_obs_threshold = 5, use_EXPN = FALSE))
 
+
+# create paired maps and barplots for state-level estimates
+map_stacking_STATE_pred_obs <- function(SPCD.id, n_obs_threshold = 5, use_EXPN = TRUE){
+  
+  Common_name_spp <- spp.table[spp.table$SPCD.id %in% SPCD.id, ]$COMMON
+  # get species-level stacked estimates for all states with more than the n_obs_threshold trees 
+  State_FP_SPECIES <- State_FP %>% 
+    filter(SPCD %in% SPCD.id) %>% 
+    filter(model.number %in% "Stacked")%>%
+    filter(n_obs >= n_obs_threshold)
+  
+  states_SPP <- left_join(states_sf, State_FP_SPECIES) %>% st_as_sf()
+  
+  # if use_EXPN == TRUE, then use the predicted and observed values on the trees/year scale
+  if(use_EXPN == TRUE){
+    
+    states_SPP_long <- states_SPP%>%
+      select(STATEFP:state, geometry, obs_M_expn_median, pred_M_expn_median, pred_M_expn_2.5.ci.lo, pred_M_expn_97.5.ci.hi) %>%
+      pivot_longer(
+        cols = c(obs_M_expn_median, pred_M_expn_median, pred_M_expn_2.5.ci.lo, pred_M_expn_97.5.ci.hi),
+        names_to = "Pred_obs_type",
+        values_to = "Mort_rate"
+      ) %>% 
+      mutate(`Pct_mort_year` = Mort_rate*100) %>%
+      mutate(`Pred_obs_names` = ifelse(Pred_obs_type %in% "obs_M_expn_median", "Observed", 
+                                       ifelse(Pred_obs_type %in% "pred_M_expn_median", "Predicted (median)", 
+                                              ifelse(Pred_obs_type %in% "pred_M_expn_2.5.ci.lo", "Predicted (2.5% C.I.)", 
+                                                     ifelse(Pred_obs_type %in% "pred_M_expn_97.5.ci.hi", "Predicted (97.5% C.I.)", NA)))))
+    
+    
+    #labels for maps
+    units_label <- "(% trees/year)"
+    fn_add_on <- "_pct_Trees_yr"
+    
+    
+    
+    # get residuals:
+    
+    states_residual <- states_SPP %>%
+      #select(STATEFP:state, n_obs, geometry, obs_M_expn_median, pred_M_expn_median, pred_M_expn_2.5.ci.lo, pred_M_expn_97.5.ci.hi) %>%
+      mutate(residual_M = obs_M_expn_median*100 - pred_M_expn_median*100, 
+             residual_M_2.5.ci.lo = obs_M_expn_median*100 - pred_M_expn_2.5.ci.lo*100, 
+             residual_M_97.5.ci.hi = obs_M_expn_median*100 - pred_M_expn_97.5.ci.hi*100)%>%
+      mutate(n_obs_group = ifelse(n_obs > 25, ">= 25", " < 25"))%>%
+      mutate(obs_pct = obs_M_expn_median*100, 
+             pred_pct = pred_M_expn_median*100, 
+             pred_ci.lo = pred_M_expn_2.5.ci.lo*100, 
+             pred_ci.hi = pred_M_expn_97.5.ci.hi*100, 
+             pred_25ci.lo = pred_M_expn_25.ci.lo*100, 
+             pred_75ci.hi = pred_M_expn_75.ci.hi*100)
+    
+    
+    
+  }else{
+    # if use_EXPN == FALSE, then use the predicted and observed values on the per acre scale
+    # trees/acre/year scale
+    states_SPP_long <- states_SPP %>%
+      select(STATEFP:state, geometry, obs_M_median, 
+             pred_M_median, pred_M_2.5.ci.lo, pred_M_97.5.ci.hi) %>%
+      pivot_longer(
+        cols = c(obs_M_median, pred_M_median, pred_M_2.5.ci.lo, pred_M_97.5.ci.hi),
+        names_to = "Pred_obs_type",
+        values_to = "Mort_rate"
+      ) %>% 
+      mutate(`Pct_mort_year` = Mort_rate*100) %>%
+      mutate(`Pred_obs_names` = ifelse(Pred_obs_type %in% "obs_M_median", "Observed", 
+                                       ifelse(Pred_obs_type %in% "pred_M_median", "Predicted (median)", 
+                                              ifelse(Pred_obs_type %in% "pred_M_2.5.ci.lo", "Predicted (2.5% C.I.)", 
+                                                     ifelse(Pred_obs_type %in% "pred_M_97.5.ci.hi", "Predicted (97.5% C.I.)", NA)))))
+    
+    # labels for maps
+    units_label <- "(% trees/acre/year)"
+    fn_add_on <- "_pct_TPA_yr"
+    
+    
+    
+    # get residuals:
+    
+    states_residual <- states_SPP %>%
+     # select(STATEFP:state, n_obs, geometry, obs_M_median, pred_M_median, pred_M_2.5.ci.lo, pred_M_97.5.ci.hi) %>%
+      mutate(residual_M = obs_M_median*100 - pred_M_median*100, 
+             residual_M_2.5.ci.lo = obs_M_median*100 - pred_M_2.5.ci.lo*100, 
+             residual_M_97.5.ci.hi = obs_M_median*100 - pred_M_97.5.ci.hi*100)%>%
+      mutate(n_obs_group = ifelse(n_obs > 25, ">= 25", " < 25"))%>%
+      mutate(obs_pct = obs_M_median*100, 
+             pred_pct = pred_M_median*100, 
+             pred_ci.lo = pred_M_2.5.ci.lo*100, 
+             pred_ci.hi = pred_M_97.5.ci.hi*100, 
+             pred_25ci.lo = pred_M_25.ci.lo*100, 
+             pred_75ci.hi = pred_M_75.ci.hi*100)
+    
+  }
+  # reorder the facet labels
+  states_SPP_long$Pred_obs_names <- factor(states_SPP_long$Pred_obs_names, levels = unique(states_SPP_long$Pred_obs_names))
+  
+  map_bbox <- st_bbox(counties_SPP)
+  
+  
+  p_o_maps <- ggplot(data = states_SPP_long) +
+    geom_sf(aes(fill = Pct_mort_year)) +
+    facet_wrap(~ Pred_obs_names, ncol = 4) +
+    scale_fill_viridis_b(option = "inferno", 
+                         breaks = c(0, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2),
+                         name = paste0("Mortality Rate\n",units_label)) + 
+    theme_minimal(base_size = 12)+
+    theme(legend.position = "bottom", 
+          legend.direction = "horizontal", 
+          legend.text = element_text(angle = 90))+
+    ggtitle(paste(Common_name_spp))+
+    coord_sf(xlim = c(map_bbox["xmin"],map_bbox["xmax"]),
+             ylim = c(map_bbox["ymin"], map_bbox["ymax"]))
+  
+  ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/pred_obs_maps/Stacking_p.o.STATE_maps_SPCD_", SPCD.id, fn_add_on,".png"), 
+         plot = p_o_maps ,
+         height = 4, width = 11)
+  
+  
+  res_map <- ggplot(data = states_residual) +
+    geom_sf(aes(fill = residual_M)) +
+    scale_fill_fermenter(palette = "RdBu",
+                         breaks = c( -1.5, -1, -0.5, -0.25, 0, 0.25, 0.5, 1, 1.5), 
+                         name = paste0("Residuals " ,units_label,"\n(Observed - Predicted)"))+ 
+    theme_minimal(base_size = 12)+
+    theme(legend.position = "bottom", 
+          legend.direction = "horizontal", 
+          legend.text = element_text(angle = 90, vjust = 0.5))+
+    ggtitle(paste(Common_name_spp))+
+    coord_sf(xlim = c(map_bbox["xmin"],map_bbox["xmax"]),
+             ylim = c(map_bbox["ymin"], map_bbox["ymax"]))
+  
+  
+  
+  
+  RMSE <- states_residual %>% filter(!is.na(residual_M)) %>% st_drop_geometry()%>%
+    mutate(Squared_residuals = residual_M^2) %>% 
+    group_by(n_obs_group)%>%
+    summarise(#MAE = mean(abs(residual_expn), na.rm = TRUE), 
+      #MSE = mean(Squared_residuals, na.rm = TRUE), 
+      RMSE = sqrt(mean(Squared_residuals, na.rm = TRUE)), 
+      n_states = n())%>%
+    bind_rows(
+      states_residual %>% filter(!is.na(residual_M)) %>% st_drop_geometry()%>%
+        mutate(Squared_residuals = residual_M^2, 
+               n_obs_group = "Overall") %>% 
+        group_by(n_obs_group)%>%
+        summarise(
+          RMSE = sqrt(mean(Squared_residuals, na.rm = TRUE)), 
+          n_states = n())
+    ) %>%
+    mutate(plt_label = paste0("RMSE (", n_obs_group, ") = ", round(RMSE, digits = 2)))%>%
+    arrange(desc(n_obs_group))
+  
+  
+  
+ 
+  p.o.plot <- ggplot(data = states_residual %>% filter(!is.na(pred_pct))) +
+    geom_pointrange(aes(x = obs_pct, 
+                        y = pred_pct,
+                        ymin = pred_ci.lo, 
+                        ymax = pred_ci.hi, 
+                        color = NAME), alpha = 0.75) +
+    scale_color_manual(values = c("New York" = "#a6cee3" ,
+     "Maine" = "#1f78b4" ,
+     "New Hampshire" = "#b2df8a"  ,
+      "Vermont" = "#33a02c" ,
+      "Pennsylvania" = "#fb9a99" ,
+       "Ohio" = "#e31a1c",
+       "New Jersey" = "#fdbf6f" ,
+      "West Virginia" =  "#ff7f00" ,
+       "Connecticut" = "#cab2d6" ,
+      "Maryland" = "#6a3d9a" ), name = "")+
+    geom_abline(aes(intercept = 0, slope = 1), linetype = "dashed")+
+    
+    annotate("text", x = -Inf, y = Inf, label = RMSE[RMSE$n_obs_group %in% "Overall",]$plt_label, color = "black", 
+             hjust = -0.1, vjust = 1.5, size = 4)+
+    theme_bw(base_size = 16)+
+    theme(#legend.position = "bottom",  
+          #legend.direction = "horizontal", 
+          axis.line.x.top = element_blank(), 
+          panel.grid.minor = element_blank())+
+    ylab(paste0("Predicted State Mortality\n", units_label))+
+    xlab(paste0("Observed State Mortality ", units_label))+
+    ggtitle(paste(Common_name_spp))
+  
+  
+  
+  ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/pred_obs_maps/Stacking_residual_STATE.map_SPCD_", SPCD.id, fn_add_on,".png"), 
+         plot =  res_map , height = 4, width = 4)
+  
+  ggsave(filename = paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/pred_obs_maps/Stacking_p.o_STATE_scatter_SPCD_", SPCD.id, fn_add_on,".png"), 
+         plot =  p.o.plot , height = 6, width = 8)
+  
+}
+
+lapply(spp.table$SPCD.id, FUN = function(x)map_stacking_STATE_pred_obs(x, n_obs_threshold = 5, use_EXPN = FALSE))
+
+rm(p_o_maps, p.o.plot, p.o_stacked_expanded, p.o_stacked_per_acre, res.map)
+gc()
 
 ######################################################################################
 # Marginal stacked posterior predictions ----------
