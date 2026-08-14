@@ -1123,6 +1123,231 @@ ggplot(data = counties_residual %>% filter(!is.na(pred_M_expn_median))) +
                   color = n_obs_group), method = "lm")
 
 
+######################################################################################
+# Marginal stacked posterior predictions ----------
+
+marg_draws_all_list <- lapply(list.files(paste0(output.dir, "SPCD_stanoutput_cmdstan/model_avg_draws/stacking_wts/"), pattern = "Draws_marginal_main", full.names = T), 
+       qs2::qs_read)
+
+# expanding into a very big dataframe
+marg_draws_all_df <- do.call(rbind, marg_draws_all_list)
+
+# arrange the species--
+marg_draws_all_df$COMMON_NAME <- factor(marg_draws_all_df$COMMON_NAME, levels = c(SP.TRAITS$COMMON_NAME))
+
+# make draws summary plots for different effects to identify which models
+# pull out species groups:
+n_conifers <- c("balsam fir", "red spruce", "northern white-cedar")
+Oak_birch_hickory <- c("white oak", "northern red oak", "chestnut oak","hickory spp.",
+                      "American beech", "yellow birch","paper birch", "yellow-poplar")
+
+Maples_ash_bcherry <- c("sugar maple", "red maple", "eastern white pine", 
+                        "eastern hemlock","white ash", "black cherry")
+
+plot_draws_predictors <- function( species_names, group_name,  y_max = 1){
+      
+        size.p <- marg_draws_all_df %>% filter(predictor %in% c("DIA_DIFF_scaled", "DIA_scaled")  &
+                                     COMMON_NAME %in% species_names)|>
+        ggplot()+
+        geom_line(aes(x = grid_val, y = decadal_pMort, group = draw, color = draw_source), alpha = 0.05)+
+        theme_bw(base_size = 12)+
+        xlab("Scaled Predictor")+
+        ylab("10-year predicted mortality probability")+
+        facet_grid(vars(predictor), vars(COMMON_NAME), scales = "free_y")+
+        theme(panel.grid = element_blank(),
+              strip.text.y = element_text(angle = 0), 
+              strip.text.x = element_text(angle = 90), 
+              legend.position = "bottom", 
+              legend.direction = "horizontal")+
+        guides( color = guide_legend(override.aes = list(linewidth = 2, alpha = 1)))+
+        labs(color = "Weighted Draw Source")+
+          coord_cartesian(ylim = c(0, y_max))
+      
+      ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Size_effects_pMort10_draws_",group_name,".png"), 
+              size.p,
+             height = 6, width = (length(species_names) + 1))
+      
+      
+      heighbor.p <- marg_draws_all_df %>% filter(COMMON_NAME %in% species_names)%>% 
+        filter(predictor %in% c("ba.scaled", "BAL.scaled", "damage.scaled"))|>
+        ggplot()+
+        geom_line(aes(x = grid_val, y = decadal_pMort, group = draw, color = draw_source), alpha = 0.05)+
+        theme_bw(base_size = 12)+
+        xlab("Scaled Predictor")+
+        ylab("10-year predicted mortality probability")+
+        facet_grid(vars(predictor), vars(COMMON_NAME), scales = "free_y")+
+        theme(panel.grid = element_blank(),
+              strip.text.y = element_text(angle = 0), 
+              strip.text.x = element_text(angle = 90), 
+              legend.position = "bottom", 
+              legend.direction = "horizontal")+
+        guides( color = guide_legend(override.aes = list(linewidth = 2, alpha = 1)))+
+        labs(color = "Weighted Draw Source")+
+        coord_cartesian(ylim = c(0, y_max))
+      
+      ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Neighborhood_effects_pMort10_draws_",group_name,".png"), 
+             heighbor.p,
+             height = 8, width = (length(species_names) + 1))
+      
+      
+      # for the climate effects
+      clim.p <- marg_draws_all_df %>% filter(predictor %in% c("MATmax.scaled", "MAP.scaled", 
+                                                    "ppt.anom",
+                                                    "tmax.anom"))%>%
+        filter(COMMON_NAME %in% species_names)|>
+        ggplot()+
+        geom_line(aes(x = grid_val, y = decadal_pMort, group = draw, color = draw_source), alpha = 0.05)+
+        theme_bw(base_size = 12)+
+        xlab("Scaled Predictor")+
+        ylab("10-year predicted mortality probability")+
+        facet_grid(vars(predictor), vars(COMMON_NAME), scales = "free_y")+
+        theme(panel.grid = element_blank(),
+              strip.text.y = element_text(angle = 0), 
+              strip.text.x = element_text(angle = 90), 
+              legend.position = "bottom", 
+              legend.direction = "horizontal")+
+        guides( color = guide_legend(override.aes = list(linewidth = 2, alpha = 1)))+
+        labs(color = "Weighted Draw Source")+
+        coord_cartesian(ylim = c(0, y_max))
+      
+      ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Climate_effects_pMort10_draws_",group_name,".png"), 
+             clim.p,
+             height = 9, width = (length(species_names) + 1))
+      
+      # for the site condition effects
+      marg_draws_all_df %>% filter(predictor %in% c("Ndep.scaled","slope.scaled", "aspect.scaled"))%>%
+        filter(COMMON_NAME %in% species_names)|>
+        ggplot()+
+        geom_line(aes(x = grid_val, y = decadal_pMort, group = draw, color = draw_source), alpha = 0.05)+
+        theme_bw(base_size = 12)+
+        xlab("Scaled Predictor")+
+        ylab("10-year predicted mortality probability")+
+        facet_grid(vars(predictor), vars(COMMON_NAME), scales = "free_y")+
+        theme(panel.grid = element_blank(),
+              strip.text.y = element_text(angle = 0), 
+              strip.text.x = element_text(angle = 90), 
+              legend.position = "bottom", 
+              legend.direction = "horizontal")+
+        guides( color = guide_legend(override.aes = list(linewidth = 2, alpha = 1)))+
+        labs(color = "Weighted Draw Source")+
+        coord_cartesian(ylim = c(0, y_max))
+      
+      ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Site_condition_effects_pMort10_draws_",group_name,".png"), 
+             height = 8,  width = (length(species_names) + 1))
+      
+
+}
+
+plot_draws_predictors(species_names = n_conifers, group_name = "n_conifers")
+plot_draws_predictors(species_names = Oak_birch_hickory, group_name = "Hardwoods", y_max = 0.4)
+plot_draws_predictors(species_names = Maples_ash_bcherry, group_name = "Maple_Pine_Hemlock", y_max = 0.25)
+
+
+
+marg_draws_all_df %>% filter(predictor %in% c("DIA_DIFF_scaled", "DIA_scaled") & 
+                               COMMON_NAME %in% Oak_birch_hickory)|>
+  ggplot()+
+  geom_line(aes(x = grid_val, y = decadal_pMort, group = draw, color = draw_source), alpha = 0.05)+
+  theme_bw(base_size = 12)+
+  xlab("Scaled Predictor")+
+  ylab("10-year predicted mortality probability")+
+  ylim(0, 0.4)+
+  facet_grid(vars(predictor), vars(COMMON_NAME))+
+  theme(panel.grid = element_blank(),
+        strip.text.y = element_text(angle = 0), 
+        strip.text.x = element_text(angle = 90), 
+        legend.position = "bottom", 
+        legend.direction = "horizontal")+
+  guides( color = guide_legend(override.aes = list(linewidth = 2, alpha = 1)))+
+  labs(color = "Weighted Draw Source")
+
+# do this for the plot neighborhood effects:
+c("DIA_DIFF_scaled", "DIA_scaled", "ba.scaled", "BAL.scaled",
+  "damage.scaled", "MATmax.scaled", "MAP.scaled", "ppt.anom",
+  "tmax.anom", "slope.scaled", "aspect.scaled", "Ndep.scaled")
+
+marg_draws_all_df %>% filter(COMMON_NAME %in% n_conifers)%>% #filter(predictor %in% c("ba.scaled", "BAL.scaled", "damage.scaled"))|>
+  ggplot()+
+  geom_line(aes(x = grid_val, y = decadal_pMort, group = draw, color = draw_source), alpha = 0.05)+
+  theme_bw(base_size = 12)+
+  xlab("Scaled Predictor")+
+  ylab("10-year predicted mortality probability")+
+  facet_grid(vars(predictor), vars(COMMON_NAME), scales = "free_y")+
+  theme(panel.grid = element_blank(),
+        strip.text.y = element_text(angle = 0), 
+        strip.text.x = element_text(angle = 90), 
+        legend.position = "bottom", 
+        legend.direction = "horizontal")+
+  guides( color = guide_legend(override.aes = list(linewidth = 2, alpha = 1)))+
+  labs(color = "Weighted Draw Source")
+
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Neighborhood_effects_pMort10_draws.png"), 
+       height = 8, width = 16)
+
+# for the climate effects
+marg_draws_all_df %>% filter(predictor %in% c("MATmax.scaled", "MAP.scaled", 
+                                              "ppt.anom",
+                                              "tmax.anom"))%>%
+  filter(COMMON_NAME %in% n_conifers)|>
+  ggplot()+
+  geom_line(aes(x = grid_val, y = decadal_pMort, group = draw, color = draw_source), alpha = 0.05)+
+  theme_bw(base_size = 12)+
+  xlab("Scaled Predictor")+
+  ylab("10-year predicted mortality probability")+
+  facet_grid(vars(predictor), vars(COMMON_NAME), scales = "free_y")+
+  theme(panel.grid = element_blank(),
+        strip.text.y = element_text(angle = 0), 
+        strip.text.x = element_text(angle = 90), 
+        legend.position = "bottom", 
+        legend.direction = "horizontal")+
+  guides( color = guide_legend(override.aes = list(linewidth = 2, alpha = 1)))+
+  labs(color = "Weighted Draw Source")
+
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Climate_effects_pMort10_draws_n_conifers.png"), 
+       height = 9, width = 6)
+
+# for the climate effects
+marg_draws_all_df %>% filter(predictor %in% c("MATmax.scaled", "MAP.scaled", 
+                                              "ppt.anom",
+                                              "tmax.anom"))%>%
+  filter(!COMMON_NAME %in% n_conifers)|>
+  ggplot()+
+  geom_line(aes(x = grid_val, y = decadal_pMort, group = draw, color = draw_source), alpha = 0.05)+
+  theme_bw(base_size = 12)+
+  xlab("Scaled Predictor")+
+  ylab("10-year predicted mortality probability")+
+  facet_grid(vars(predictor), vars(COMMON_NAME))+
+  theme(panel.grid = element_blank(),
+        strip.text.y = element_text(angle = 0), 
+        strip.text.x = element_text(angle = 90), 
+        legend.position = "bottom", 
+        legend.direction = "horizontal")+
+  guides( color = guide_legend(override.aes = list(linewidth = 2, alpha = 1)))+
+  labs(color = "Weighted Draw Source")
+
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Climate_effects_pMort10_draws_n_conifers.png"), 
+       height = 9, width = 16)
+
+
+# for the site condition effects
+marg_draws_all_df %>% filter(predictor %in% c("Ndep.scaled","slope.scaled", "aspect.scaled"))|>
+  ggplot()+
+  geom_line(aes(x = grid_val, y = decadal_pMort, group = draw, color = draw_source), alpha = 0.05)+
+  theme_bw(base_size = 12)+
+  xlab("Scaled Predictor")+
+  ylab("10-year predicted mortality probability")+
+  facet_grid(vars(predictor), vars(COMMON_NAME), scales = "free_y")+
+  theme(panel.grid = element_blank(),
+        strip.text.y = element_text(angle = 0), 
+        strip.text.x = element_text(angle = 90), 
+        legend.position = "bottom", 
+        legend.direction = "horizontal")+
+  guides( color = guide_legend(override.aes = list(linewidth = 2, alpha = 1)))+
+  labs(color = "Weighted Draw Source")
+
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Site_condition_effects_pMort10_draws.png"), 
+       height = 8, width = 16)
+
 
 
 cut.county.pmort.sf %>% #filter( model.number %in% "Stacked")%>%
