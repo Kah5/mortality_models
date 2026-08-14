@@ -68,8 +68,8 @@ SP.TRAITS$`Shade Tolerance`  <- ifelse(SP.TRAITS$ShadeTol >=4, "High",
 sppColors <- SP.TRAITS$Color 
 names(sppColors) <- unique(SP.TRAITS$COMMON_NAME) 
 
-species_fill <- scale_fill_manual(values = sppColors)
-species_color <- scale_color_manual(values = sppColors)
+species_fill <- scale_fill_manual(values = sppColors, name = "Species")
+species_color <- scale_color_manual(values = sppColors, name = "Species")
 
 # common species ordering scheme:
 disturb.species.order <- c(
@@ -626,6 +626,7 @@ regional_summary_df %>%
 
 # save summaries:
 qs2::qs_save(regional_summary_df, paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Regional_summary_p_o_mort.qs"))
+regional_summary_df <- qs2::qs_read( paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Regional_summary_p_o_mort.qs"))
 
 
 # get state-level summaries
@@ -633,6 +634,7 @@ State_summary_df <- do.call(rbind, lapply(spp.table$SPCD.id, FUN = function(sppc
 State_summary_df$COMMON_NAME <- ref_species[match(State_summary_df$SPCD, ref_species$SPCD),]$COMMON_NAME
 # save summaries:
 qs2::qs_save(State_summary_df, paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/State_summary_p_o_mort.qs"))
+State_summary_df <- qs2::qs_read( paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/State_summary_p_o_mort.qs"))
 
 State_summary_df %>% 
   group_by(COMMON_NAME, model.type, model.number)%>% 
@@ -655,6 +657,7 @@ ST_CTY_summary_df <- do.call(rbind, lapply(spp.table$SPCD.id, FUN = function(spp
 ST_CTY_summary_df$COMMON_NAME <- ref_species[match(ST_CTY_summary_df$SPCD, ref_species$SPCD),]$COMMON_NAME
 # save summaries:
 qs2::qs_save(ST_CTY_summary_df, paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/ST_CTY_summary_p_o_mort.qs"))
+ST_CTY_summary_df <- qs2::qs_read(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/ST_CTY_summary_p_o_mort.qs"))
 
 
 
@@ -739,6 +742,8 @@ State_summary_df %>% filter(n_obs > 50)%>%
 ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/State_Species_pred_obs.png"), 
        height = 6, width = 9)
 
+
+
 regional_summary_df %>% filter(n_obs > 50)%>%
   #filter(model.number == "Stacked")|>
   ggplot()+geom_point(aes(x = obs_M_expn_median, y = pred_M_expn_median, color = model.type))+
@@ -753,7 +758,61 @@ regional_summary_df %>% filter(n_obs > 50)%>%
 ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Regional_Species_pred_obs.png"), 
        height = 6, width = 9)
 
-# calculate RMSE & BIAS for each model, species, scale
+
+# save the stacked pred vs observed by species for all regional values
+all_scale_stacked <- regional_summary_df %>%
+  filter(model.number == "Stacked") %>%
+  mutate(group = "region") %>%
+  rbind(., 
+        State_summary_df %>% 
+          filter(model.number == "Stacked")%>%
+          rename("group" = "state")%>%
+          select(everything(), group)) %>%
+  rbind(., ST_CTY_summary_df %>% filter(n_obs > 50)%>%
+          filter(model.number == "Stacked")%>%
+          rename("group" = "ST_CTY")%>%
+          select(everything(), group))
+
+all_scale_stacked$scale <- factor(all_scale_stacked$scale, levels = c("County", "State", "Regional"))
+
+p.o_stacked_expanded <- all_scale_stacked %>% filter(n_obs >25)|>
+  ggplot()+geom_point(aes(x = obs_M_expn_median*100, y = pred_M_expn_median*100, color = COMMON_NAME), size = 2)+
+  geom_errorbar(aes(x = obs_M_expn_median*100, ymin = pred_M_expn_5.ci.lo*100, ymax = pred_M_expn_95.ci.hi*100, color = COMMON_NAME), size = 0.5)+
+  geom_errorbar(aes(x = obs_M_expn_median*100, ymin = pred_M_expn_25.ci.lo*100, ymax = pred_M_expn_75.ci.hi*100, color = COMMON_NAME), size = 1)+
+  theme_bw(base_size = 16)+
+  facet_wrap(~scale)+
+  geom_abline(aes(intercept = 0, slope = 1))+
+  ylab("Predicted mortality rate (% trees/year)")+
+  xlab("Observed Mortality rate (% trees/year)")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  species_color+
+  theme(panel.grid = element_blank())
+
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Stacked_model_pred_obs_EXPN.png"), 
+       p.o_stacked_expanded,
+       height = 6, width = 11)
+
+p.o_stacked_per_acre <- all_scale_stacked %>% filter(n_obs >25)|>
+  ggplot()+geom_point(aes(x = obs_M_median*100, y = pred_M_median*100, color = COMMON_NAME), size = 2)+
+  geom_errorbar(aes(x = obs_M_median*100, ymin = pred_M_5.ci.lo*100, ymax = pred_M_95.ci.hi*100, color = COMMON_NAME), size = 0.5, alpha = 0.5)+
+  geom_errorbar(aes(x = obs_M_median*100, ymin = pred_M_25.ci.lo*100, ymax = pred_M_75.ci.hi*100, color = COMMON_NAME), size = 1, alpha = 0.75)+
+  theme_bw(base_size = 16)+
+  facet_wrap(~scale)+
+  geom_abline(aes(intercept = 0, slope = 1))+
+  ylab("Predicted mortality rate (% trees/acre/year)")+
+  xlab("Observed Mortality rate (% trees/acre/year)")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  species_color+
+  coord_cartesian(ylim = c(0, 2.5), xlim = c(0, 2.5))+
+  theme(panel.grid = element_blank())
+
+ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Stacked_model_pred_obs_per_acre.png"), 
+       p.o_stacked_per_acre,
+       height = 6, width = 11)
+
+
+################################################################################
+# calculate RMSE & BIAS for each model, species, scale ---
 State_RMSE_BIAS <- State_summary_df %>% filter(n_obs > 50)%>%
   mutate(residual_diff = obs_M_expn_median - pred_M_expn_median)%>%
   group_by(model.number, model.type, COMMON_NAME)%>%
@@ -1239,115 +1298,10 @@ plot_draws_predictors <- function( species_names, group_name,  y_max = 1){
 }
 
 plot_draws_predictors(species_names = n_conifers, group_name = "n_conifers")
-plot_draws_predictors(species_names = Oak_birch_hickory, group_name = "Hardwoods", y_max = 0.4)
-plot_draws_predictors(species_names = Maples_ash_bcherry, group_name = "Maple_Pine_Hemlock", y_max = 0.25)
+plot_draws_predictors(species_names = Oak_birch_hickory, group_name = "Hardwoods", y_max = 0.3)
+plot_draws_predictors(species_names = Maples_ash_bcherry, group_name = "Maple_Pine_Hemlock", y_max = 0.1)
 
-
-
-marg_draws_all_df %>% filter(predictor %in% c("DIA_DIFF_scaled", "DIA_scaled") & 
-                               COMMON_NAME %in% Oak_birch_hickory)|>
-  ggplot()+
-  geom_line(aes(x = grid_val, y = decadal_pMort, group = draw, color = draw_source), alpha = 0.05)+
-  theme_bw(base_size = 12)+
-  xlab("Scaled Predictor")+
-  ylab("10-year predicted mortality probability")+
-  ylim(0, 0.4)+
-  facet_grid(vars(predictor), vars(COMMON_NAME))+
-  theme(panel.grid = element_blank(),
-        strip.text.y = element_text(angle = 0), 
-        strip.text.x = element_text(angle = 90), 
-        legend.position = "bottom", 
-        legend.direction = "horizontal")+
-  guides( color = guide_legend(override.aes = list(linewidth = 2, alpha = 1)))+
-  labs(color = "Weighted Draw Source")
-
-# do this for the plot neighborhood effects:
-c("DIA_DIFF_scaled", "DIA_scaled", "ba.scaled", "BAL.scaled",
-  "damage.scaled", "MATmax.scaled", "MAP.scaled", "ppt.anom",
-  "tmax.anom", "slope.scaled", "aspect.scaled", "Ndep.scaled")
-
-marg_draws_all_df %>% filter(COMMON_NAME %in% n_conifers)%>% #filter(predictor %in% c("ba.scaled", "BAL.scaled", "damage.scaled"))|>
-  ggplot()+
-  geom_line(aes(x = grid_val, y = decadal_pMort, group = draw, color = draw_source), alpha = 0.05)+
-  theme_bw(base_size = 12)+
-  xlab("Scaled Predictor")+
-  ylab("10-year predicted mortality probability")+
-  facet_grid(vars(predictor), vars(COMMON_NAME), scales = "free_y")+
-  theme(panel.grid = element_blank(),
-        strip.text.y = element_text(angle = 0), 
-        strip.text.x = element_text(angle = 90), 
-        legend.position = "bottom", 
-        legend.direction = "horizontal")+
-  guides( color = guide_legend(override.aes = list(linewidth = 2, alpha = 1)))+
-  labs(color = "Weighted Draw Source")
-
-ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Neighborhood_effects_pMort10_draws.png"), 
-       height = 8, width = 16)
-
-# for the climate effects
-marg_draws_all_df %>% filter(predictor %in% c("MATmax.scaled", "MAP.scaled", 
-                                              "ppt.anom",
-                                              "tmax.anom"))%>%
-  filter(COMMON_NAME %in% n_conifers)|>
-  ggplot()+
-  geom_line(aes(x = grid_val, y = decadal_pMort, group = draw, color = draw_source), alpha = 0.05)+
-  theme_bw(base_size = 12)+
-  xlab("Scaled Predictor")+
-  ylab("10-year predicted mortality probability")+
-  facet_grid(vars(predictor), vars(COMMON_NAME), scales = "free_y")+
-  theme(panel.grid = element_blank(),
-        strip.text.y = element_text(angle = 0), 
-        strip.text.x = element_text(angle = 90), 
-        legend.position = "bottom", 
-        legend.direction = "horizontal")+
-  guides( color = guide_legend(override.aes = list(linewidth = 2, alpha = 1)))+
-  labs(color = "Weighted Draw Source")
-
-ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Climate_effects_pMort10_draws_n_conifers.png"), 
-       height = 9, width = 6)
-
-# for the climate effects
-marg_draws_all_df %>% filter(predictor %in% c("MATmax.scaled", "MAP.scaled", 
-                                              "ppt.anom",
-                                              "tmax.anom"))%>%
-  filter(!COMMON_NAME %in% n_conifers)|>
-  ggplot()+
-  geom_line(aes(x = grid_val, y = decadal_pMort, group = draw, color = draw_source), alpha = 0.05)+
-  theme_bw(base_size = 12)+
-  xlab("Scaled Predictor")+
-  ylab("10-year predicted mortality probability")+
-  facet_grid(vars(predictor), vars(COMMON_NAME))+
-  theme(panel.grid = element_blank(),
-        strip.text.y = element_text(angle = 0), 
-        strip.text.x = element_text(angle = 90), 
-        legend.position = "bottom", 
-        legend.direction = "horizontal")+
-  guides( color = guide_legend(override.aes = list(linewidth = 2, alpha = 1)))+
-  labs(color = "Weighted Draw Source")
-
-ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Climate_effects_pMort10_draws_n_conifers.png"), 
-       height = 9, width = 16)
-
-
-# for the site condition effects
-marg_draws_all_df %>% filter(predictor %in% c("Ndep.scaled","slope.scaled", "aspect.scaled"))|>
-  ggplot()+
-  geom_line(aes(x = grid_val, y = decadal_pMort, group = draw, color = draw_source), alpha = 0.05)+
-  theme_bw(base_size = 12)+
-  xlab("Scaled Predictor")+
-  ylab("10-year predicted mortality probability")+
-  facet_grid(vars(predictor), vars(COMMON_NAME), scales = "free_y")+
-  theme(panel.grid = element_blank(),
-        strip.text.y = element_text(angle = 0), 
-        strip.text.x = element_text(angle = 90), 
-        legend.position = "bottom", 
-        legend.direction = "horizontal")+
-  guides( color = guide_legend(override.aes = list(linewidth = 2, alpha = 1)))+
-  labs(color = "Weighted Draw Source")
-
-ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Site_condition_effects_pMort10_draws.png"), 
-       height = 8, width = 16)
-
+# Marginal effects plots with different CI around them using geom_ribbon------
 
 
 cut.county.pmort.sf %>% #filter( model.number %in% "Stacked")%>%
