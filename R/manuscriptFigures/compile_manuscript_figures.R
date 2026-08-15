@@ -1537,9 +1537,509 @@ plot_draws_predictors(species_names = n_conifers, group_name = "n_conifers")
 plot_draws_predictors(species_names = Oak_birch_hickory, group_name = "Hardwoods", y_max = 0.3)
 plot_draws_predictors(species_names = Maples_ash_bcherry, group_name = "Maple_Pine_Hemlock", y_max = 0.1)
 
+########################################################################################
 # Marginal effects plots with different CI around them using geom_ribbon------
 
+marg_summary_all_df <- do.call(rbind, 
+                             lapply(list.files(path = paste0(output.dir, "SPCD_stanoutput_cmdstan/model_avg_draws/stacking_wts/"), 
+                                                pattern ="Summary_marginal_main", full.names = T), 
+                                    qs2::qs_read))
 
+main_effects_df <- data.frame(predictor = c("DIA_DIFF_scaled", "DIA_scaled", "ba.scaled", "BAL.scaled",
+                  "damage.scaled", "MATmax.scaled", "MAP.scaled", "ppt.anom",
+                  "tmax.anom", "slope.scaled", "aspect.scaled", "Ndep.scaled"),
+                  
+                  Pretty_name = c("Diameter difference", "Diameter", "Plot Basal Area", "Tree BA Larger than", 
+                                  "% Damage", "MATmax", "MAP", "Precip anomaly", "Tmax anomaly", "slope", "aspect", "N deposition"))
+
+
+marg_summary_all_df <- marg_summary_all_df %>% left_join(., main_effects_df)
+marg_summary_all_df$predictor <- factor(marg_summary_all_df$predictor, levels = main_effects_df$predictor)
+marg_summary_all_df$Pretty_name <- factor(marg_summary_all_df$Pretty_name, levels = main_effects_df$Pretty_name)
+
+
+# convert grid_value back to raw values for each species:
+train.data.list <- test.data.list <- list()
+
+all.spcd.data.files <- list.files(paste0("SPCD_standata_general_full_standardized_v3/"), pattern = "_9.Rdata", full.names = TRUE)
+for(i in 1:length(all.spcd.data.files)){
+  load(all.spcd.data.files[i])
+  train.data.list[[i]] <- train.data
+  test.data.list[[i]] <- test.data
+}
+
+
+# covariates that are scaled by species:
+train.data <- do.call(rbind, train.data.list)
+
+test.data <-do.call(rbind, test.data.list)
+plot.medians <- readRDS("data/plot.medians_SPCD_all.rds")
+
+
+# get the species scaling information:
+
+# n deposition
+species.scaling <- 
+ 
+  #DIA_DIFF_scaled
+ train.data %>% select(Species, SPCD, logDIA.DIFF.median, logDIA.DIFF.sd) %>% distinct()%>%
+          mutate(Covariate = "DIA_DIFF_scaled", 
+                 Clean_Name = "Diameter Difference",
+                 Transformation = "log(x)",
+                 Units = "Inches/year")%>% 
+          rename("Val.mean" = "logDIA.DIFF.median",
+                 "Val.sd" = "logDIA.DIFF.sd")%>%
+  #DIA
+  rbind(., train.data %>% select(Species, SPCD, logDIA.median, logDIA.sd) %>% distinct()%>%
+          mutate(Covariate = "DIA_scaled", 
+                 Clean_Name = "Diameter",
+                 Transformation = "log(x)",
+                 Units = "Inches")%>% 
+          rename("Val.mean" = "logDIA.median",
+                 "Val.sd" = "logDIA.sd") 
+  )%>%
+  
+  #plt_ba_sq_ft_old
+  rbind(., train.data %>% select(Species, SPCD, logplt_ba_sq_ft_cur.median, logplt_ba_sq_ft_cur.sd) %>% 
+          distinct()%>%
+          mutate(Covariate = "ba.scaled", 
+                 Clean_Name = "Plot Basal Area",
+                 Transformation = "log(1+x)",
+                 Units = "ft^2")%>% 
+          rename("Val.mean" = "logplt_ba_sq_ft_cur.median",
+                 "Val.sd" = "logplt_ba_sq_ft_cur.sd")
+  )%>%
+ 
+  #BAL ratio
+  rbind(.,train.data %>% select(Species, SPCD, BAL.ratio.median, BAL.ratio.sd) %>% distinct()%>%
+          mutate(Covariate = "BAL.scaled",
+                 Clean_Name = "Basal Area Larger Than",
+                 Transformation = "None",
+                 Units = "Ratio")%>% 
+          rename("Val.mean" = "BAL.ratio.median",
+                 "Val.sd" = "BAL.ratio.sd")
+  )%>%
+  
+  #damage.scaled
+  rbind(.,train.data %>% select(Species, SPCD) %>% distinct()%>%
+          mutate(damage.median = plot.medians$damage.median, 
+                 damage.sd = plot.medians$damage.sd) %>%
+          mutate(Covariate = "damage.scaled",
+                 Clean_Name = "% Damage",
+                 Transformation = "log(1+x)",
+                 Units = "Percent")%>% 
+          rename("Val.mean" = "damage.median",
+                 "Val.sd" = "damage.sd")
+  )%>%
+  
+  #MATmax.scaled
+  rbind(.,train.data %>% select(Species, SPCD) %>% distinct()%>%
+          mutate(MATmax.median = plot.medians$MATmax.median, 
+                 MATmax.sd = plot.medians$MATmax.sd) %>%
+          mutate(Covariate = "MATmax.scaled",
+                 Clean_Name = "Mean Annual Tmax",
+                 Transformation = "None",
+                 Units = "Degrees")%>% 
+          rename("Val.mean" = "MATmax.median",
+                 "Val.sd" = "MATmax.sd")
+  )%>%
+  
+  #MAP.scaled
+  rbind(.,train.data %>% select(Species, SPCD) %>% distinct()%>%
+          mutate(MAP.median = plot.medians$MAP.median, 
+                 MAP.sd = plot.medians$MAP.sd) %>%
+          mutate(Covariate = "MAP.scaled",
+                 Clean_Name = "Mean Annual Precipitation",
+                 Transformation = "None",
+                 Units = "mm")%>% 
+          rename("Val.mean" = "MAP.median",
+                 "Val.sd" = "MAP.sd")
+  )%>%
+  
+  
+  #ppt.anom
+  rbind(.,train.data %>% select(Species, SPCD, ppt.anom.median, ppt.anom.sd) %>% distinct()%>%
+          mutate(Covariate = "ppt.anom",
+                 Clean_Name = "Precipitation anomaly",
+                 Transformation = "None",
+                 Units = " ")%>% 
+          rename("Val.mean" = "ppt.anom.median",
+                 "Val.sd" = "ppt.anom.sd")
+  )%>%
+  
+  #tmax.anom
+  rbind(.,train.data %>% select(Species, SPCD, tmax.anom.median, tmax.anom.sd) %>% distinct()%>%
+          mutate(Covariate = "tmax.anom",
+                 Clean_Name = "Max. Temperature anomaly",
+                 Transformation = "None",
+                 Units = " ")%>% 
+          rename("Val.mean" = "tmax.anom.median",
+                 "Val.sd" = "tmax.anom.sd")
+  )%>%
+  
+  
+  #slope
+  rbind(.,train.data %>% select(Species, SPCD, slope.sin.median, slope.sin.sd) %>% distinct()%>%
+          mutate(Covariate = "slope.scaled",
+                 Clean_Name = "sin(slope)",
+                 Transformation = "None",
+                 Units = "degrees")%>% 
+          rename("Val.mean" = "slope.sin.median",
+                 "Val.sd" = "slope.sin.sd")
+  )%>%
+  
+  #aspect
+  rbind(.,train.data %>% select(Species, SPCD, aspect.cos.median, aspect.cos.sd) %>% distinct()%>%
+          mutate(Covariate = "aspect.scaled",
+                 Clean_Name = "cos(aspect)",
+                 Transformation = "None",
+                 Units = "degrees")%>% 
+          rename("Val.mean" = "aspect.cos.median",
+                 "Val.sd" = "aspect.cos.sd")
+  )%>%
+  
+  # N deposition
+  rbind(., train.data %>% select(Species, SPCD) %>% distinct()%>%
+          mutate(Ndep.median = plot.medians$Ndep.median, 
+                 Ndep.sd = plot.medians$Ndep.sd) %>%
+  mutate(Covariate = "Ndep.scaled", 
+         Clean_Name = "N deposition rate",
+         Transformation = "None",
+         Units = "kg/m^2/year") %>% 
+  rename("Val.mean" = "Ndep.median",
+         "Val.sd" = "Ndep.sd")
+  )%>%
+  select(Species, SPCD, Covariate, Val.mean, Val.sd, Clean_Name, Units, Transformation) %>% 
+  rename("predictor" = "Covariate")
+  
+# convert scaled grid values to the raw values for each species:
+marg_with_raw_values <- marg_summary_all_df %>% left_join(., species.scaling)%>% 
+  mutate(Descaled = grid_val*Val.sd + Val.mean)%>%
+  mutate(Raw_grid_val = ifelse(Transformation %in% "log(x)", exp(Descaled), 
+                               ifelse(Transformation %in% "log(1+x)", expm1(Descaled), Descaled)))
+
+
+###################################################################################
+# function to plot all the 50% CI by predictor name
+marg_with_raw_values
+
+plot_50CI_summary_clean <- function(predictor_name, species_names = unique(marg_with_raw_values$Species),  y_max = 0.25){
+  
+  SPP.marginals_predictor <- marg_with_raw_values %>% filter(predictor %in% predictor_name  &
+                                    COMMON_NAME %in% species_names)
+  
+  #unique(SPP.marginals_predictor$Clean_Name)
+  unit_parentheses <- ifelse(unique(SPP.marginals_predictor$Units) %in% " ", " ", paste0(" (",unique(SPP.marginals_predictor$Units), ")" ))
+  
+  SPP.marginals_predictor |>
+    ggplot()+
+    #geom_ribbon(aes(x = Raw_grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+    geom_ribbon(aes(x = Raw_grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.65)+
+    geom_line(aes(x = Raw_grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+    species_fill + species_color+
+    theme_bw()+
+    facet_grid(vars(Pretty_name),  vars(COMMON_NAME), scales = "free_x")+
+    theme(panel.grid = element_blank(),
+          strip.text.y = element_text(angle = 0), 
+          strip.text.x = element_text(angle = 90), 
+          legend.position = "bottom", 
+          legend.direction = "horizontal")+
+    coord_cartesian(ylim = c(0, y_max))+
+    xlab(paste0(unique(SPP.marginals_predictor$Clean_Name), unit_parentheses))+
+    ylab("10-year predicted mortality probability")
+ 
+}
+
+
+unique(marg_with_raw_values$predictor)
+plot_50CI_summary_clean(predictor_name = "DIA_DIFF_scaled", 
+                        species_names = unique(marg_with_raw_values$Species),  
+                        y_max = 0.25)
+plot_50CI_summary_clean(predictor_name = "DIA_scaled", 
+                        species_names = unique(marg_with_raw_values$Species),  
+                        y_max = 0.25)
+
+plot_50CI_summary_clean(predictor_name = "ba.scaled", 
+                        species_names = unique(marg_with_raw_values$Species),  
+                        y_max = 0.25)
+
+plot_50CI_summary_clean(predictor_name = "BAL.scaled", 
+                        species_names = unique(marg_with_raw_values$Species),  
+                        y_max = 0.25)
+
+plot_50CI_summary_clean(predictor_name = "damage.scaled", 
+                        species_names = unique(marg_with_raw_values$Species),  
+                        y_max = 0.25)
+
+plot_50CI_summary_clean(predictor_name = "Ndep.scaled", 
+                        species_names = unique(marg_with_raw_values$Species),  
+                        y_max = 0.25)
+
+plot_50CI_summary_clean(predictor_name = "MAP.scaled", 
+                        species_names = unique(marg_with_raw_values$Species),  
+                        y_max = 0.25)
+
+plot_50CI_summary_clean(predictor_name = "MATmax.scaled", 
+                        species_names = unique(marg_with_raw_values$Species),  
+                        y_max = 0.25)
+
+
+plot_50CI_summary_clean(predictor_name = "ppt.anom", 
+                        species_names = unique(marg_with_raw_values$Species),  
+                        y_max = 0.25)
+
+plot_50CI_summary_clean(predictor_name = "tmax.anom", 
+                        species_names = unique(marg_with_raw_values$Species),  
+                        y_max = 0.25)
+
+
+plot_50CI_summary_clean(predictor_name = "slope.scaled", 
+                        species_names = unique(marg_with_raw_values$Species),  
+                        y_max = 0.25)
+
+plot_50CI_summary_clean(predictor_name = "aspect.scaled", 
+                        species_names = unique(marg_with_raw_values$Species),  
+                        y_max = 0.25)
+
+# TODO: 
+# classify general shapes of the curves and plot up together?
+
+marg_with_raw_values %>% group_by(SPCD, COMMON_NAME, predictor, Clean_Name) %>%
+  summarise(min_predictor = min(Raw_grid_val, na.rm =TRUE), 
+            max_predictor = max(Raw_grid_val, na.rm =TRUE)) %>% 
+  mutate(linear_diff_pred = (max_predictor - min_predictor)/min_predictor)
+
+
+marg_with_raw_values %>% filter(predictor %in% c("DIA_scaled")) |>
+  ggplot()+
+  #geom_ribbon(aes(x = Raw_grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+  geom_ribbon(aes(x = Raw_grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.75)+
+  geom_line(aes(x = Raw_grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+  species_fill + species_color+
+  theme_bw()+
+  facet_grid(vars(Pretty_name), scales = "free")+
+  theme(panel.grid = element_blank(),
+        strip.text.y = element_text(angle = 0), 
+        strip.text.x = element_text(angle = 90), 
+        legend.position = "bottom", 
+        legend.direction = "horizontal")+
+  coord_cartesian(ylim = c(0, y_max))+
+  xlab("Scaled Predictor")+
+  ylab("10-year predicted mortality probability")
+
+marg_with_raw_values %>% filter(predictor %in% c("DIA_DIFF_scaled")) |>
+  ggplot()+
+  #geom_ribbon(aes(x = Raw_grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+  geom_ribbon(aes(x = Raw_grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.75)+
+  geom_line(aes(x = Raw_grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+  species_fill + species_color+
+  theme_bw()+
+  facet_grid(vars(Pretty_name), scales = "free")+
+  theme(panel.grid = element_blank(),
+        strip.text.y = element_text(angle = 0), 
+        strip.text.x = element_text(angle = 90), 
+        legend.position = "bottom", 
+        legend.direction = "horizontal")+
+  coord_cartesian(ylim = c(0, y_max))+
+  xlab("Scaled Predictor")+
+  ylab("10-year predicted mortality probability")
+
+marg_with_raw_values %>% filter(predictor %in% c("damage.scaled")) |>
+  ggplot()+
+  #geom_ribbon(aes(x = Raw_grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+  geom_ribbon(aes(x = Raw_grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.75)+
+  geom_line(aes(x = Raw_grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+  species_fill + species_color+
+  theme_bw()+
+  facet_grid(vars(Pretty_name), scales = "free")+
+  theme(panel.grid = element_blank(),
+        strip.text.y = element_text(angle = 0), 
+        strip.text.x = element_text(angle = 90), 
+        legend.position = "bottom", 
+        legend.direction = "horizontal")+
+  coord_cartesian(ylim = c(0, y_max))+
+  xlab("Scaled Predictor")+
+  ylab("10-year predicted mortality probability")
+
+marg_with_raw_values %>% filter(predictor %in% c("Ndep.scaled")) |>
+  ggplot()+
+  #geom_ribbon(aes(x = Raw_grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+  geom_ribbon(aes(x = Raw_grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.75)+
+  geom_line(aes(x = Raw_grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+  species_fill + species_color+
+  theme_bw()+
+  facet_grid(vars(Pretty_name), scales = "free")+
+  theme(panel.grid = element_blank(),
+        strip.text.y = element_text(angle = 0), 
+        strip.text.x = element_text(angle = 90), 
+        legend.position = "bottom", 
+        legend.direction = "horizontal")+
+  coord_cartesian(ylim = c(0, y_max))+
+  xlab("Scaled Predictor")+
+  ylab("10-year predicted mortality probability")
+
+
+marg_with_raw_values %>% filter(predictor %in% c("ppt.anom")) |>
+  ggplot()+
+  #geom_ribbon(aes(x = Raw_grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+  geom_ribbon(aes(x = Raw_grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.75)+
+  geom_line(aes(x = Raw_grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+  species_fill + species_color+
+  theme_bw()+
+  facet_grid(vars(Pretty_name), scales = "free")+
+  theme(panel.grid = element_blank(),
+        strip.text.y = element_text(angle = 0), 
+        strip.text.x = element_text(angle = 90), 
+        legend.position = "bottom", 
+        legend.direction = "horizontal")+
+  coord_cartesian(ylim = c(0, y_max))+
+  xlab("Scaled Predictor")+
+  ylab("10-year predicted mortality probability")
+
+marg_with_raw_values %>% filter(predictor %in% c("tmax.anom")) |>
+  ggplot()+
+  #geom_ribbon(aes(x = Raw_grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+  geom_ribbon(aes(x = Raw_grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.75)+
+  geom_line(aes(x = Raw_grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+  species_fill + species_color+
+  theme_bw()+
+  facet_grid(vars(Pretty_name), scales = "free")+
+  theme(panel.grid = element_blank(),
+        strip.text.y = element_text(angle = 0), 
+        strip.text.x = element_text(angle = 90), 
+        legend.position = "bottom", 
+        legend.direction = "horizontal")+
+  coord_cartesian(ylim = c(0, y_max))+
+  xlab("Scaled Predictor")+
+  ylab("10-year predicted mortality probability")
+
+
+plot_ribbons_predictors <- function( species_names, group_name,  y_max = 1){
+  
+  size.p <- marg_summary_all_df %>% filter(predictor %in% c("DIA_DIFF_scaled", "DIA_scaled")  &
+                                           COMMON_NAME %in% species_names)|>
+    ggplot()+
+    geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+    geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.75)+
+    geom_line(aes(x = grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+    species_fill + species_color+
+    theme_bw()+
+    facet_grid(vars(Pretty_name), vars(COMMON_NAME), scales = "free")+
+    theme(panel.grid = element_blank(),
+          strip.text.y = element_text(angle = 0), 
+          strip.text.x = element_text(angle = 90), 
+          legend.position = "bottom", 
+          legend.direction = "horizontal")+
+    coord_cartesian(ylim = c(0, y_max))+
+    xlab("Scaled Predictor")+
+    ylab("10-year predicted mortality probability")
+  
+  ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Size_effects_pMort10_ribbons_",group_name,".png"), 
+         size.p,
+         height = 6, width = (length(species_names) + 1))
+  
+  
+  heighbor.p <-  marg_summary_all_df %>% filter(COMMON_NAME %in% species_names)%>% 
+    filter(predictor %in% c("ba.scaled", "BAL.scaled", "damage.scaled"))|>
+    ggplot()+
+    geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+    geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.75)+
+    geom_line(aes(x = grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+    species_fill + species_color+
+    theme_bw()+
+    facet_grid(vars(Pretty_name), vars(COMMON_NAME), scales = "free_y")+
+    theme(panel.grid = element_blank(),
+          strip.text.y = element_text(angle = 0), 
+          strip.text.x = element_text(angle = 90), 
+          legend.position = "bottom", 
+          legend.direction = "horizontal")+
+    coord_cartesian(ylim = c(0, y_max))+
+    xlab("Scaled Predictor")+
+    ylab("10-year predicted mortality probability")
+  
+  ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Neighborhood_effects_pMort10_ribbons_",group_name,".png"), 
+         heighbor.p,
+         height = 8, width = (length(species_names) + 1))
+  
+  
+  # for the climate effects
+  clim.p <- marg_summary_all_df %>% filter(predictor %in% c("MATmax.scaled", "MAP.scaled", 
+                                                          "ppt.anom",
+                                                          "tmax.anom"))%>%
+    filter(COMMON_NAME %in% species_names)|>
+    ggplot()+
+    geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+    geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.75)+
+    geom_line(aes(x = grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+    species_fill + species_color+
+    theme_bw()+
+    facet_grid(vars(Pretty_name), vars(COMMON_NAME), scales = "free_y")+
+    theme(panel.grid = element_blank(),
+          strip.text.y = element_text(angle = 0), 
+          strip.text.x = element_text(angle = 90), 
+          legend.position = "bottom", 
+          legend.direction = "horizontal")+
+    coord_cartesian(ylim = c(0, y_max))+
+    xlab("Scaled Predictor")+
+    ylab("10-year predicted mortality probability")
+  
+  ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Climate_effects_pMort10_ribbons_",group_name,".png"), 
+         clim.p,
+         height = 9, width = (length(species_names) + 1))
+  
+  # for the site condition effects
+ site.p <-  marg_summary_all_df  %>% filter(predictor %in% c("Ndep.scaled","slope.scaled", "aspect.scaled"))%>%
+    filter(COMMON_NAME %in% species_names)|>
+           ggplot()+
+           geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+           geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.75)+
+           geom_line(aes(x = grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+           species_fill + species_color+
+           theme_bw()+
+           facet_grid(vars(Pretty_name), vars(COMMON_NAME), scales = "free_y")+
+           theme(panel.grid = element_blank(),
+                 strip.text.y = element_text(angle = 0), 
+                 strip.text.x = element_text(angle = 90), 
+                 legend.position = "bottom", 
+                 legend.direction = "horizontal")+
+           coord_cartesian(ylim = c(0, y_max))+
+           xlab("Scaled Predictor")+
+           ylab("10-year predicted mortality probability")
+          
+  ggsave(paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/Site_condition_effects_pMort10_ribbons_",group_name,".png"), 
+         site.p,
+         height = 8,  width = (length(species_names) + 1))
+  
+  
+}
+
+plot_ribbons_predictors(species_names = n_conifers, group_name = "n_conifers", y_max = 0.5)
+plot_ribbons_predictors(species_names = Oak_birch_hickory, group_name = "Hardwoods", y_max = 0.3)
+plot_ribbons_predictors(species_names = Maples_ash_bcherry, group_name = "Maple_Pine_Hemlock", y_max = 0.1)
+
+
+# plot up the 50% CI only across the values:
+ggplot(data = marg_summary_all_df)+
+  #geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.5)+
+  geom_line(aes(x = grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+  facet_wrap(~Pretty_name, scales = "free_y")+
+  species_fill + species_color+
+  theme_bw()
+
+# omit balsam fir
+ggplot(data = marg_summary_all_df %>% filter(! COMMON_NAME %in% c("balsam fir", "northern white-cedar", "red spruce")))+
+  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.05.ci.lo, ymax = decadal_pMort.95.ci.hi, fill = COMMON_NAME), alpha = 0.25)+
+  geom_ribbon(aes(x = grid_val, ymin = decadal_pMort.25.ci.lo, ymax = decadal_pMort.75.ci.hi, fill = COMMON_NAME), alpha = 0.75)+
+  geom_line(aes(x = grid_val, y = decadal_pMort.median, color = COMMON_NAME))+
+  facet_wrap(~Pretty_name, scales = "free_y")+
+  species_fill + species_color+
+  theme_bw()
+
+
+
+########################################################################################
+# Old code------
 cut.county.pmort.sf %>% #filter( model.number %in% "Stacked")%>%
   filter(n_obs >=10)%>%
   ggplot()+geom_histogram(aes(pred_M_expn_median*100 - obs_M_expn_median*100, fill = model.number))
