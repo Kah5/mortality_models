@@ -1296,13 +1296,14 @@ hier_draws_path <- function(k)
   paste0(output.dir, "SPCD_stanoutput_cmdstan/betas/u_beta_alpha_samps_hierarchical_mort_model_",k,"_niter_1000_nchain_4.qs")  # ADAPT: your actual naming
 
 hier_draws_spp_save_path <- function(spcd, k)
-  paste0(output.dir, "SPCD_stanoutput_cmdstan/betas/u_beta_alpha_samps_hierarchical_mort_model_",k,"_SPCD_",spcd,"_niter_1000_nchain_4.qs")  # ADAPT: your actual naming
+  paste0(output.dir, "SPCD_stanoutput_cmdstan/betas/u_beta_alpha_samps_hierarchical_resaved_mort_model_",k,"_SPCD_",spcd,"_niter_1000_nchain_4.qs")  # ADAPT: your actual naming
 
 
 species_draws_path <- function(spcd, k){
   
   paste0(output.dir, "SPCD_stanoutput_cmdstan/betas/u_beta_alpha_samps_mort_model_",k,"_SPCD_",spcd,"_remper_correction_0.5_niter_1000_nchain_4.qs")
 }
+
 resave_hier_betas <- do.call(rbind, lapply(1:9, function(i){
   
   cat(paste0("model ", i, "\n"))
@@ -1430,6 +1431,7 @@ betas_261 <- stack_betas_alphas_species(spcd = 261,
                              y_plan = NULL)
 
 betas_261$draws %>% as_draws_df() %>% summarise_draws()
+
 summarize_beta_posteriors <- function(x) {
   c(median = median(x, na.rm =TRUE),
     ci.lo.2.5 = quantile(x, probs = c(0.025), na.rm =TRUE),

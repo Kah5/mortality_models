@@ -1421,24 +1421,34 @@ gc()
 ######################################################################################
 # Plot up beta posterior predictions from all models ----------
 
-# read_qs
+# function to summarize all posterior draws
+summarize_beta_posteriors <- function(x) {
+  c(median = median(x, na.rm =TRUE),
+    quantile(x, probs = c(0.025), na.rm =TRUE),
+    quantile(x, probs = c(0.975), na.rm =TRUE), 
+    quantile(x, probs = c(0.05), na.rm =TRUE),
+    quantile(x, probs = c(0.95), na.rm =TRUE), 
+    quantile(x, probs = c(0.25), na.rm =TRUE),
+    quantile(x, probs = c(0.75), na.rm =TRUE))
+}
+
+# Hierarchical u_beta and alpha posteriors--
 betas.heir <- list.files(paste0(output.dir, "SPCD_stanoutput_cmdstan/betas/"), pattern = "hierarchical_mort_model_", full.names = T)
 
 beta_sumary_df <- do.call(rbind, lapply(1:9, function(i){
   
-  
-  ubetas <- qs2::qs_read(betas.heir[i]) %>% subset_draws(., "u_beta")%>%  summarise_draws() %>% mutate(model.number = i) %>% 
+  ubetas <- qs2::qs_read(betas.heir[i]) %>% subset_draws(., "u_beta")%>%  
+    summarise_draws(., summarize_beta_posteriors) %>% 
+    mutate(model.number = i) %>% 
     mutate(param = "u_beta")
   
-  mu_beta <- qs2::qs_read(betas.heir[i]) %>% subset_draws(., "mu_beta")%>%  summarise_draws() %>% mutate(model.number = i) %>% 
-    mutate(param = "mu_beta")
-  
-  alpha_spp <- qs2::qs_read(betas.heir[i]) %>% subset_draws(., "alpha_SPP")%>%  summarise_draws() %>% mutate(model.number = i) %>% 
+ 
+  alpha_spp <- qs2::qs_read(betas.heir[i]) %>% subset_draws(., "alpha_SPP")%>%  
+    summarise_draws(., summarize_beta_posteriors) %>% 
+    mutate(model.number = i) %>% 
     mutate(param = "alpha_SPP")
   
-  mu_alpha = qs2::qs_read(betas.heir[i]) %>% subset_draws(., "alpha_SPP")%>%  summarise_draws() %>% mutate(model.number = i) %>% 
-    mutate(param = "mu_alpha" )
-  rbind(ubetas, mu_beta, alpha_spp, mu_alpha)
+  rbind(ubetas,  alpha_spp)
 })
 )
 
@@ -1448,12 +1458,16 @@ u_beta_names <- data.frame(variable = unique(u_betas$variable),
                            SPP = rep(1:17, 78),
                            cov.number = rep(1:78, each = 17))
 # get covariate names
+# need to read in the model data for model 9
+
+load(paste0("SPCD_standata_general_full_standardized_v3/", "SPCD_97remper_correction_0.5model_9.Rdata"))
+
 cov.names <- data.frame(cov.number = unique(u_beta_names$cov.number),
                         Covariate = colnames(mod.data$xM))
 
 spp.table <- read.csv(file = paste0(output.dir, "/data/Hierarchical_obs_model_7.csv"))
 
-u_betas.quant <- u_betas %>% rename("ci.lo"="q5", "ci.hi" = "q95")%>% 
+u_betas.quant <- u_betas %>% rename("ci.lo"="5%", "ci.hi" = "95%")%>% 
   left_join(., u_beta_names)%>% left_join(., spp.table) %>%
   left_join(., cov.names)
 u_betas.quant$Covariate <- factor(u_betas.quant$Covariate, levels = cov.names$Covariate)
@@ -1464,7 +1478,7 @@ u_betas.quant$`significance` <- ifelse(u_betas.quant$ci.lo < 0 & u_betas.quant$c
                                              ifelse(u_betas.quant$ci.lo > 0 & u_betas.quant$ci.hi > 0, "significant", "overlapping zero"))
 
 
-# get the species.level u_betas----
+# species level u_betas and alphas posteriors---
 
 species_draws_path <- function(spcd, k){
  
@@ -1477,12 +1491,29 @@ spp_beta_sumary_df <- do.call(rbind, lapply(1:9, function(i){
   
   
     ubetas <- do.call(rbind, lapply(spp.table$SPCD, FUN = function(spcd, k = i){
-      qs2::qs_read(species_draws_path(spcd = spcd, k)) %>% subset_draws(., "u_beta")%>%  
-        summarise_draws() %>% 
+      ubetas_df <-  qs2::qs_read(species_draws_path(spcd = spcd, k)) %>% subset_draws(., "u_beta")%>%  
+        summarise_draws(., summarize_beta_posteriors) %>% 
         mutate(model.number = i, 
-             SPCD = spcd) %>% 
-      mutate(param = "u_beta")
+             SPCD = spcd)%>%
+        mutate(param = "u_beta")
+      
+      
+      alpha_spp <-  qs2::qs_read(species_draws_path(spcd = spcd, k)) %>% subset_draws(., "alpha_SPP")%>%  
+        summarise_draws(., summarize_beta_posteriors)%>% 
+        mutate(model.number = i, 
+               SPCD = spcd) %>% 
+        mutate(param = "alpha_SPP")
+      
+      
+     
+      
+      rbind(ubetas_df,  alpha_spp)
+      
+      
     }))
+    
+    
+    
   ubetas
 
 })
@@ -1499,7 +1530,7 @@ cov.names_spp <- data.frame(cov.number = unique(u_beta_spp_names$cov.number),
                         Covariate = colnames(mod.data$xM))
 
 
-u_betas_spp.quant <- u_betas_spp %>% rename("ci.lo"="q5", "ci.hi" = "q95")%>% 
+u_betas_spp.quant <- u_betas_spp %>% rename("ci.lo"="5%", "ci.hi" = "95%")%>% 
   left_join(., u_beta_spp_names)%>% left_join(., spp.table) %>%
   left_join(., cov.names_spp)
 u_betas_spp.quant$Covariate <- factor(u_betas_spp.quant$Covariate, levels = cov.names_spp$Covariate)
@@ -1508,6 +1539,55 @@ u_betas_spp.quant$Covariate <- factor(u_betas_spp.quant$Covariate, levels = cov.
 # get overlapping zero to color the error bars
 u_betas_spp.quant$`significance` <- ifelse(u_betas_spp.quant$ci.lo < 0 & u_betas_spp.quant$ci.hi < 0, "significant", 
                                        ifelse(u_betas_spp.quant$ci.lo > 0 & u_betas_spp.quant$ci.hi > 0, "significant", "overlapping zero"))
+
+# get the stacked posterior draws---
+stacked_draws_path <- function(spcd, weighting = "stacking_wts"){
+  
+  paste0(output.dir, "SPCD_stanoutput_cmdstan/betas/u_betas_alpha_samps_SPCD_",spcd,"_", weighting, ".qs")
+}
+
+
+
+stacked_beta_sumary_df <- do.call(rbind, lapply(spcd_ids, function(spcd, weighting = "stacking_wts"){
+  
+  
+
+    ubetas_df <-  qs2::qs_read(stacked_draws_path(spcd = spcd, weighting = "stacking_wts")) %>% 
+      subset_draws(., "u_beta")%>%  
+      summarise_draws(., summarize_beta_posteriors) %>% 
+      mutate(model.number = weighting, 
+             SPCD = spcd)%>%
+      mutate(param = "u_beta")
+    
+    
+    alpha_spp <-  qs2::qs_read(stacked_draws_path(spcd = spcd, weighting = "stacking_wts")) %>% 
+      subset_draws(., "alpha_SPP")%>%  
+      summarise_draws(., summarize_beta_posteriors) %>% 
+      mutate(model.number = weighting, 
+             SPCD = spcd) %>% 
+      mutate(param = "alpha_SPP")
+    
+    
+    
+    
+    rbind(ubetas_df,  alpha_spp)
+    
+
+  
+})
+)
+
+u_betas_stack <- stacked_beta_sumary_df %>% filter(param %in% "u_beta")
+
+u_betas_stack.quant <- u_betas_stack %>% rename("ci.lo"="5%", "ci.hi" = "95%")%>% 
+  left_join(., u_beta_spp_names)%>% left_join(., spp.table) %>%
+  left_join(., cov.names_spp)
+u_betas_stack.quant$Covariate <- factor(u_betas_stack.quant$Covariate, levels = cov.names_spp$Covariate)
+
+
+# get overlapping zero to color the error bars
+u_betas_stack.quant$`significance` <- ifelse(u_betas_stack.quant$ci.lo < 0 & u_betas_stack.quant$ci.hi < 0, "significant", 
+                                           ifelse(u_betas_stack.quant$ci.lo > 0 & u_betas_stack.quant$ci.hi > 0, "significant", "overlapping zero"))
 
 
 
@@ -1519,7 +1599,11 @@ u_betas_all_models <- rbind(
 
       u_betas.quant %>% 
       select(SPCD, COMMON, SPP, model.number, Covariate, median, ci.lo, ci.hi, significance) %>%
-           mutate(model.type = "Hierarchical") 
+           mutate(model.type = "Hierarchical"), 
+    
+    u_betas_stack.quant %>% 
+      select(SPCD, COMMON, SPP, model.number, Covariate, median, ci.lo, ci.hi, significance) %>%
+      mutate(model.type = "Stacked") 
 )
 
 u_betas_signifcance_summary <- u_betas_all_models  %>% 
@@ -1571,6 +1655,9 @@ u_betas_signifcance_summary |>
   theme_bw()+
   theme(panel.grid = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
 
+
+
+
 u_betas_all_models  %>% filter(COMMON %in% "sugar maple") |>
   ggplot()+geom_point(aes(x = model.number, y = median, color = model.type, group = COMMON))+
   facet_wrap(~Covariate)
@@ -1580,10 +1667,26 @@ u_betas_all_models  %>% filter(COMMON %in% "sugar maple") |>
 
 u_betas_all_models %>% filter(Covariate %in% c("DIA_DIFF_scaled", "DIA_scaled")) |>
   ggplot()+geom_pointrange(aes(x = as.character(model.number), y = median, ymin = ci.lo, ymax = ci.hi, group = COMMON, color = significance, shape = model.type))+
-  facet_grid(vars(Covariate), vars(COMMON))
+  geom_hline(aes(yintercept = 0), linetype = "dashed")+
+  facet_grid(vars(Covariate), vars(COMMON), scale = "free_y")
 
-u_betas_all_models %>% filter(Covariate %in% c("DIA_DIFF_scaled", "DIA_scaled")) |>
-  ggplot()+geom_pointrange(aes(x = as.character(model.number), y = median, ymin = ci.lo, ymax = ci.hi, group = COMMON, color = significance))+
+u_betas_all_models %>% filter(Covariate %in% c("ba.scaled", "BAL.scaled",
+                                               "damage.scaled")) |>
+  ggplot()+geom_pointrange(aes(x = as.character(model.number), y = median, ymin = ci.lo, ymax = ci.hi, group = COMMON, color = significance, shape = model.type))+
+  geom_hline(aes(yintercept = 0), linetype = "dashed")+
+  facet_grid(vars(Covariate), vars(COMMON), scale = "free_y")
+
+
+u_betas_all_models %>% filter(Covariate %in% c("MATmax.scaled", "MAP.scaled", "ppt.anom",
+                                               "tmax.anom")) |>
+  ggplot()+geom_pointrange(aes(x = as.character(model.number), y = median, ymin = ci.lo, ymax = ci.hi, group = COMMON, color = significance, shape = model.type))+
+  geom_hline(aes(yintercept = 0), linetype = "dashed")+
+  facet_grid(vars(Covariate), vars(COMMON), scale = "free_y")
+
+
+u_betas_all_models %>% filter(Covariate %in% c("slope.scaled", "aspect.scaled", "Ndep.scaled")) |>
+  ggplot()+geom_pointrange(aes(x = as.character(model.number), y = median, ymin = ci.lo, ymax = ci.hi, group = COMMON, color = significance, shape = model.type))+
+  geom_hline(aes(yintercept = 0), linetype = "dashed")+
   facet_grid(vars(Covariate), vars(COMMON))
 
 
@@ -1591,57 +1694,75 @@ main_effects <- c("DIA_DIFF_scaled", "DIA_scaled", "ba.scaled", "BAL.scaled",
                   "damage.scaled", "MATmax.scaled", "MAP.scaled", "ppt.anom",
                   "tmax.anom", "slope.scaled", "aspect.scaled", "Ndep.scaled")
 
-u_betas_all_models %>% filter(Covariate %in% main_effects) |>
-  ggplot()+geom_pointrange(aes(x = as.character(model.number), y = median, ymin = ci.lo, ymax = ci.hi, group = COMMON, color = significance))+
-  facet_grid(vars(Covariate), vars(COMMON), scales = "free_y")
+# get posterior probability of inclusion (PIP) using stacking:---
+# Banner and Higgs 2017, Ecological Applications (https://qerm514.github.io/website/references/Banner_Higgs_2017_model_averaging.pdf)
+
+# M_bar_k = the subset of models where the k'th coefficient is not included (u_beta[k] = 0) 
+# M_inc_k = = the subset of models where the k'th coefficient is included (u_beta[k] != 0) 
+# PIP_k = 1 - summation of P(M|y) for all M_bar_k, or just summation of P(M|Y) for models that include the variable
+# using weights as P(M|y), the probability of the model given the data
+
+# calculate the PIP for k = 2, spcd = 9
+
+# Load all species model weights from LOO_ELPD.df (generated in cmdstan_model_assessment) ---
+
+LOO_ELPD.df <- readRDS( paste0(output.dir, "SPCD_stanoutput_cmdstan/summary/All_LOO_comparisons.rds"))
+
+# function to filter the weights for each species
+load_species_weights <- function(spcd, 
+                                 weighting = "stacking_wts")# can be c("pbma_wts","pbma_BB_wts", "stacking_wts"))
+{LOO_ELPD.df %>% filter(SPCD %in% spcd) %>% select(SPCD, model,  !!sym(weighting))}
 
 
+get_spcd_PIPs <- function(spcd, weighting = "stacking_wts"){
+          
+          weights_spcd <- load_species_weights(spcd, weighting) %>% 
+            separate(model, into = c("model.type", "model", "model.number"), remove = F) %>%
+            mutate(model.number = as.numeric(model.number))
+          
+          covariate.presence <- u_betas_spp.quant %>% 
+            select(model.number, Covariate) %>% distinct() %>% 
+            mutate(present = 1) %>% group_by(model.number)%>%
+            spread(Covariate, present)
+          
+          weights_presence <- weights_spcd %>% left_join(., covariate.presence)
+          
+          
+          
+          PIPs_spcd <- do.call(rbind, lapply(1:78, FUN = function(k){
+            
+            cov_k_name <- cov.names_spp[k,]$Covariate
+            
+            M_inc_k <- weights_presence %>% 
+              # get just the SPCD,  model information, stacking weights, and the cov of interest:
+              select(SPCD, model.type, model.number, stacking_wts, all_of(cov_k_name)) %>% 
+              # drop any NA values
+              na.omit()
+            
+            
+            
+            data.frame(cov.number = k, 
+                       Covariate = cov_k_name,
+                       SPCD = spcd,
+                       PIP = sum(M_inc_k$stacking_wts), 
+                       num_models = length(M_inc_k$stacking_wts))
+            
+            
+          }))
+          
+          return(PIPs_spcd)
 
-ggplot(data = na.omit(u_betas_all_models), aes(x = COMMON, y = median, color = significance))+geom_point()+
-  geom_errorbar(data = na.omit(u_betas_all_models), aes(x = COMMON , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-  geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
-  facet_wrap(~Covariate, scales= "free_y")+
-  theme_bw(base_size = 14)+
-  theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+
-  ylab("Effect on Survival")+xlab("Parameter")+
-  scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))
+}
 
-
-
-ggplot(data = na.omit(u_betas_all_models), aes(x = Covariate, y = median, color = significance))+geom_jitter()+
-  #geom_errorbar(data = na.omit(u_betas_all_models), aes(x = COMMON , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-  geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
-  facet_wrap(~COMMON, scales= "free_y")+
-  theme_bw(base_size = 14)+
-  theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+
-  ylab("Effect on Survival")+xlab("Parameter")+
-  scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))
-
-
-
-
-# get overlapping zero to color the error bars
-betas.quant$`significance` <- ifelse(betas.quant$ci.lo < 0 & betas.quant$ci.hi < 0, "significant", 
-                                     ifelse(betas.quant$ci.lo > 0 & betas.quant$ci.hi > 0, "significant", "not overlapping zero"))
-
-
-
-betas.quant$Covariate <- factor(betas.quant$Covariate, levels = unique(betas.quant$Covariate))
-# order species by hardwood softwood, then shade tolence
-betas.quant$Species <- factor(betas.quant$Species, levels = SP.TRAITS$COMMON_NAME)
-
-
-ggplot(data = na.omit(betas.quant), aes(x = Species, y = median, color = significance))+geom_point()+
-  geom_errorbar(data = na.omit(betas.quant), aes(x = Species , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
-  geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
-  facet_wrap(~Covariate, scales= "free_y")+
-  theme_bw(base_size = 14)+
-  theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+
-  ylab("Effect on Survival")+xlab("Parameter")+
-  scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))
-#ggsave(height = 10, width = 15,dpi = 350, units = "in",paste0(output.folder,"SPCD_stanoutput_joint_v3/images/Estimated_effects_on_mortality_model_model_",model.no,"_all_species_betas.png"))
+all_stacked_PIPS <- do.call(rbind, lapply(spcd_ids, FUN = function(s){get_spcd_PIPs(spcd = s, weighting = "stacking_wts")}))
 
 
+# anything with PIP > 0.5 is likely important
+all_stacked_PIPS %>% mutate(frac_models = num_models/18)%>% 
+  mutate(additional_PIP = PIP- frac_models) %>%
+  #filter(PIP >= 0.5)%>%
+  group_by(SPCD) %>% arrange(SPCD, desc(additional_PIP)) %>% View()
+# this method doesn't really make sense here because some variables are in most of the models
 
 ######################################################################################
 # Marginal stacked posterior predictions ----------
