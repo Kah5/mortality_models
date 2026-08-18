@@ -1421,7 +1421,225 @@ gc()
 ######################################################################################
 # Plot up beta posterior predictions from all models ----------
 
-# read
+# read_qs
+betas.heir <- list.files(paste0(output.dir, "SPCD_stanoutput_cmdstan/betas/"), pattern = "hierarchical_mort_model_", full.names = T)
+
+beta_sumary_df <- do.call(rbind, lapply(1:9, function(i){
+  
+  
+  ubetas <- qs2::qs_read(betas.heir[i]) %>% subset_draws(., "u_beta")%>%  summarise_draws() %>% mutate(model.number = i) %>% 
+    mutate(param = "u_beta")
+  
+  mu_beta <- qs2::qs_read(betas.heir[i]) %>% subset_draws(., "mu_beta")%>%  summarise_draws() %>% mutate(model.number = i) %>% 
+    mutate(param = "mu_beta")
+  
+  alpha_spp <- qs2::qs_read(betas.heir[i]) %>% subset_draws(., "alpha_SPP")%>%  summarise_draws() %>% mutate(model.number = i) %>% 
+    mutate(param = "alpha_SPP")
+  
+  mu_alpha = qs2::qs_read(betas.heir[i]) %>% subset_draws(., "alpha_SPP")%>%  summarise_draws() %>% mutate(model.number = i) %>% 
+    mutate(param = "mu_alpha" )
+  rbind(ubetas, mu_beta, alpha_spp, mu_alpha)
+})
+)
+
+u_betas <- beta_sumary_df %>% filter(param %in% "u_beta")
+
+u_beta_names <- data.frame(variable = unique(u_betas$variable), 
+                           SPP = rep(1:17, 78),
+                           cov.number = rep(1:78, each = 17))
+# get covariate names
+cov.names <- data.frame(cov.number = unique(u_beta_names$cov.number),
+                        Covariate = colnames(mod.data$xM))
+
+spp.table <- read.csv(file = paste0(output.dir, "/data/Hierarchical_obs_model_7.csv"))
+
+u_betas.quant <- u_betas %>% rename("ci.lo"="q5", "ci.hi" = "q95")%>% 
+  left_join(., u_beta_names)%>% left_join(., spp.table) %>%
+  left_join(., cov.names)
+u_betas.quant$Covariate <- factor(u_betas.quant$Covariate, levels = cov.names$Covariate)
+
+
+# get overlapping zero to color the error bars
+u_betas.quant$`significance` <- ifelse(u_betas.quant$ci.lo < 0 & u_betas.quant$ci.hi < 0, "significant", 
+                                             ifelse(u_betas.quant$ci.lo > 0 & u_betas.quant$ci.hi > 0, "significant", "overlapping zero"))
+
+
+# get the species.level u_betas----
+
+species_draws_path <- function(spcd, k){
+ 
+  paste0(output.dir, "SPCD_stanoutput_cmdstan/betas/u_beta_alpha_samps_mort_model_",k,"_SPCD_",spcd,"_remper_correction_0.5_niter_1000_nchain_4.qs")
+}
+
+
+spp_beta_sumary_df <- do.call(rbind, lapply(1:9, function(i){
+  
+  
+  
+    ubetas <- do.call(rbind, lapply(spp.table$SPCD, FUN = function(spcd, k = i){
+      qs2::qs_read(species_draws_path(spcd = spcd, k)) %>% subset_draws(., "u_beta")%>%  
+        summarise_draws() %>% 
+        mutate(model.number = i, 
+             SPCD = spcd) %>% 
+      mutate(param = "u_beta")
+    }))
+  ubetas
+
+})
+)
+
+# species u_beta summaries
+u_betas_spp <- spp_beta_sumary_df %>% filter(param %in% "u_beta")
+
+u_beta_spp_names <- data.frame(variable = unique(u_betas_spp$variable), 
+                           #SPP = rep(1:17, 78),
+                           cov.number = 1:78)
+# get covariate names
+cov.names_spp <- data.frame(cov.number = unique(u_beta_spp_names$cov.number),
+                        Covariate = colnames(mod.data$xM))
+
+
+u_betas_spp.quant <- u_betas_spp %>% rename("ci.lo"="q5", "ci.hi" = "q95")%>% 
+  left_join(., u_beta_spp_names)%>% left_join(., spp.table) %>%
+  left_join(., cov.names_spp)
+u_betas_spp.quant$Covariate <- factor(u_betas_spp.quant$Covariate, levels = cov.names_spp$Covariate)
+
+
+# get overlapping zero to color the error bars
+u_betas_spp.quant$`significance` <- ifelse(u_betas_spp.quant$ci.lo < 0 & u_betas_spp.quant$ci.hi < 0, "significant", 
+                                       ifelse(u_betas_spp.quant$ci.lo > 0 & u_betas_spp.quant$ci.hi > 0, "significant", "overlapping zero"))
+
+
+
+# combine the species and hierarchical summaries together:
+u_betas_all_models <- rbind(
+    u_betas_spp.quant %>%  select(SPCD, COMMON, SPP, model.number, Covariate, median, ci.lo, ci.hi, significance) %>%
+        mutate(model.type = "Species"), 
+
+
+      u_betas.quant %>% 
+      select(SPCD, COMMON, SPP, model.number, Covariate, median, ci.lo, ci.hi, significance) %>%
+           mutate(model.type = "Hierarchical") 
+)
+
+u_betas_signifcance_summary <- u_betas_all_models  %>% 
+  group_by(SPCD, COMMON, SPP, Covariate) %>% 
+  summarise(total_num = n(), 
+            num_sig = sum(significance %in% "significant"), 
+            num_pos.sig = sum(significance %in% "significant" & median > 0), 
+            num_neg.sig = sum(significance %in% "significant" & median < 0))%>%
+  mutate(frac_sig = num_sig/total_num, 
+         frac_pos.sig = num_pos.sig/total_num, 
+         frac_neg.sig = num_neg.sig/total_num)
+
+u_betas_signifcance_summary |>
+  ggplot()+
+  geom_bar(aes(x = Covariate, y = num_sig, fill = COMMON), stat = "identity", position = "stack")+
+  species_fill+
+  theme_bw()+
+  theme(panel.grid = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+
+u_betas_signifcance_summary |>
+  ggplot()+
+  geom_bar(aes(x = Covariate, y = frac_sig/17, fill = COMMON), stat = "identity", position = "stack")+
+  species_fill+
+  theme_bw()+
+  theme(panel.grid = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+u_betas_signifcance_summary %>% filter(Covariate %in% main_effects)|>
+  ggplot()+
+  geom_bar(aes(x = Covariate, y = num_sig, fill = COMMON), stat = "identity", position = "stack")+
+  species_fill+
+  theme_bw()+
+  theme(panel.grid = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+u_betas_signifcance_summary %>% filter(Covariate %in% main_effects)|>
+  ggplot()+
+  geom_bar(aes(x = Covariate, y = frac_sig/17, fill = COMMON), stat = "identity", position = "stack")+
+  species_fill+
+  theme_bw()+
+  theme(panel.grid = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+
+
+u_betas_signifcance_summary |>
+  ggplot()+
+  geom_bar(aes(x = Covariate, y = num_pos.sig, fill = COMMON), stat = "identity", position = "stack")+
+  geom_bar(aes(x = Covariate, y = -num_neg.sig, fill = COMMON), stat = "identity", position = "stack")+
+  species_fill+
+  theme_bw()+
+  theme(panel.grid = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+u_betas_all_models  %>% filter(COMMON %in% "sugar maple") |>
+  ggplot()+geom_point(aes(x = model.number, y = median, color = model.type, group = COMMON))+
+  facet_wrap(~Covariate)
+ 
+
+
+
+u_betas_all_models %>% filter(Covariate %in% c("DIA_DIFF_scaled", "DIA_scaled")) |>
+  ggplot()+geom_pointrange(aes(x = as.character(model.number), y = median, ymin = ci.lo, ymax = ci.hi, group = COMMON, color = significance, shape = model.type))+
+  facet_grid(vars(Covariate), vars(COMMON))
+
+u_betas_all_models %>% filter(Covariate %in% c("DIA_DIFF_scaled", "DIA_scaled")) |>
+  ggplot()+geom_pointrange(aes(x = as.character(model.number), y = median, ymin = ci.lo, ymax = ci.hi, group = COMMON, color = significance))+
+  facet_grid(vars(Covariate), vars(COMMON))
+
+
+main_effects <- c("DIA_DIFF_scaled", "DIA_scaled", "ba.scaled", "BAL.scaled",
+                  "damage.scaled", "MATmax.scaled", "MAP.scaled", "ppt.anom",
+                  "tmax.anom", "slope.scaled", "aspect.scaled", "Ndep.scaled")
+
+u_betas_all_models %>% filter(Covariate %in% main_effects) |>
+  ggplot()+geom_pointrange(aes(x = as.character(model.number), y = median, ymin = ci.lo, ymax = ci.hi, group = COMMON, color = significance))+
+  facet_grid(vars(Covariate), vars(COMMON), scales = "free_y")
+
+
+
+ggplot(data = na.omit(u_betas_all_models), aes(x = COMMON, y = median, color = significance))+geom_point()+
+  geom_errorbar(data = na.omit(u_betas_all_models), aes(x = COMMON , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
+  geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
+  facet_wrap(~Covariate, scales= "free_y")+
+  theme_bw(base_size = 14)+
+  theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+
+  ylab("Effect on Survival")+xlab("Parameter")+
+  scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))
+
+
+
+ggplot(data = na.omit(u_betas_all_models), aes(x = Covariate, y = median, color = significance))+geom_jitter()+
+  #geom_errorbar(data = na.omit(u_betas_all_models), aes(x = COMMON , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
+  geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
+  facet_wrap(~COMMON, scales= "free_y")+
+  theme_bw(base_size = 14)+
+  theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+
+  ylab("Effect on Survival")+xlab("Parameter")+
+  scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))
+
+
+
+
+# get overlapping zero to color the error bars
+betas.quant$`significance` <- ifelse(betas.quant$ci.lo < 0 & betas.quant$ci.hi < 0, "significant", 
+                                     ifelse(betas.quant$ci.lo > 0 & betas.quant$ci.hi > 0, "significant", "not overlapping zero"))
+
+
+
+betas.quant$Covariate <- factor(betas.quant$Covariate, levels = unique(betas.quant$Covariate))
+# order species by hardwood softwood, then shade tolence
+betas.quant$Species <- factor(betas.quant$Species, levels = SP.TRAITS$COMMON_NAME)
+
+
+ggplot(data = na.omit(betas.quant), aes(x = Species, y = median, color = significance))+geom_point()+
+  geom_errorbar(data = na.omit(betas.quant), aes(x = Species , ymin = ci.lo, ymax = ci.hi, color = significance), width = 0.1)+
+  geom_abline(aes(slope = 0, intercept = 0), color = "grey", linetype = "dashed")+
+  facet_wrap(~Covariate, scales= "free_y")+
+  theme_bw(base_size = 14)+
+  theme( axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5), panel.grid  = element_blank(), legend.position = "none")+
+  ylab("Effect on Survival")+xlab("Parameter")+
+  scale_color_manual(values = c("not overlapping zero"="darkgrey", "significant"="black"))
+#ggsave(height = 10, width = 15,dpi = 350, units = "in",paste0(output.folder,"SPCD_stanoutput_joint_v3/images/Estimated_effects_on_mortality_model_model_",model.no,"_all_species_betas.png"))
 
 
 

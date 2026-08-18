@@ -619,7 +619,7 @@ gc()
 
 
 #################################################################################
-# Bayesian model averaging (stacking) for yhat, yrep, mhat, mrep-------
+# Bayesian model averaging (stacking) for yhat, yrep, mhat, mrep, betas, and alphas -------
 #################################################################################
 
 # we can use similar appraoch to marginal effect averaging above
@@ -1016,7 +1016,10 @@ calculate_state_county_rates_BMA <- function(SPCD.id, weighting, model.type){
         
         # Exposure at the tree-scale (assume same for predicted and observed): 
         # Exposure = remper*volfac 
-        # units = tree-years
+        # units = tree-years/acre
+        # Exposure_acre = remper*volfac*expacre 
+        # units = tree-years/acre
+        # 
         
         # weight posterior mortality rates by expacr for county and state scales
         # calculate the posterior expected # of trees dead based on tree-level volfac
@@ -1283,5 +1286,322 @@ stacked.ests %>% filter(n_obs > 25)|>
   geom_errorbar(aes(x = obs_M_expn_median, ymin = pred_M_expn_5.ci.lo, ymax = pred_M_expn_95.ci.hi, color = COMMON_NAME))+
   geom_errorbar(aes(x = obs_M_expn_median, ymin = pred_M_expn_25.ci.lo, ymax = pred_M_expn_75.ci.hi, color = COMMON_NAME))+
   theme_bw()
+
+###################################################################################
+# get weighted posterior draws for each beta
+
+# read in betas for hiearachical models, save each species betas in a separate file
+betas.heir <- list.files(paste0(output.dir, "SPCD_stanoutput_cmdstan/betas/"), pattern = "hierarchical_mort_model_", full.names = T)
+hier_draws_path <- function(k)
+  paste0(output.dir, "SPCD_stanoutput_cmdstan/betas/u_beta_alpha_samps_hierarchical_mort_model_",k,"_niter_1000_nchain_4.qs")  # ADAPT: your actual naming
+
+hier_draws_spp_save_path <- function(spcd, k)
+  paste0(output.dir, "SPCD_stanoutput_cmdstan/betas/u_beta_alpha_samps_hierarchical_mort_model_",k,"_SPCD_",spcd,"_niter_1000_nchain_4.qs")  # ADAPT: your actual naming
+
+
+species_draws_path <- function(spcd, k){
+  
+  paste0(output.dir, "SPCD_stanoutput_cmdstan/betas/u_beta_alpha_samps_mort_model_",k,"_SPCD_",spcd,"_remper_correction_0.5_niter_1000_nchain_4.qs")
+}
+resave_hier_betas <- do.call(rbind, lapply(1:9, function(i){
+  
+  cat(paste0("model ", i, "\n"))
+  ubetas <- qs2::qs_read(hier_draws_path(k = i) ) %>% subset_draws(., "u_beta")#%>% 
+    #summarise_draws() %>% mutate(model.number = i) %>%
+    # mutate(param = "u_beta")
+    # 
+  alphas <- qs2::qs_read(hier_draws_path(k = i) ) %>% subset_draws(., "alpha_SPP")
+  
+  for(s in 1:17){
+    cat(s)
+  species.ubeta_idx <- colnames(ubetas) %in% paste0("u_beta[", s, ",", 1:78, "]")
+  species.alpha_idx <- colnames(alphas) %in% paste0("alpha_SPP[", s, "]")
+  
+  spp_alphas_betas <- bind_draws(alphas[, species.alpha_idx], ubetas[, species.ubeta_idx]) 
+  
+  colnames(spp_alphas_betas) <- c("alpha_SPP", paste0("u_beta[",1:(length(colnames(spp_alphas_betas)) -1),"]"))
+  
+  qs2::qs_save(object = spp_alphas_betas, 
+               file = hier_draws_spp_save_path(spcd = spp.table[match(s, spp.table$SPP),]$SPCD, k = i))
+  }
+}))
+
+
+
+# get posterior beta matrix function
+get_posterior_betas_matrix <- function(structure,  spcd,  k, spp_index = NULL) {
+  
+  if (structure == "species_only") {
+    qs2::qs_read(species_draws_path(spcd, k))          # draws x N_species, already per-species
+  } else {
+    qs2::qs_read(hier_draws_spp_save_path(spcd, k))            # draws x N_total (all species stacked)
+    
+  }
+}
+
+mix_beta_predictions <- function(pred_list, plan){
+  
+  # get the number of x values 
+  grid_n <- 79
+  
+  out <- matrix(NA_real_, plan$N, grid_n)
+  for (n in seq_len(plan$N)) {
+    ncol_mod <-  ncol(pred_list[[plan$model[n]]])
+    out[n, 1:ncol_mod] <- pred_list[[plan$model[n]]][plan$draw[n], 1:ncol_mod] # ensures we only add to the right columns
+    
+  }
+  
+  # keep a record of which model this draw came from
+  list(draws = out, model = plan$model)
+}
+
+# now get a draw from the posterior betas based on the plan
+
+
+stack_betas_alphas_species <- function(spcd, 
+                            #y_type = c("y_rep"),
+                            N = 4000, 
+                            weighting = "stacking_wts",
+                            y_plan = NULL) {
+  
+  # get the weighting and indices to sample from for each species
+  weights_i <- load_species_weights(spcd, weighting)
+  plan <- if (is.null(y_plan)) post_draw_plan(spcd, weights_i, N) else y_plan
+  
+  # get the full predicted list from all the models that have non-zero weights for this species
+  pred_list <- list()
+  for (structure in c("species_only", "hierarchical")) {
+    for (k in 1:9) {
+      # wname = naming structure of the model in the weight dataframe
+      wname <- paste0(if (structure == "hierarchical") "Hierarchical_model_" else "Species_model_", k)
+      if (!(wname %in% plan$model)) next  # zero-weight models were never sampled; skip loading
+      
+      # get the matrix of y values
+      mat <- tryCatch(get_posterior_betas_matrix(structure, spcd, k), error = function(e) NULL)
+      if (is.null(mat)) next
+      
+      # get the max number of iterations needed from this model and check that we have that
+      needed <- max(plan$draw[plan$model == wname])
+      if (nrow(mat) < needed) {
+        stop(wname, "'s saved ", type, " has only ", nrow(mat), " draws, but the plan ",
+             "needs draw index ", needed, ".")
+      }
+      pred_list[[wname]] <- mat # 
+    }
+  }
+  #unique(plan$model) %in% names(pred_list) 
+  list(pred_list = pred_list, 
+       plan = plan)
+
+
+
+
+
+  # use indices in the plan to output the predicted y or psurv values
+  mixed <- mix_beta_predictions(pred_list, plan)  # takes the draws plan and gets the pred_list
+  
+  # get the number of tree observations for the species
+  var_names <- c("alpha_SPP", paste0("u_beta[",1:78,"]"))
+  draws_df <- as.data.frame(mixed$draws)
+  colnames(draws_df) <- var_names  
+  draws_matrix <- as_draws_matrix(draws_df)
+  
+  #draws_matrix$model_source <- mixed$model
+  qs2::qs_save(draws_matrix,     paste0(output.dir, "SPCD_stanoutput_cmdstan/betas/u_betas_alpha_samps_SPCD_", spcd, "_", weighting, ".qs"))
+  
+ draws_df <-  draws_df %>% mutate(model_source = mixed$model)%>%
+    mutate(spcd = spcd,
+           weighting = weighting) %>%
+    select(model_source, spcd, weighting, everything())
+  
+  qs2::qs_save(draws_matrix,     paste0(output.dir, "SPCD_stanoutput_cmdstan/betas/u_betas_alpha_samps_SPCD_", spcd, "_", weighting, ".qs"))
+  qs2::qs_save(draws_df,     paste0(output.dir, "SPCD_stanoutput_cmdstan/betas/mixed_df_betas_samps_SPCD_", spcd, "_", weighting, ".qs"))
+  
+  #draws_df
+  list(draws = draws_matrix,
+       model_source = mixed$model,
+       spcd = spcd,
+       weighting = weighting)
+}
+
+# example usage for pSurv_hat for one species
+betas_261 <- stack_betas_alphas_species(spcd = 261, 
+                             N = 4000, 
+                             y_plan = NULL)
+
+betas_261$draws %>% as_draws_df() %>% summarise_draws()
+summarize_beta_posteriors <- function(x) {
+  c(median = median(x, na.rm =TRUE),
+    ci.lo.2.5 = quantile(x, probs = c(0.025), na.rm =TRUE),
+    ci.hi.97.5 = quantile(x, probs = c(0.975), na.rm =TRUE), 
+    ci.lo.5 = quantile(x, probs = c(0.05), na.rm =TRUE),
+    ci.hi.95 = quantile(x, probs = c(0.95), na.rm =TRUE), 
+    ci.lo.25 = quantile(x, probs = c(0.25), na.rm =TRUE),
+    ci.hi.75 = quantile(x, probs = c(0.75), na.rm =TRUE))
+}
+
+stacked_betas_list <- list()
+for(s in 1:length(spcd_ids)){
+  betas_spcd <- stack_betas_alphas_species(spcd = spcd_ids[s], 
+                                          N = 4000, 
+                                          y_plan = NULL)
+  
+  #betas_spcd$model_source[4]
+  betas.NA.omited <- betas_spcd$draws %>% summarise_draws(., summarize_beta_posteriors) # just omits NA values
+  
+  beta_draws <- betas_spcd$draws
+  beta_draws[is.na(beta_draws)] <- 0
+  
+  betas.NA.as.0 <- beta_draws %>% summarise_draws(., summarize_beta_posteriors) %>%
+    mutate(spcd = betas_spcd$spcd, 
+           weighting = betas_spcd$weighting)# just omits NA values
+  colnames(betas.NA.as.0) <- c("variable", "median", "ci.lo.2.5", "ci.hi.97.5", "ci.lo.5", "ci.hi.95", "ci.lo.25", "ci.hi.75", 
+                               "spcd", "weighting")
+  stacked_betas_list[[s]] <- betas.NA.as.0
+}
+stacked_betas_df <- do.call(rbind, stacked_betas_list)
+
+stacked_betas_df %>% filter(variable %in% "alpha_SPP")|>
+  ggplot()+geom_pointrange(aes(x = as.character(spcd), y = median, ymin = ci.lo.5, ymax = ci.hi.95))+
+  ylab("alpha_SPP stacked")
+
+stacked_betas_df %>% filter(variable %in% "u_beta[1]")|>
+  ggplot()+geom_pointrange(aes(x = as.character(spcd), y = median, ymin = `ci.lo.25%`, ymax = `ci.hi.75%`))+
+  ylab("u_beta[1] effect")
+
+# create a function to process/summarise the stacked posteriors
+# 1. Save the weighted samples pSurv_hat, pSurv_rep, y_hat, y_rep for each species as draws_df for later use
+# 2. Calculate is and oos AUC scores, confusion matrices for each species
+# 3. Summarise the pSurv_hat, pSurv_rep, y_hat, y_rep for each species
+
+
+spcd = 261
+weighting = "stacking_wts"
+N = 4000
+process_bma_posterior_pSurv_y <- function(spcd, weighting, N){
+  # start function
+  
+  cat(paste0("getting weighted posteriors for spcd ", spcd, "\n"))
+  # get species in and out of sample y data to compare to:
+  load(paste0("SPCD_standata_general_full_standardized_v3/", "SPCD_", spcd, "remper_correction_0.5model_9.Rdata"))
+  #length(mod.data$y)
+  
+  
+  # set up plan for each species once, then feed it inot the stack_y_species
+  weights_i <- load_species_weights(spcd, weighting)
+  plan <- post_draw_plan(spcd, weights_i, N)
+  
+  # get the weighted probabilities and predicted classifications
+  psurv_hat <- stack_y_species(spcd = spcd, 
+                               y_type = "pSurv_hat", 
+                               N = 4000, 
+                               y_plan = plan)
+  psurv_rep <- stack_y_species(spcd = spcd, 
+                               y_type = "pSurv_rep", 
+                               N = 4000, 
+                               y_plan = plan)
+  
+  y_hat <- stack_y_species(spcd = spcd, 
+                           y_type = "y_hat", 
+                           N = 4000, 
+                           y_plan = plan)
+  
+  y_rep <- stack_y_species(spcd = spcd, 
+                           y_type = "y_rep", 
+                           N = 4000, 
+                           y_plan = plan)
+  
+  
+  cat(paste0("saving weighted posterior draws for ", spcd, "\n"))
+  # get just the draws
+  y_rep_samps <- y_rep$draws
+  y_hat_samps <- y_hat$draws
+  
+  pSurv_rep_samps <- psurv_rep$draws
+  pSurv_hat_samps <- psurv_hat$draws
+  
+  qs2::qs_save(y_rep_samps,     paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/y_rep_samps_SPCD_", spcd, "_", weighting, ".qs"))
+  qs2::qs_save(y_hat_samps,     paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/y_hat_samps_SPCD_", spcd, "_", weighting, ".qs"))
+  qs2::qs_save(pSurv_rep_samps, paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/pSurv_rep_samps_SPCD_", spcd, "_", weighting, ".qs"))
+  qs2::qs_save(pSurv_hat_samps, paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/pSurv_hat_samps_SPCD_", spcd, "_", weighting, ".qs"))
+  
+  # convert remper probabilities to annualized probabilities of survival:
+  Remper_matrix <- matrix(mod.data$Remper, nrow = nrow(pSurv_hat_samps), ncol = ncol(pSurv_hat_samps), byrow = TRUE)
+  #length(unique(Remper_matrix[,1])) ==1 # check that the byrow is right
+  
+  pSannual_hat <- pSurv_hat_samps^(1/Remper_matrix) 
+  
+  Remperoos_matrix <- matrix(mod.data$Remperoos, nrow = nrow(pSurv_rep_samps), ncol = ncol(pSurv_rep_samps), byrow = TRUE)
+  #length(unique(Remper_matrix[,1])) ==1 # check that the byrow is right
+  
+  pSannual_rep <- pSurv_rep_samps^(1/Remperoos_matrix) 
+  
+  qs2::qs_save(pSannual_rep, paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/pSurv_annual_rep_samps_SPCD_", spcd, "_", weighting, ".qs"))
+  qs2::qs_save(pSannual_hat, paste0(output.dir, "SPCD_stanoutput_cmdstan/predicted_mort/pSurv_annual_hat_samps_SPCD_", spcd, "_", weighting, ".qs"))
+  
+  # does the predicted count of y_hat match that in the data?
+  is.ppc.bar <- ppc_bars(y = mod.data$y, as_draws_matrix(y_hat_samps))+xlab("Survival Classifcation (In-sample)")
+  oos.ppc.bar <- ppc_bars(y = mod.data$ytest, as_draws_matrix(y_rep_samps))+xlab("Survival Classifcation (out-of-sample)")
+  combined.bar <- cowplot::plot_grid( is.ppc.bar, oos.ppc.bar, align = "hv")
+  cowplot::save_plot(paste0(output.dir, "SPCD_stanoutput_cmdstan/images/post_pred_y_SPCD_", spcd, "_", weighting, ".png"), 
+                     plot = combined.bar, 
+                     bg = "white")
+  rm(is.ppc.bar, oos.ppc.bar, combined.bar)
+  
+  
+  # --- AUC + confusion matrix over posterior draws ------------------------
+  actuals     <- mod.data$y
+  actuals.oos <- mod.data$ytest
+  cat(paste0("estimating AUC and confusion matrix on weighted posterior draws for ", spcd, "\n"))
+  
+  # library(pROC)
+  
+  
+  # calculate AUC for each draw:------
+  AUC.is.samples.df  <- apply(pSurv_hat_samps, 1, function(p) as.numeric(pROC::auc(actuals, p, quiet = TRUE)))
+  AUC.oos.samples.df <- apply(pSurv_rep_samps, 1, function(p) as.numeric(pROC::auc(actuals.oos, p, quiet = TRUE)))
+  #rm(pSurv_hat_samps, pSurv_rep_samps, y_hat.quant, y_rep.quant, pSurv_hat.quant, pSurv_rep.quant); gc()
+  
+  preds.is.class <- y_hat_samps == 1
+  confusion.is_draws <- data.frame(
+    TP_draws = rowSums(preds.is.class[, actuals == 1, drop = FALSE]),
+    FP_draws = rowSums(preds.is.class[, actuals == 0, drop = FALSE]),
+    TN_draws = rowSums(!preds.is.class[, actuals == 0, drop = FALSE]),
+    FN_draws = rowSums(!preds.is.class[, actuals == 1, drop = FALSE])
+  ) %>%
+    mutate(`True survival rate` = TP_draws / (TP_draws + FN_draws),
+           `True mortality rate` = TN_draws / (TN_draws + FP_draws),
+           model.number = "BMA", 
+           type = "in-sample",
+           model.type = weighting, 
+           SPCD = spcd)
+  
+  preds.oos.class <- y_rep_samps == 1
+  confusion.oos_draws <- data.frame(
+    TP_draws = rowSums(preds.oos.class[, actuals.oos == 1, drop = FALSE]),
+    FP_draws = rowSums(preds.oos.class[, actuals.oos == 0, drop = FALSE]),
+    TN_draws = rowSums(!preds.oos.class[, actuals.oos == 0, drop = FALSE]),
+    FN_draws = rowSums(!preds.oos.class[, actuals.oos == 1, drop = FALSE])
+  ) %>%
+    mutate(`True survival rate` = TP_draws / (TP_draws + FN_draws),
+           `True mortality rate` = TN_draws / (TN_draws + FP_draws),
+           model.number = "BMA", 
+           type = "out-of-sample",
+           model.type = "weighting", 
+           SPCD = spcd)
+  
+  confusion.is_draws$AUC  <- AUC.is.samples.df
+  confusion.oos_draws$AUC <- AUC.oos.samples.df
+  AUC.confusion_draws <- rbind(confusion.is_draws, confusion.oos_draws)
+  
+  qs2::qs_save(AUC.confusion_draws,
+               paste0(output.dir, "SPCD_stanoutput_cmdstan/AUC/AUC_draws_SPCD_", spcd, "_", weighting, ".qs"))
+}
+
+# run for all of the species
+process_bma_posterior_pSurv_y(spcd = 261,
+                              weighting = "stacking_wts",
+                              N = 4000)
+
 
 # outputs are saved for later use in manuscript figures document
